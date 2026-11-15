@@ -44,6 +44,19 @@ class RedactFilter(logging.Filter):
         return True
 
 
+class RedactingFormatter(logging.Formatter):
+    """Formatter yang meredaksi HASIL AKHIR format — termasuk traceback.
+
+    RedactFilter hanya menjangkau pesan record; teks `exc_info`
+    (traceback) ditambahkan Formatter SETELAH filter berjalan, jadi
+    secret yang terbawa di dalam pesan exception hanya bisa disamarkan
+    di sini (Fase 6-A4).
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact(super().format(record))
+
+
 def setup_logging(level: int = logging.INFO) -> None:
     """Konfigurasi logging global. Aman dipanggil berkali-kali."""
     global _CONFIGURED
@@ -51,7 +64,7 @@ def setup_logging(level: int = logging.INFO) -> None:
         return
     _CONFIGURED = True
 
-    fmt = logging.Formatter(
+    fmt = RedactingFormatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )

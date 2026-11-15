@@ -106,6 +106,7 @@ class App:
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
         self.executor = OrderExecutor(settings, self.binance, self.symbols, db=self.database)
+        self.executor.set_intent_hook(self.journal.record_intent)  # write-ahead (Fase 6-A1)
         self.service = TradingService(settings, self.risk, self.executor, self.binance)
 
 

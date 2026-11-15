@@ -12,7 +12,7 @@ dan tidak pernah dicetak ke log.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:  # python-dotenv bersifat opsional saat runtime bila env sudah diset OS
@@ -63,41 +63,41 @@ class Settings:
     """Konfigurasi aplikasi yang immutable setelah dimuat."""
 
     # --- Binance Futures ---
-    binance_api_key: str = ""
-    binance_api_secret: str = ""
+    binance_api_key: str = field(default="", repr=False)
+    binance_api_secret: str = field(default="", repr=False)
     binance_testnet: bool = False
 
     # --- AI Router BangunWeb ---
-    bangunweb_api_key: str = ""
+    bangunweb_api_key: str = field(default="", repr=False)
     bangunweb_base_url: str = "https://router.bangunweb.com/v1"
     bangunweb_model: str = "bw-focus"
 
     # --- Multi-provider AI (dipilih lewat ai_provider) ---
     ai_provider: str = "bangunweb"  # bangunweb|openai|anthropic|deepseek|grok|nous|custom
-    openai_api_key: str = ""
+    openai_api_key: str = field(default="", repr=False)
     openai_model: str = "gpt-4o"
     openai_base_url: str = "https://api.openai.com/v1"
-    anthropic_api_key: str = ""
+    anthropic_api_key: str = field(default="", repr=False)
     anthropic_model: str = "claude-sonnet-4-5"
     anthropic_base_url: str = "https://api.anthropic.com"
-    deepseek_api_key: str = ""
+    deepseek_api_key: str = field(default="", repr=False)
     deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com/v1"
-    xai_api_key: str = ""
+    xai_api_key: str = field(default="", repr=False)
     xai_model: str = "grok-4"
     xai_base_url: str = "https://api.x.ai/v1"
-    nous_api_key: str = ""
+    nous_api_key: str = field(default="", repr=False)
     nous_model: str = "Hermes-4-70B"
     nous_base_url: str = "https://inference-api.nousresearch.com/v1"
     ai_custom_base_url: str = ""
-    ai_custom_api_key: str = ""
+    ai_custom_api_key: str = field(default="", repr=False)
     ai_custom_model: str = ""
 
     # --- Jurnal perdagangan ---
     trade_journal_path: str = "logs/trades.jsonl"
 
     # --- Notifikasi Telegram ---
-    telegram_bot_token: str = ""
+    telegram_bot_token: str = field(default="", repr=False)
     telegram_chat_id: str = ""
     telegram_notifications: bool = True
 
@@ -129,6 +129,7 @@ class Settings:
     protection_working_type: str = "MARK_PRICE"  # pemicu SL/TP algo: MARK_PRICE | CONTRACT_PRICE
     reconciler_enabled: bool = True   # rekonsiliasi posisi berkala di web server
     reconciler_interval_sec: int = 60  # jeda antar putaran rekonsiliasi
+    reconciler_grace_sec: int = 120  # Fase 6-A1: masa tenggang — reconciler melewati simbol dgn transisi eksekusi terbaru
 
     # --- Fase 3: strategi sinyal (semua bisa dimatikan; bawaan konservatif) ---
     use_closed_candles_only: bool = True  # indikator hanya dari candle tertutup
@@ -155,6 +156,7 @@ class Settings:
     funding_extreme_pct: float = 0.1       # |funding| >= ini dianggap ekstrem
     btc_filter: bool = False               # altcoin mengikuti tren kuat BTC
     risk_state_path: str = "data/risk_state.json"  # baseline ekuitas harian/mingguan + kunci harian (persisten)
+    data_dir: str = ""  # Fase 6-A6: direktori state tunggal; kosong = <root proyek>/data (diisi load_settings)
     protection_retries: int = 3             # percobaan pasang SL/TP sebelum emergency close
     default_interval: str = "15m"
     quote_asset: str = "USDT"
@@ -163,15 +165,15 @@ class Settings:
     # Kosong = autentikasi NONAKTIF (hanya aman untuk akses lokal sendiri).
     # Isi WEB_API_TOKEN untuk mewajibkan token pada semua endpoint /api/*:
     # token utama = akses penuh (operator), WEB_VIEWER_TOKEN = hanya baca.
-    web_api_token: str = ""
-    web_viewer_token: str = ""
+    web_api_token: str = field(default="", repr=False)
+    web_viewer_token: str = field(default="", repr=False)
     # Daftar origin CORS yang diizinkan, pisah koma. Kosong = tanpa CORS
     # (hanya same-origin). JANGAN gunakan "*" bersamaan dengan token.
     cors_origins: str = ""
     rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
     mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
     market_ws_enabled: bool = True    # WebSocket data pasar real-time untuk grafik Web UI
-    database_url: str = ""            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
+    database_url: str = field(default="", repr=False)            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
 
     # --- Web UI ---
     web_host: str = "127.0.0.1"  # aman secara default: hanya mesin ini sendiri
@@ -278,6 +280,10 @@ class Settings:
 
 def load_settings() -> Settings:
     """Bangun objek Settings dari environment saat ini."""
+    # Fase 6-A6: DATA_DIR tunggal & absolut agar state tidak bergantung CWD.
+    data_dir = os.environ.get("DATA_DIR", "").strip() or str(
+        Path(__file__).resolve().parent.parent / "data"
+    )
     return Settings(
         binance_api_key=os.environ.get("BINANCE_API_KEY", "").strip(),
         binance_api_secret=os.environ.get("BINANCE_API_SECRET", "").strip(),
@@ -306,7 +312,7 @@ def load_settings() -> Settings:
         ai_custom_base_url=os.environ.get("AI_CUSTOM_BASE_URL", "").strip().rstrip("/"),
         ai_custom_api_key=os.environ.get("AI_CUSTOM_API_KEY", "").strip(),
         ai_custom_model=os.environ.get("AI_CUSTOM_MODEL", "").strip(),
-        trade_journal_path=os.environ.get("TRADE_JOURNAL_PATH", "logs/trades.jsonl").strip(),
+        trade_journal_path=os.environ.get("TRADE_JOURNAL_PATH", "").strip() or f"{data_dir}/trades.jsonl",
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),
@@ -351,7 +357,9 @@ def load_settings() -> Settings:
         funding_guard_minutes=_get_int("FUNDING_GUARD_MINUTES", 0),
         funding_extreme_pct=_get_float("FUNDING_EXTREME_PCT", 0.1),
         btc_filter=_get_bool("BTC_FILTER", False),
-        risk_state_path=os.environ.get("RISK_STATE_PATH", "data/risk_state.json").strip(),
+        risk_state_path=os.environ.get("RISK_STATE_PATH", "").strip() or f"{data_dir}/risk_state.json",
+        data_dir=data_dir,
+        reconciler_grace_sec=_get_int("RECONCILER_GRACE_SEC", 120),
         protection_retries=_get_int("PROTECTION_RETRIES", 3),
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
         web_viewer_token=os.environ.get("WEB_VIEWER_TOKEN", "").strip(),

@@ -69,7 +69,14 @@ def load_history(
     start_time, end_time)`. Mengembalikan baris terurut berdasarkan
     open time, hanya yang >= batas awal rentang.
     """
-    cache_dir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+    if cache_dir:
+        cache_dir = Path(cache_dir)
+    else:
+        # Fase 6-A6: cache mengikuti DATA_DIR bila diatur di environment.
+        import os
+
+        base = os.environ.get("DATA_DIR", "").strip()
+        cache_dir = (Path(base) / "kline_cache") if base else DEFAULT_CACHE_DIR
     now = now_ms if now_ms is not None else int(time.time() * 1000)
     start = now - days * 86_400_000
     path = _cache_path(cache_dir, symbol, interval)

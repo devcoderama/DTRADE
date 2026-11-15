@@ -95,6 +95,7 @@ def _refresh_ai_from_store() -> None:
         log.info("Pilihan AI dimuat ulang: %s:%s", provider, model)
 risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager, db=database)
+executor.set_intent_hook(journal.record_intent)  # write-ahead jurnal (Fase 6-A1)
 market_stream = MarketStream(settings)
 trading_service = TradingService(settings, risk_manager, executor, binance)
 position_manager = PositionManager(settings, binance, executor, journal, symbol_manager)
@@ -313,6 +314,27 @@ def enforce_web_safety() -> None:
 def _validate_startup() -> None:
     """Validasi keamanan & pemulihan saat server mulai."""
     enforce_web_safety()
+    # Fase 6-A6: DATA_DIR wajib bisa ditulis saat LIVE (state risiko
+    # harus persisten), dan selfcheck dijalankan otomatis sebagai
+    # laporan kesiapan di log startup.
+    from core.selfcheck import assert_data_writable, hedge_mode_active, run_selfcheck
+
+    assert_data_writable(settings)
+    try:
+        for c in run_selfcheck(settings, binance=binance, database=database, ai=ai_client):
+            if c.ok is False:
+                log.warning("SELFCHECK %s: GAGAL — %s", c.name, c.detail)
+            elif c.ok is True:
+                log.info("SELFCHECK %s: OK — %s", c.name, c.detail)
+    except Exception as exc:
+        log.warning("Selfcheck startup gagal dijalankan: %s", exc)
+    # Fase 6-A7: Hedge Mode tidak didukung — tolak trading saat live.
+    if settings.is_live and settings.has_binance_keys:
+        if hedge_mode_active(binance):
+            raise RuntimeError(
+                "MENOLAK START: akun Binance berada di Hedge Mode — bot tidak "
+                "mendukung positionSide. Ubah akun ke One-way Mode dulu."
+            )
     if settings.is_live:
         log.warning("⚠ MODE LIVE AKTIF — order akan dikirim dengan dana sungguhan.")
     if settings.is_live and not settings.has_binance_keys:

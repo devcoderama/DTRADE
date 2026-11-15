@@ -305,3 +305,62 @@ BTC_FILTER) semua BAWAAAN MATI.
    sudah aktif; manajemen keluar terakhir) sambil membandingkan metrik.
 5. Jangan mengaktifkan TRADING_MODE=live sebelum langkah 2–3 memberi
    bukti, dan rotasi kredensial apa pun yang pernah terekspos di chat.
+
+---
+
+# FASE 6 — Audit November 2026 (branch `fix/audit-nov-2026`)
+
+Program lanjutan atas permintaan pemilik repo: perbaikan bug hasil
+audit, dibuktikan dengan test otomatis DAN tes langsung di Binance
+Futures TESTNET (aturan keras khusus program ini: hanya testnet,
+order testnet kecil diizinkan untuk pengujian, branch + PR — bukan
+push langsung ke main). Baseline sebelum perubahan: **108 test hijau**.
+
+## Fase A — Kritis sebelum live — SELESAI (unit), 125 test hijau
+
+- **A1 Race Reconciler vs Executor.** Executor memakai RLock yang
+  diekspos (`executor.lock`); seluruh putaran Reconciler berjalan di
+  dalamnya dan membaca ulang posisi+algo di dalam lock — eksekusi
+  yang sedang memasang SL tidak bisa dinilai dari snapshot lama.
+  Masa tenggang `RECONCILER_GRACE_SEC=120`: simbol dengan transisi
+  eksekusi lebih muda dari itu dilewati. Write-ahead: executor
+  memanggil hook jurnal (`record_intent`) tepat sebelum order entri
+  dikirim — registry mengenali posisi + SL-nya sejak awal
+  (`open_registry` menerima state SUBMITTING dari entri intent).
+  Test: fake dengan latensi `place_algo_order` 0,6 dtk + run_once di
+  thread lain → posisi TIDAK ditutup; intent tercatat sebelum entri.
+- **A2 Notasi ilmiah.** Semua parameter float dinormalisasi di
+  `_request_once` SEBELUM penandatanganan dengan
+  `format(Decimal(str(x)), 'f')` — `1.23e-05` menjadi `0.0000123`.
+  Test menangkap parameter request untuk order & algo order mikro.
+- **A3 Jurnal dry-run.** `open_registry` mengabaikan entri
+  `dry_run=True`; langkah (c) reconciler tidak menulis apa pun dalam
+  mode dry-run. Test: jurnal dry-run + income akun → nol event close.
+- **A4 Secret di repr/log.** Semua field secret Settings kini
+  `field(repr=False)` (13 field). `RedactingFormatter` meredaksi
+  hasil format akhir termasuk traceback/exc_info. Test keduanya.
+- **A5 pending_recovery.** Marker close_position kini membawa
+  `client_order_id` korelasi `close-<simbol>-<ts>` sehingga
+  CLOSING↔CLOSED berpasangan; `mark_resolved()` menulis event
+  RESOLVED (status terminal baru); execution_state.jsonl dirotasi
+  pada 5 MB (satu cadangan `.1`). Test: close bersih tidak muncul di
+  pending_recovery; RESOLVED membersihkan entri macet.
+- **A6 DATA_DIR tunggal.** `load_settings` menghitung DATA_DIR
+  absolut (env `DATA_DIR` atau `<root>/data`); risk_state & jurnal
+  bawaan kini di bawahnya (CATATAN MIGRASI: jurnal berpindah dari
+  `logs/trades.jsonl` ke `data/trades.jsonl` — pindahkan berkas lama
+  Anda ke lokasi baru bila ingin riwayat menyatu). ai_settings &
+  cache klines mengikuti DATA_DIR. `assert_data_writable`: startup
+  LIVE menolak jalan bila DATA_DIR tidak bisa ditulis. Selfcheck
+  otomatis berjalan di startup web (hasilnya di log). Docker Compose
+  beralih ke named volume (bind mount menimpa izin uid 10001 —
+  instruksi chown didokumentasikan di compose).
+- **A7 Mode akun & versi endpoint.** Selfcheck memeriksa
+  `GET /fapi/v1/positionSide/dual`: Hedge Mode + live = GAGAL (web
+  startup juga menolak); ping tak bertanda tangan diganti validasi
+  panggilan bertanda tangan + selisih jam server. Migrasi v3 dengan
+  fallback: account/balance/positionRisk kini mencoba `/fapi/v3/*`
+  dulu (panduan migrasi resmi Binance Futures Connector: v2 account
+  & balance digantikan v3 sejak Des 2024, v2 positionRisk deprecated
+  Jan 2025), fallback ke v2 bila v3 gagal. Perilaku testnetnya
+  diverifikasi pada tahap E2E.

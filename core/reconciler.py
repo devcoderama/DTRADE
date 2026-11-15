@@ -19,7 +19,6 @@ log — tidak ada panggilan tulis ke bursa.
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any, Optional
 
 from config.settings import Settings
@@ -39,9 +38,16 @@ def open_registry(journal) -> dict[str, dict]:
         cid = e.get("client_order_id")
         if not cid:
             continue
+        # Fase 6-A3: entri dry-run TIDAK PERNAH dianggap posisi terbuka —
+        # menyesuaikan registry live dengan simulasi mencemari jurnal &
+        # performa, dan memasang SL dari data basi berbahaya.
+        if e.get("dry_run"):
+            continue
         if e.get("type") == "close":
             registry.pop(cid, None)
-        elif e.get("execution_state") in {"PROTECTED", "FILLED", "PARTIALLY_FILLED"}:
+        elif e.get("execution_state") in {"PROTECTED", "FILLED", "PARTIALLY_FILLED", "SUBMITTING"}:
+            # SUBMITTING = entri write-ahead "intent" (Fase 6-A1): posisi
+            # dikenali (beserta SL-nya) sejak sebelum order entri terkirim.
             registry[cid] = e
     return registry
 
@@ -62,7 +68,21 @@ class Reconciler:
 
     # ------------------------------------------------------------------
     def run_once(self) -> dict[str, Any]:
-        """Satu putaran rekonsiliasi. Mengembalikan ringkasan tindakan."""
+        """Satu putaran rekonsiliasi. Mengembalikan ringkasan tindakan.
+
+        Fase 6-A1: SELURUH putaran berjalan di bawah lock executor —
+        reconciler tidak pernah menilai/menutup posisi selagi sebuah
+        eksekusi sedang memasang perlindungannya. Posisi + algo order
+        dibaca ulang DI DALAM lock, jadi keputusan selalu atas keadaan
+        terbaru, bukan snapshot sebelum eksekusi selesai.
+        """
+        lock = getattr(self._executor, "lock", None)
+        if lock is None:
+            return self._run_once()
+        with lock:
+            return self._run_once()
+
+    def _run_once(self) -> dict[str, Any]:
         summary = {"sl_placed": [], "emergency_closed": [], "orphans_cancelled": [], "closes_recorded": []}
         dry = not self._settings.is_live
         try:
@@ -86,6 +106,8 @@ class Reconciler:
         registry_by_symbol = {e["symbol"]: (cid, e) for cid, e in registry.items()}
 
         # (a) posisi tanpa SL
+        grace = float(getattr(self._settings, "reconciler_grace_sec", 120))
+        recent_fn = getattr(self._executor, "recent_activity", None)
         for symbol, pos in open_by_symbol.items():
             orders = algo_by_symbol.get(symbol, [])
             has_sl = any(
@@ -93,6 +115,16 @@ class Reconciler:
             )
             if has_sl:
                 continue
+            # Masa tenggang (Fase 6-A1): simbol dengan transisi eksekusi
+            # sangat baru dilewati — perlindungannya mungkin sedang dipasang.
+            if recent_fn is not None and grace > 0:
+                age = recent_fn(symbol)
+                if age is not None and age < grace:
+                    log.info(
+                        "Rekonsiliasi: %s dilewati (transisi eksekusi %.0f dtk lalu < tenggang %.0f dtk).",
+                        symbol, age, grace,
+                    )
+                    continue
             amt = float(pos["positionAmt"])
             exit_side = "SELL" if amt > 0 else "BUY"
             known = registry_by_symbol.get(symbol)
@@ -141,8 +173,11 @@ class Reconciler:
             except Exception as exc:
                 log.warning("Rekonsiliasi: gagal membatalkan algo yatim %s: %s", symbol, exc)
 
-        # (c) posisi tertutup → catat ke jurnal
-        for cid, entry in registry.items():
+        # (c) posisi tertutup → catat ke jurnal.
+        # Fase 6-A3: mode dry-run TIDAK menulis apa pun di sini — income
+        # yang terbaca adalah milik akun nyata dan akan mencemari
+        # performance() dengan penutupan fiktif.
+        for cid, entry in (registry.items() if not dry else []):
             symbol = entry["symbol"]
             if symbol in open_by_symbol:
                 continue

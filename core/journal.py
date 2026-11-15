@@ -44,6 +44,30 @@ class TradeJournal:
         if self._db is not None:
             self._db.insert_journal(row)  # kegagalan DB diabaikan di dalam Database
 
+    def record_intent(self, decision: Any, result: Any) -> None:
+        """Write-ahead (Fase 6-A1): catat NIAT eksekusi SEBELUM order entri
+        dikirim, lengkap dengan SL/TP dan client_order_id. Reconciler &
+        PositionManager mengenali posisi dari entri ini sejak detik
+        pertama — tidak ada lagi jendela "posisi yatim tak dikenal"
+        selama eksekusi masih berjalan.
+        """
+        self.record(
+            {
+                "type": "intent",
+                "symbol": decision.symbol,
+                "side": decision.side,
+                "quantity": decision.quantity,
+                "leverage": decision.leverage,
+                "stop_loss": decision.stop_loss,
+                "take_profit": decision.take_profit,
+                "notional": round(decision.notional, 2),
+                "risk_amount": round(decision.risk_amount, 2),
+                "dry_run": bool(getattr(result, "dry_run", True)),
+                "execution_state": "SUBMITTING",
+                "client_order_id": getattr(result, "client_order_id", None),
+            }
+        )
+
     def record_execution(self, decision: Any, result: Any, reference_price: float) -> None:
         self.record(
             {
