@@ -12,6 +12,7 @@ dipertaruhkan dengan uang.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -234,6 +235,82 @@ class SignalEngine:
             reasons=reasons,
         )
 
+    def snapshot_light(
+        self, symbol: str, interval: Optional[str], ticker: dict, funding: dict
+    ) -> dict:
+        """Snapshot hemat untuk pemindaian: hanya klines yang diambil per simbol;
+        ticker & funding memakai hasil panggilan massal, open interest dilewati."""
+        interval = interval or self._settings.default_interval
+        klines = self._binance.klines(symbol, interval=interval, limit=200)
+        return build_snapshot(symbol, klines, ticker, funding, open_interest=None)
+
+    def _score_snapshot(self, snapshot: dict, min_abs_score: int) -> Optional[TradeSignal]:
+        """Ubah snapshot menjadi TradeSignal teknikal (None bila skor terlalu kecil)."""
+        score, reasons = technical_score(snapshot)
+        if abs(score) < min_abs_score:
+            return None
+        side = "LONG" if score > 0 else ("SHORT" if score < 0 else "NEUTRAL")
+        sl, tp = _atr_levels(float(snapshot["price"]), snapshot.get("atr14"), side)
+        return TradeSignal(
+            symbol=str(snapshot["symbol"]),
+            side=side,
+            confidence=abs(score),
+            price=float(snapshot["price"]),
+            stop_loss=sl,
+            take_profit=tp,
+            technical_score=score,
+            snapshot=snapshot,
+            reasons=reasons,
+        )
+
+    def _scan_snapshots(
+        self, symbols: list[str], interval: Optional[str], min_abs_score: int
+    ) -> list[TradeSignal]:
+        """Tahap 1 pemindaian: saring 150 simbol terlikuid dari data massal,
+        lalu nilai klines-nya secara paralel (10 pekerja). Bila panggilan
+        massal gagal, jatuh kembali ke cara lama (berurutan, snapshot penuh)
+        agar pemindaian tidak pernah mati total."""
+        try:
+            tickers = {t["symbol"]: t for t in self._binance.tickers_24h_all()}
+            funding = {f["symbol"]: f for f in self._binance.funding_all()}
+            if not tickers:
+                raise RuntimeError("ticker massal kosong")
+        except Exception as exc:
+            log.warning("Pemindaian massal tidak tersedia (%s); pakai cara berurutan.", exc)
+            staged: list[TradeSignal] = []
+            for symbol in symbols:
+                try:
+                    sig = self._score_snapshot(
+                        self.snapshot_for(symbol, interval), min_abs_score
+                    )
+                except Exception as exc2:
+                    log.debug("Lewati %s saat scan: %s", symbol, exc2)
+                    continue
+                if sig is not None:
+                    staged.append(sig)
+            return staged
+
+        def _quote_volume(sym: str) -> float:
+            try:
+                return float(tickers.get(sym, {}).get("quoteVolume", 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        universe = sorted(
+            (s for s in symbols if s in tickers), key=_quote_volume, reverse=True
+        )[:150]
+
+        def _work(sym: str) -> Optional[TradeSignal]:
+            try:
+                snap = self.snapshot_light(sym, interval, tickers[sym], funding.get(sym, {}))
+                return self._score_snapshot(snap, min_abs_score)
+            except Exception as exc:
+                log.debug("Lewati %s saat scan: %s", sym, exc)
+                return None
+
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            return [s for s in pool.map(_work, universe) if s is not None]
+
     def scan(
         self,
         symbols: list[str],
@@ -243,34 +320,11 @@ class SignalEngine:
     ) -> list[TradeSignal]:
         """Nilai banyak simbol; AI hanya untuk kandidat teratas agar hemat token.
 
-        Dua tahap: (1) skor teknikal untuk semua simbol (gratis),
+        Dua tahap: (1) skor teknikal untuk 150 simbol terlikuid
+        (data massal + klines paralel — selesai dalam hitungan detik),
         (2) bila use_ai, lima kandidat teratas dinilai AI.
         """
-        staged: list[TradeSignal] = []
-        for symbol in symbols:
-            try:
-                snapshot = self.snapshot_for(symbol, interval)
-            except Exception as exc:
-                log.debug("Lewati %s saat scan: %s", symbol, exc)
-                continue
-            score, reasons = technical_score(snapshot)
-            if abs(score) < min_abs_score:
-                continue
-            side = "LONG" if score > 0 else ("SHORT" if score < 0 else "NEUTRAL")
-            sl, tp = _atr_levels(float(snapshot["price"]), snapshot.get("atr14"), side)
-            staged.append(
-                TradeSignal(
-                    symbol=symbol,
-                    side=side,
-                    confidence=abs(score),
-                    price=float(snapshot["price"]),
-                    stop_loss=sl,
-                    take_profit=tp,
-                    technical_score=score,
-                    snapshot=snapshot,
-                    reasons=reasons,
-                )
-            )
+        staged = self._scan_snapshots(symbols, interval, min_abs_score)
         staged.sort(key=lambda s: abs(s.technical_score), reverse=True)
 
         if use_ai and self._ai is not None and self._ai.is_configured():

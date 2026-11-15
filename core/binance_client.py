@@ -143,6 +143,16 @@ class BinanceFuturesClient:
         data = self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol})
         return data if isinstance(data, dict) else {}
 
+    def tickers_24h_all(self) -> list[dict]:
+        """Ticker 24 jam SEMUA simbol dalam satu panggilan (untuk pemindaian)."""
+        data = self._request("GET", "/fapi/v1/ticker/24hr")
+        return data if isinstance(data, list) else []
+
+    def funding_all(self) -> list[dict]:
+        """Premium index (funding rate) SEMUA simbol dalam satu panggilan."""
+        data = self._request("GET", "/fapi/v1/premiumIndex")
+        return data if isinstance(data, list) else []
+
     def open_interest(self, symbol: str) -> float:
         """Open interest terkini (dalam unit aset dasar)."""
         data = self._request("GET", "/fapi/v1/openInterest", {"symbol": symbol})
