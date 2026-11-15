@@ -12,13 +12,19 @@ Endpoint REST tipis di atas core yang sama dengan CLI:
     GET  /api/scan?top=N        pindai semua simbol (teknikal; AI opsional)
     POST /api/trade             {symbol, side?} → risk check → eksekusi
     POST /api/close/{symbol}    tutup posisi
+    POST /api/broadcast         satu putaran siaran sinyal ke Telegram
     GET  /api/ai/account        sisa token AI BangunWeb
+
+Selama server berjalan, siaran sinyal juga berjalan OTOMATIS di latar
+belakang (lihat BROADCAST_* di .env) — tanpa perlu perintah terpisah.
 
 Jalankan:  python run.py web   →  http://localhost:8000
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -63,6 +69,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Siaran sinyal otomatis ke Telegram — thread latar belakang selama server
+# web berjalan. Putaran pertama ±30 detik setelah start, lalu berkala
+# sesuai BROADCAST_INTERVAL_MINUTES. Kunci (lock) yang sama dipakai
+# endpoint manual /api/broadcast agar dua putaran tidak berjalan bersamaan.
+# ---------------------------------------------------------------------------
+_broadcast_lock = threading.Lock()
+_broadcast_cache: dict[str, float] = {}
+BROADCAST_FIRST_DELAY_SEC = 30
+
+
+def _auto_broadcast_loop() -> None:
+    interval = max(1, settings.broadcast_interval_minutes) * 60
+    time.sleep(BROADCAST_FIRST_DELAY_SEC)
+    while True:
+        try:
+            if _broadcast_lock.acquire(blocking=False):
+                try:
+                    run_broadcast(
+                        settings, engine, binance, notifier,
+                        symbol_manager.all_symbols(),
+                        min_score=settings.broadcast_min_score,
+                        max_signals=settings.broadcast_max_signals,
+                        sent_cache=_broadcast_cache,
+                        cooldown_sec=int(settings.broadcast_cooldown_hours * 3600),
+                    )
+                finally:
+                    _broadcast_lock.release()
+        except Exception as exc:  # satu putaran gagal tidak boleh mematikan loop
+            log.warning("Siaran otomatis gagal pada putaran ini: %s", exc)
+        time.sleep(interval)
+
+
+@app.on_event("startup")
+def _start_auto_broadcast() -> None:
+    if not settings.broadcast_enabled:
+        log.info("Siaran otomatis nonaktif (BROADCAST_ENABLED=false).")
+        return
+    if not notifier.enabled:
+        log.warning(
+            "Siaran otomatis nonaktif: Telegram belum dikonfigurasi "
+            "(isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env)."
+        )
+        return
+    threading.Thread(target=_auto_broadcast_loop, name="auto-broadcast", daemon=True).start()
+    log.info(
+        "Siaran otomatis AKTIF: putaran pertama ±%d detik, lalu tiap %d menit "
+        "(skor ≥%d, maks %d sinyal/putaran, jeda siar ulang %.0f jam).",
+        BROADCAST_FIRST_DELAY_SEC,
+        settings.broadcast_interval_minutes,
+        settings.broadcast_min_score,
+        settings.broadcast_max_signals,
+        settings.broadcast_cooldown_hours,
+    )
 
 
 def _guard(fn):
@@ -290,10 +351,11 @@ def broadcast(min_score: int = Query(50, ge=10, le=100), max_signals: int = Quer
         )
 
     def _run() -> dict:
-        return run_broadcast(
-            settings, engine, binance, notifier, symbol_manager.all_symbols(),
-            min_score=min_score, max_signals=max_signals,
-        )
+        with _broadcast_lock:
+            return run_broadcast(
+                settings, engine, binance, notifier, symbol_manager.all_symbols(),
+                min_score=min_score, max_signals=max_signals,
+            )
 
     return _guard(_run)
 

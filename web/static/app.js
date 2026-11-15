@@ -40,6 +40,14 @@ async function loadConfig() {
     const ai = $("badge-ai");
     ai.textContent = cfg.ai_configured ? "AI: " + cfg.ai_model : "AI: belum dikonfigurasi";
     if (cfg.ai_configured) ai.classList.add("ok");
+    const bc = $("badge-broadcast");
+    if (cfg.broadcast_enabled && cfg.telegram_configured) {
+      bc.textContent = "📣 Siaran Otomatis " + cfg.broadcast_interval_minutes + " mnt";
+      bc.classList.add("ok");
+    } else {
+      bc.textContent = "📣 Siaran Nonaktif";
+      bc.classList.remove("ok");
+    }
   } catch (e) { /* server belum siap */ }
 }
 

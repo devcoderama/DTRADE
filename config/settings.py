@@ -93,6 +93,13 @@ class Settings:
     telegram_chat_id: str = ""
     telegram_notifications: bool = True
 
+    # --- Siaran sinyal otomatis ke Telegram (berjalan selama server web) ---
+    broadcast_enabled: bool = True
+    broadcast_interval_minutes: int = 30
+    broadcast_min_score: int = 50
+    broadcast_max_signals: int = 3
+    broadcast_cooldown_hours: float = 4.0
+
     # --- Mode trading ---
     trading_mode: str = "dry_run"  # "dry_run" | "live"
 
@@ -136,6 +143,9 @@ class Settings:
             "ai_model": self.bangunweb_model,
             "ai_provider": self.ai_provider,
             "telegram_configured": bool(self.telegram_bot_token and self.telegram_chat_id),
+            "broadcast_enabled": self.broadcast_enabled,
+            "broadcast_interval_minutes": self.broadcast_interval_minutes,
+            "broadcast_min_score": self.broadcast_min_score,
             "trading_mode": "live" if self.is_live else "dry_run",
             "risk_per_trade_pct": self.risk_per_trade_pct,
             "max_leverage": self.max_leverage,
@@ -180,6 +190,11 @@ def load_settings() -> Settings:
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),
+        broadcast_enabled=_get_bool("BROADCAST_ENABLED", True),
+        broadcast_interval_minutes=_get_int("BROADCAST_INTERVAL_MINUTES", 30),
+        broadcast_min_score=_get_int("BROADCAST_MIN_SCORE", 50),
+        broadcast_max_signals=_get_int("BROADCAST_MAX_SIGNALS", 3),
+        broadcast_cooldown_hours=_get_float("BROADCAST_COOLDOWN_HOURS", 4.0),
         trading_mode=os.environ.get("TRADING_MODE", "dry_run").strip().lower(),
         risk_per_trade_pct=_get_float("RISK_PER_TRADE_PCT", 1.0),
         max_leverage=_get_int("MAX_LEVERAGE", 5),

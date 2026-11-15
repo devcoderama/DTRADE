@@ -221,21 +221,29 @@ sebelum order dikirim.
 ### Siaran sinyal ke Telegram (`broadcast`)
 
 Memindai semua simbol, menyaring sinyal teknikal terkuat
-(`--min-score`, bawaan 50), menganalisis kandidat dengan AI, dan hanya
+(bawaan: skor ≥ 50), menganalisis kandidat dengan AI, dan hanya
 mengirim yang terkonfirmasi LONG/SHORT ke channel Telegram Anda —
 lengkap dengan **gambar grafik candlestick** (EMA20/50, volume, RSI,
-garis SL/TP) dan caption ringkasannya:
+garis SL/TP) dan caption ringkasannya.
+
+**Otomatis (bawaan):** selama server web berjalan
+(`python run.py web`), siaran berjalan sendiri di latar belakang —
+putaran pertama ±30 detik setelah start, lalu tiap
+`BROADCAST_INTERVAL_MINUTES` (bawaan 30 menit). Atur lewat `BROADCAST_*`
+di `.env`; statusnya terlihat pada lencana "📣 Siaran Otomatis" di
+dasbor. Matikan dengan `BROADCAST_ENABLED=false`.
+
+**Manual:**
 
 ```bash
 python run.py cli broadcast                       # sekali jalan, maks 3 sinyal
-python run.py cli broadcast --loop 30 --cooldown 4  # berkala tiap 30 menit,
-                                                    # simbol yang sama tidak
-                                                    # disiarkan ulang < 4 jam
+python run.py cli broadcast --loop 30 --cooldown 4  # berkala tanpa server web
 ```
 
 Tombol **📣 Siaran ke Telegram** di panel Pemindai Web UI menjalankan
-putaran yang sama. Syarat: `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`
-terisi di `.env` (bot harus menjadi admin channel tujuan).
+satu putaran yang sama. Syarat: `TELEGRAM_BOT_TOKEN` dan
+`TELEGRAM_CHAT_ID` terisi di `.env` (bot harus menjadi admin channel
+tujuan).
 
 ## Aplikasi Android — D TRADE
 
