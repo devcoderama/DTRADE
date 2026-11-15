@@ -200,7 +200,8 @@ def cmd_analyze(app: App, args) -> int:
     signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai)
     snap = signal.snapshot
     _print(f"[bold]{signal.symbol}[/bold] @ {fmt_price(signal.price)}  ({fmt_pct(snap['change_24h_pct'])} 24 jam)")
-    _print(f"  Tren {snap['trend']} | RSI {snap['rsi14']:.1f} | ATR {fmt_price(snap['atr14'] or 0)} "
+    rsi_txt = f"{snap['rsi14']:.1f}" if snap.get("rsi14") is not None else "—"
+    _print(f"  Tren {snap['trend']} | RSI {rsi_txt} | ATR {fmt_price(snap['atr14'] or 0)} "
            f"| Funding {snap['funding_rate'] * 100:.4f}%")
     _print(f"  Skor teknikal: {signal.technical_score} (-100..100)")
     if signal.ai:
@@ -208,6 +209,7 @@ def cmd_analyze(app: App, args) -> int:
         _print(f"  Alasan AI: {signal.ai.reasoning}")
         for risk in signal.ai.risks:
             _print(f"    ⚠ {risk}")
+    app.journal.record_ai_decision(signal, provider=app.engine.ai_name)
     _print(f"  → SINYAL: [bold]{signal.side}[/bold] (confidence {signal.confidence})")
     if signal.stop_loss:
         _print(f"    SL {fmt_price(signal.stop_loss)} | TP {fmt_price(signal.take_profit or 0)}")
@@ -324,18 +326,23 @@ def cmd_backtest(app: App, args) -> int:
     _print(f"  Profit factor: {pf if pf is not None else '∞ (belum ada kerugian)'}")
     _print(f"  Max drawdown : {d['max_drawdown_pct']:.2f}%")
     if result.trades:
-        table = Table(title="10 trade terakhir", header_style="bold")
-        for col in ("Sisi", "Entri", "Keluar", "Alasan", "PnL (USDT)"):
-            table.add_column(col)
-        for t in result.trades[-10:]:
-            table.add_row(
-                t.side,
-                fmt_price(t.entry_price),
-                fmt_price(t.exit_price),
-                t.exit_reason,
-                f"{t.pnl:+.2f}",
-            )
-        _print(table)
+        if HAS_RICH:
+            table = Table(title="10 trade terakhir", header_style="bold")
+            for col in ("Sisi", "Entri", "Keluar", "Alasan", "PnL (USDT)"):
+                table.add_column(col)
+            for t in result.trades[-10:]:
+                table.add_row(
+                    t.side,
+                    fmt_price(t.entry_price),
+                    fmt_price(t.exit_price),
+                    t.exit_reason,
+                    f"{t.pnl:+.2f}",
+                )
+            _print(table)
+        else:  # tanpa rich: teks polos
+            for t in result.trades[-10:]:
+                _print(f"  {t.side} {fmt_price(t.entry_price)} → {fmt_price(t.exit_price)} "
+                       f"({t.exit_reason}) PnL {t.pnl:+.2f}")
     _print("[dim]Catatan: backtest memakai skor teknikal murni (tanpa AI) agar deterministik.[/dim]")
     return 0
 
@@ -376,6 +383,15 @@ def cmd_journal(app: App, args) -> int:
     if not rows:
         _print("Jurnal masih kosong — belum ada eksekusi yang tercatat.")
         return 0
+    if not HAS_RICH:  # tanpa rich: teks polos (Table tidak tersedia)
+        for r in rows:
+            when = time.strftime("%d-%m %H:%M", time.localtime(r.get("time", 0) / 1000))
+            _print(
+                f"  {when} {r.get('symbol')} {r.get('side')} qty {r.get('quantity')} "
+                f"@ {fmt_price(float(r.get('reference_price', 0) or 0))} "
+                f"{'DRY-RUN' if r.get('dry_run') else 'LIVE'} notional {float(r.get('notional', 0) or 0):.2f}"
+            )
+        return 0
     table = Table(title=f"Jurnal perdagangan ({len(rows)} entri terakhir)", header_style="bold")
     for col in ("Waktu", "Simbol", "Sisi", "Qty", "Harga ref", "Mode", "Notional"):
         table.add_column(col)
@@ -391,6 +407,31 @@ def cmd_journal(app: App, args) -> int:
             f"{float(r.get('notional', 0) or 0):.2f}",
         )
     _print(table)
+    return 0
+
+
+def cmd_performance(app: App, args) -> int:
+    perf = app.journal.performance()
+    if not perf["closed_trades"]:
+        _print("Belum ada trade tertutup di jurnal — metrik performa belum tersedia.")
+        return 0
+    _print(f"[bold]Performa ({perf['closed_trades']} trade tertutup)[/bold]")
+    _print(f"  Win rate     : {perf['win_rate_pct']}%  (menang {perf['wins']} / kalah {perf['losses']})")
+    pf = perf["profit_factor"]
+    _print(f"  Profit factor: {pf if pf is not None else '∞ (belum ada kerugian)'}")
+    _print(f"  Expectancy   : {perf['expectancy']:+.4f} USDT/trade")
+    _print(f"  R rata-rata  : {perf['avg_r'] if perf['avg_r'] is not None else '—'}")
+    _print(f"  Total PnL    : {perf['total_pnl']:+.4f} USDT")
+    _print(f"  Max drawdown : {perf['max_drawdown']:.4f} USDT (dari kurva PnL kumulatif)")
+    return 0
+
+
+def cmd_reconcile(app: App, args) -> int:
+    from core.reconciler import Reconciler
+
+    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal)
+    summary = reconciler.run_once()
+    _print(f"[bold]Rekonsiliasi selesai[/bold]: {summary}")
     return 0
 
 
@@ -532,6 +573,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("journal", help="Lihat jurnal eksekusi terakhir")
     p.add_argument("--limit", type=int, default=20)
 
+    sub.add_parser("performance", help="Metrik performa dari jurnal (trade tertutup)")
+
+    sub.add_parser("reconcile", help="Jalankan satu putaran rekonsiliasi posisi ↔ proteksi ↔ jurnal")
+
     p = sub.add_parser("broadcast", help="Pindai semua simbol → AI → kirim sinyal terbaik + grafik ke Telegram")
     p.add_argument("--min-score", type=int, default=50, help="Ambang |skor teknikal| kandidat (bawaan 50)")
     p.add_argument("--max", type=int, default=3, help="Maks sinyal terkirim per putaran (bawaan 3)")
@@ -562,6 +607,8 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": cmd_backtest,
         "watch": cmd_watch,
         "journal": cmd_journal,
+        "performance": cmd_performance,
+        "reconcile": cmd_reconcile,
         "broadcast": cmd_broadcast,
     }
     try:

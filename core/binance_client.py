@@ -208,28 +208,22 @@ class BinanceFuturesClient:
         params = {"symbol": symbol} if symbol else {}
         return self._request("GET", "/fapi/v1/openOrders", params, signed=True)
 
-    def income_history(self, limit: int = 100) -> list[dict]:
-        return self._request("GET", "/fapi/v1/income", {"limit": limit}, signed=True)
+    def income_history(
+        self,
+        limit: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        income_type: Optional[str] = None,
+    ) -> list[dict]:
+        params: dict[str, Any] = {"limit": limit}
+        if start_time is not None:
+            params["startTime"] = int(start_time)
+        if end_time is not None:
+            params["endTime"] = int(end_time)
+        if income_type:
+            params["incomeType"] = income_type
+        return self._request("GET", "/fapi/v1/income", params, signed=True)
 
-    def realized_pnl_today(self) -> float:
-        """Total realized PnL sejak 00:00 UTC hari ini (untuk batas rugi harian)."""
-        import datetime as _dt
-
-        start = int(
-            _dt.datetime.now(_dt.timezone.utc)
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-            .timestamp()
-            * 1000
-        )
-        rows = self._request(
-            "GET",
-            "/fapi/v1/income",
-            {"incomeType": "REALIZED_PNL", "startTime": start, "limit": 1000},
-            signed=True,
-        )
-        return sum(float(r.get("income", 0)) for r in rows)
-
-    # ------------------------------------------------------------------
     # Endpoint bertanda tangan — trading
     # ------------------------------------------------------------------
     def change_leverage(self, symbol: str, leverage: int) -> dict:
@@ -314,6 +308,7 @@ class BinanceFuturesClient:
         quantity: Optional[float] = None,
         close_position: bool = False,
         client_algo_id: Optional[str] = None,
+        working_type: Optional[str] = None,
     ) -> dict:
         params: dict[str, Any] = {
             "algoType": "CONDITIONAL",
@@ -322,6 +317,12 @@ class BinanceFuturesClient:
             "type": order_type,
             "triggerPrice": trigger_price,
         }
+        # TODO(verify): nama parameter `workingType` (MARK_PRICE/CONTRACT_PRICE)
+        # mengikuti dokumentasi Algo Order API Binance; verifikasi ulang saat
+        # ada akses dokumentasi resmi — nilai tidak valid ditolak bursa dengan
+        # error parameter, bukan dieksekusi diam-diam.
+        if working_type:
+            params["workingType"] = working_type
         if client_algo_id:
             params["clientAlgoId"] = client_algo_id
         if close_position:

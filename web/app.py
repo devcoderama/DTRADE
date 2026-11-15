@@ -54,6 +54,7 @@ from core.database import build_database
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.market_stream import MarketStream
+from core.reconciler import Reconciler
 from core.service import TradingService
 from core.notifier import build_notifier
 from core.risk import RiskManager
@@ -94,8 +95,23 @@ risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager, db=database)
 market_stream = MarketStream(settings)
 trading_service = TradingService(settings, risk_manager, executor, binance)
+reconciler = Reconciler(settings, binance, executor, journal)
 
-app = FastAPI(title="binance-ai-future", version="1.0.0")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    """Pengganti @app.on_event('startup') yang deprecated."""
+    _validate_startup()
+    _start_auto_broadcast()
+    if settings.reconciler_enabled:
+        reconciler.start()
+    yield
+    reconciler.stop()
+
+
+app = FastAPI(title="binance-ai-future", version="1.0.0", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # Keamanan API (P0):
@@ -292,7 +308,6 @@ def enforce_web_safety() -> None:
     )
 
 
-@app.on_event("startup")
 def _validate_startup() -> None:
     """Validasi keamanan & pemulihan saat server mulai."""
     enforce_web_safety()
@@ -318,7 +333,6 @@ def _validate_startup() -> None:
         )
 
 
-@app.on_event("startup")
 def _start_auto_broadcast() -> None:
     if not settings.broadcast_enabled:
         log.info("Siaran otomatis nonaktif (BROADCAST_ENABLED=false).")
@@ -513,7 +527,19 @@ def snapshot(symbol: str, interval: Optional[str] = None) -> dict:
 @app.get("/api/analyze/{symbol}")
 def analyze(symbol: str, interval: Optional[str] = None, ai: bool = True) -> dict:
     _refresh_ai_from_store()
-    return _guard(lambda: _signal_payload(engine.analyze(symbol.upper(), interval, use_ai=ai)))
+
+    def _run():
+        signal = engine.analyze(symbol.upper(), interval, use_ai=ai)
+        journal.record_ai_decision(signal, provider=engine.ai_name)
+        return _signal_payload(signal)
+
+    return _guard(_run)
+
+
+@app.get("/api/performance")
+def performance() -> dict:
+    """Metrik performa dari jurnal (trade tertutup): win rate, PF, dst."""
+    return _guard(lambda: journal.performance())
 
 
 @app.get("/api/scan")
@@ -658,7 +684,7 @@ def ai_models() -> dict:
     live: list[str] = []
     if ai_client is not None and ai_client.name == "bangunweb" and ai_client.is_configured():
         try:
-            live = [str(m.get("id")) for m in ai_client._client.list_models() if m.get("id")]
+            live = [str(m.get("id")) for m in ai_client.list_models() if m.get("id")]
         except Exception:
             live = []  # daftar live bersifat tambahan; saran statis tetap ada
     return {

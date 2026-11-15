@@ -7,6 +7,7 @@ CLI, maupun Web UI.
 
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 
@@ -17,13 +18,24 @@ def sma(values: list[float], period: int) -> Optional[float]:
 
 
 def ema_series(values: list[float], period: int) -> list[float]:
+    """EMA dengan seed SMA(period) bila data cukup (standar industri).
+
+    Sebelum titik seed, nilai diisi rata-rata berjalan agar panjang seri
+    tetap sama dengan data. Data kurang dari period → fallback perilaku
+    lama (mulai dari nilai pertama).
+    """
     if not values or period <= 0:
         return []
     k = 2.0 / (period + 1)
     out: list[float] = []
     prev: Optional[float] = None
-    for v in values:
-        prev = v if prev is None else (v - prev) * k + prev
+    for i, v in enumerate(values):
+        if len(values) >= period and i < period - 1:
+            prev = sum(values[: i + 1]) / (i + 1)  # pra-seed: rata-rata berjalan
+        elif len(values) >= period and i == period - 1:
+            prev = sum(values[:period]) / period  # seed SMA(period)
+        else:
+            prev = v if prev is None else (v - prev) * k + prev
         out.append(prev)
     return out
 
@@ -209,12 +221,20 @@ def pct_change(values: list[float], lookback: int) -> Optional[float]:
     return (values[-1] / values[-lookback - 1] - 1.0) * 100.0
 
 
+_INTERVAL_SECONDS = {
+    "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
+    "1h": 3600, "2h": 7200, "4h": 14400, "6h": 21600, "8h": 28800,
+    "12h": 43200, "1d": 86400, "3d": 259200, "1w": 604800,
+}
+
+
 def build_snapshot(
     symbol: str,
     klines: list[list],
     ticker24h: dict,
     funding: dict,
     open_interest: float | None = None,
+    interval: str = "15m",
 ) -> dict:
     """Ubah klines mentah Binance menjadi snapshot indikator yang ringkas.
 
@@ -263,7 +283,19 @@ def build_snapshot(
         "bb_pct_b": bb["pct_b"],
         "atr14": atr_v,
         "atr_pct": (atr_v / price * 100.0) if (atr_v and price) else None,
-        "change_1h_pct": pct_change(closes, 4),   # asumsi interval 15m: 4 candle = 1 jam
+        # Perubahan 1 jam dihitung dari interval AKTUAL: jumlah candle
+        # yang mencakup 3600 detik. Interval > 1 jam tidak bisa memberi
+        # perubahan intra-jam → None (bukan tebakan).
+        "change_1h_pct": (
+            pct_change(closes, max(1, 3600 // _INTERVAL_SECONDS[interval]))
+            if interval in _INTERVAL_SECONDS and _INTERVAL_SECONDS[interval] <= 3600
+            else None
+        ),
+        # True bila candle terakhir belum tertutup (closeTime > sekarang) —
+        # penanda untuk kebijakan candle-tertutup (Fase 3.1).
+        "includes_open_candle": bool(
+            klines and len(klines[-1]) > 6 and int(klines[-1][6]) > int(time.time() * 1000)
+        ),
         "avg_volume": (sum(volumes) / len(volumes)) if volumes else None,
         "last_volume": volumes[-1] if volumes else None,
         "funding_rate": float(funding.get("lastFundingRate", 0) or 0),

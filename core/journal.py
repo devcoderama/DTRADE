@@ -64,6 +64,117 @@ class TradeJournal:
             }
         )
 
+    def record_close(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        exit_price: float | None,
+        exit_reason: str,
+        realized_pnl: float | None,
+        client_order_id: str | None = None,
+        fee: float | None = None,
+        opened_at_ms: int | None = None,
+        risk_amount: float | None = None,
+    ) -> None:
+        """Catat penutupan posisi (SL/TP/manual) — pasangan entri eksekusi.
+
+        Dihubungkan ke entri lewat `client_order_id`; R-multiple dihitung
+        terhadap risk_amount entri bila diketahui.
+        """
+        now_ms = int(time.time() * 1000)
+        r_multiple = None
+        if realized_pnl is not None and risk_amount:
+            r_multiple = realized_pnl / risk_amount
+        self.record(
+            {
+                "type": "close",
+                "symbol": symbol,
+                "side": side,
+                "client_order_id": client_order_id,
+                "exit_price": exit_price,
+                "exit_reason": exit_reason,
+                "realized_pnl": realized_pnl,
+                "fee": fee,
+                "duration_sec": (
+                    round((now_ms - opened_at_ms) / 1000, 1) if opened_at_ms else None
+                ),
+                "r_multiple": r_multiple,
+            }
+        )
+
+    def record_ai_decision(self, signal: Any, provider: str | None = None) -> None:
+        """Catat keputusan AI per sinyal (untuk menilai nilai tambah AI)."""
+        ai = getattr(signal, "ai", None)
+        if ai is None:
+            return
+        self.record(
+            {
+                "type": "ai_decision",
+                "symbol": signal.symbol,
+                "provider": provider,
+                "model": getattr(ai, "model_used", None),
+                "ai_signal": getattr(ai, "signal", None),
+                "ai_confidence": getattr(ai, "confidence", None),
+                "final_side": signal.side,
+                "final_confidence": signal.confidence,
+                "technical_score": signal.technical_score,
+            }
+        )
+
+    def all_entries(self) -> list[dict[str, Any]]:
+        """Seluruh isi jurnal (urutan kronologis)."""
+        try:
+            lines = self._path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        out: list[dict[str, Any]] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+        return out
+
+    def performance(self) -> dict[str, Any]:
+        """Metrik performa dari event penutupan di jurnal.
+
+        Win rate, profit factor, expectancy, R rata-rata, dan drawdown
+        maksimum dari kurva PnL kumulatif — hanya dari trade yang sudah
+        TUTUP (punya realized PnL), bukan dari entri yang masih terbuka.
+        """
+        closes = [
+            e for e in self.all_entries()
+            if e.get("type") == "close" and e.get("realized_pnl") is not None
+        ]
+        pnls = [float(e["realized_pnl"]) for e in closes]
+        wins = [p for p in pnls if p > 0]
+        losses = [p for p in pnls if p < 0]
+        gross_profit = sum(wins)
+        gross_loss = abs(sum(losses))
+        rs = [float(e["r_multiple"]) for e in closes if e.get("r_multiple") is not None]
+        equity = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        for p in pnls:
+            equity += p
+            peak = max(peak, equity)
+            max_dd = max(max_dd, peak - equity)
+        return {
+            "closed_trades": len(pnls),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate_pct": round(len(wins) / len(pnls) * 100, 2) if pnls else None,
+            "total_pnl": round(sum(pnls), 4),
+            "profit_factor": (round(gross_profit / gross_loss, 3) if gross_loss > 0 else None),
+            "expectancy": (round(sum(pnls) / len(pnls), 4) if pnls else None),
+            "avg_r": (round(sum(rs) / len(rs), 3) if rs else None),
+            "max_drawdown": round(max_dd, 4),
+        }
+
     def recent(self, limit: int = 20) -> list[dict[str, Any]]:
         """Baca entri terakhir (terbaru di akhir)."""
         try:

@@ -30,16 +30,28 @@ class SymbolFilters:
     min_notional: float   # MIN_NOTIONAL.notional
 
     def round_quantity(self, qty: float) -> float:
+        """Bulatkan ke bawah ke kelipatan stepSize — presisi Decimal.
+
+        Pembagian float (`0.3 / 0.1 = 2.99999…`) bisa membuat floor()
+        turun satu step penuh; Decimal menghindarinya sepenuhnya.
+        """
         if self.quantity_step <= 0:
             return qty
-        steps = math.floor(qty / self.quantity_step)
-        return round(steps * self.quantity_step, 10)
+        from decimal import ROUND_DOWN, Decimal
+
+        step = Decimal(str(self.quantity_step))
+        steps = (Decimal(str(qty)) / step).to_integral_value(rounding=ROUND_DOWN)
+        return float(steps * step)
 
     def round_price(self, price: float) -> float:
+        """Bulatkan ke bawah ke kelipatan tickSize — presisi Decimal."""
         if self.price_tick <= 0:
             return price
-        steps = math.floor(price / self.price_tick)
-        return round(steps * self.price_tick, 10)
+        from decimal import ROUND_DOWN, Decimal
+
+        tick = Decimal(str(self.price_tick))
+        steps = (Decimal(str(price)) / tick).to_integral_value(rounding=ROUND_DOWN)
+        return float(steps * tick)
 
 
 class SymbolManager:
@@ -81,6 +93,25 @@ class SymbolManager:
     def all_symbols(self) -> list[str]:
         self._ensure_loaded()
         return sorted(self._filters.keys())
+
+    def top_by_volume(self, n: int) -> list[str]:
+        """N simbol aktif dengan quoteVolume 24 jam terbesar (untuk `watch`)."""
+        self._ensure_loaded()
+        try:
+            tickers = self._client.tickers_24h_all()
+        except Exception as exc:
+            log.warning("Gagal memuat ticker untuk top_by_volume: %s", exc)
+            return self.all_symbols()[:n]
+        rows = []
+        for t in tickers:
+            symbol = t.get("symbol")
+            if symbol in self._filters:
+                try:
+                    rows.append((symbol, float(t.get("quoteVolume", 0))))
+                except (TypeError, ValueError):
+                    continue
+        rows.sort(key=lambda r: r[1], reverse=True)
+        return [s for s, _ in rows[: max(0, n)]]
 
     def filters(self, symbol: str) -> SymbolFilters:
         self._ensure_loaded()

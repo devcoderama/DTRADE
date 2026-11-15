@@ -73,3 +73,54 @@ Test baru: `tests/test_phase1.py` (10 test) + 3 test executor
 (close ordering, exception pasca-fill) + test DB non-blocking.
 Perilaku yang sengaja berubah & test-nya disesuaikan: `test_database.py`
 (insert kini asinkron — memakai `flush()`), sesuai butir 1.5.
+
+## Fase 2 — Keandalan & Koreksi Logika — SELESAI, 79 test hijau (61 → +18)
+
+- **2.1 Streak rugi berjendela.** `_consecutive_losses` kini hanya
+  menghitung REALIZED_PNL dalam `CONSECUTIVE_LOSS_WINDOW_HOURS` (bawaan
+  24) — rugi lama tidak mengunci selamanya (cooldown alami saat jendela
+  berlalu). Pengambilan memakai `startTime` + `incomeType` + paginasi
+  (5×1000), tidak lagi bergantung pada 100 baris tercampur.
+  `income_history` client diperluas (start/end time, income type).
+  Test lama disesuaikan (timestamp relatif) + test jendela baru.
+- **2.2 `cli watch` DIPERBAIKI** — sebelumnya crash: `SymbolManager`
+  tidak punya `top_by_volume`. Kini diimplementasikan (urut
+  quoteVolume dari `tickers_24h_all`, hanya simbol aktif) + test.
+  `cmd_journal`/`cmd_backtest` aman tanpa rich (fallback teks polos);
+  `cmd_analyze` menangani `rsi14 is None`.
+- **2.3 Presisi Decimal.** `round_quantity`/`round_price` memakai
+  `Decimal` ROUND_DOWN (kasus 0.3/0.1, 0.57/0.01, 1.15/0.01 + property
+  test 1000 nilai acak: selalu kelipatan step, tak pernah turun >1 step).
+  Arah pembulatan SL didokumentasikan di `risk.py` (risiko dolar tetap
+  karena qty dihitung dari jarak SL final).
+- **2.4 Indikator.** `change_1h_pct` dihitung dari interval aktual
+  (3600/detik-interval; interval >1h → None, tidak ditebak). EMA kini
+  di-seed SMA(period) bila data cukup. `snapshot_for` mengambil 300
+  candle agar EMA200 valid. Snapshot menandai `includes_open_candle`
+  (persiapan kebijakan candle-tertutup Fase 3.1).
+- **2.5 Konfigurasi ketat.** `ConfigError`: parameter risiko/keuangan
+  yang salah format kini MENOLAK start (bukan diam-diam default) dan
+  `Settings.__post_init__` memvalidasi rentang (risk ≤5%, leverage
+  1–20, batas rugi >0, R/R ≥1, interval sah, dll). `has_ai_key` &
+  `ai_model` di ringkasan kini mengikuti provider aktif, bukan selalu
+  BangunWeb.
+- **2.6 Reconciler BARU** (`core/reconciler.py`): thread latar web
+  (juga perintah CLI `reconcile`). Tiap putaran: (a) posisi tanpa SL →
+  pasang ulang SL dari jurnal / tutup darurat bila asal tak diketahui;
+  (b) algo yatim → dibatalkan; (c) posisi tertutup → event penutupan +
+  realized PnL dicatat ke jurnal. Registri diturunkan dari jurnal
+  (restart-safe). Dry-run: hanya log. 4 test skenario + dry-run.
+- **2.7 Jurnal & metrik.** `record_close` (harga keluar, alasan,
+  PnL terealisasi, fee, durasi, R-multiple, terhubung client_order_id),
+  `record_ai_decision` (provider/model/sinyal/keyakinan per analisis,
+  dicatat dari Web & CLI), `TradeJournal.performance()` →
+  `GET /api/performance` + CLI `performance` (win rate, PF, expectancy,
+  R rata-rata, drawdown kurva PnL).
+- **2.8 Kebersihan.** `@app.on_event` → `lifespan` (validasi + broadcast
+  + reconciler; peringatan deprecation hilang). `realized_pnl_today`
+  dihapus (tak terpakai). Akses privat `ai_client._client` diganti
+  method publik `list_models()` di provider. Cache analisis disapu
+  TTL-nya & dibatasi 512 entri. Baseline harian/mingguan RiskManager
+  kini UTC (satu sumber waktu). Algo order menerima `workingType`
+  (`PROTECTION_WORKING_TYPE`, bawaan MARK_PRICE) — ditandai
+  `TODO(verify)` di kode sesuai aturan kehati-hatian API.

@@ -30,23 +30,31 @@ def _get_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _get_float(name: str, default: float) -> float:
+class ConfigError(ValueError):
+    """Konfigurasi tidak valid — aplikasi harus menolak start, bukan menebak."""
+
+
+def _get_float(name: str, default: float, *, critical: bool = False) -> float:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
     try:
         return float(raw)
     except ValueError:
+        if critical:
+            raise ConfigError(f"{name}: nilai {raw!r} bukan angka yang valid.")
         return default
 
 
-def _get_int(name: str, default: int) -> int:
+def _get_int(name: str, default: int, *, critical: bool = False) -> int:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
     try:
         return int(raw)
     except ValueError:
+        if critical:
+            raise ConfigError(f"{name}: nilai {raw!r} bukan bilangan bulat yang valid.")
         return default
 
 
@@ -117,6 +125,10 @@ class Settings:
     max_total_exposure_pct: float = 300.0   # total notional semua posisi ≤ % ekuitas ini
     min_risk_reward: float = 1.5            # rasio TP:SL minimum agar sinyal diterima
     max_consecutive_losses: int = 3         # 0 = nonaktif; berhenti setelah N rugi beruntun
+    consecutive_loss_window_hours: int = 24  # streak hanya dihitung dari realisasi N jam terakhir
+    protection_working_type: str = "MARK_PRICE"  # pemicu SL/TP algo: MARK_PRICE | CONTRACT_PRICE
+    reconciler_enabled: bool = True   # rekonsiliasi posisi berkala di web server
+    reconciler_interval_sec: int = 60  # jeda antar putaran rekonsiliasi
     risk_state_path: str = "data/risk_state.json"  # baseline ekuitas harian/mingguan + kunci harian (persisten)
     protection_retries: int = 3             # percobaan pasang SL/TP sebelum emergency close
     default_interval: str = "15m"
@@ -157,9 +169,57 @@ class Settings:
     def has_binance_keys(self) -> bool:
         return bool(self.binance_api_key and self.binance_api_secret)
 
+    # Peta provider → (field kunci API, field model). Mengikuti provider
+    # yang dipilih di `ai_provider` agar has_ai_key/ai_model tidak selalu
+    # menunjuk BangunWeb.
+    _AI_KEY_FIELDS = {
+        "bangunweb": ("bangunweb_api_key", "bangunweb_model"),
+        "openai": ("openai_api_key", "openai_model"),
+        "anthropic": ("anthropic_api_key", "anthropic_model"),
+        "deepseek": ("deepseek_api_key", "deepseek_model"),
+        "grok": ("xai_api_key", "xai_model"),
+        "nous": ("nous_api_key", "nous_model"),
+        "custom": ("ai_custom_api_key", "ai_custom_model"),
+    }
+
     @property
     def has_ai_key(self) -> bool:
-        return bool(self.bangunweb_api_key)
+        fields = self._AI_KEY_FIELDS.get((self.ai_provider or "bangunweb").lower())
+        if fields is None:
+            return False
+        return bool(getattr(self, fields[0], ""))
+
+    @property
+    def active_ai_model(self) -> str:
+        fields = self._AI_KEY_FIELDS.get((self.ai_provider or "bangunweb").lower())
+        if fields is None:
+            return self.bangunweb_model
+        return str(getattr(self, fields[1], "") or "")
+
+    def __post_init__(self) -> None:
+        """Validasi rentang parameter kritis — gagal = ConfigError (tolak start)."""
+        errors = []
+        if not (0 < self.risk_per_trade_pct <= 5):
+            errors.append(f"RISK_PER_TRADE_PCT harus dalam (0, 5], kini {self.risk_per_trade_pct}")
+        if not (1 <= self.max_leverage <= 20):
+            errors.append(f"MAX_LEVERAGE harus dalam [1, 20], kini {self.max_leverage}")
+        if self.daily_loss_limit_pct <= 0:
+            errors.append(f"DAILY_LOSS_LIMIT_PCT harus > 0, kini {self.daily_loss_limit_pct}")
+        if self.weekly_loss_limit_pct <= 0:
+            errors.append(f"WEEKLY_LOSS_LIMIT_PCT harus > 0, kini {self.weekly_loss_limit_pct}")
+        if self.min_risk_reward < 1:
+            errors.append(f"MIN_RISK_REWARD harus >= 1, kini {self.min_risk_reward}")
+        if self.max_open_positions < 1:
+            errors.append(f"MAX_OPEN_POSITIONS harus >= 1, kini {self.max_open_positions}")
+        if self.max_consecutive_losses < 0:
+            errors.append(f"MAX_CONSECUTIVE_LOSSES harus >= 0 (0 = nonaktif), kini {self.max_consecutive_losses}")
+        if not (0 < self.max_entry_deviation_pct <= 10):
+            errors.append(f"MAX_ENTRY_DEVIATION_PCT harus dalam (0, 10], kini {self.max_entry_deviation_pct}")
+        valid_intervals = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"}
+        if self.default_interval not in valid_intervals:
+            errors.append(f"DEFAULT_INTERVAL tidak dikenal: {self.default_interval!r}")
+        if errors:
+            raise ConfigError("Konfigurasi tidak valid — " + "; ".join(errors))
 
     def public_summary(self) -> dict:
         """Ringkasan konfigurasi yang AMAN ditampilkan (tanpa secret)."""
@@ -167,7 +227,7 @@ class Settings:
             "binance_network": "testnet" if self.binance_testnet else "mainnet",
             "binance_keys_configured": self.has_binance_keys,
             "ai_configured": self.has_ai_key,
-            "ai_model": self.bangunweb_model,
+            "ai_model": self.active_ai_model,
             "ai_provider": self.ai_provider,
             "telegram_configured": bool(self.telegram_bot_token and self.telegram_chat_id),
             "broadcast_enabled": self.broadcast_enabled,
@@ -228,15 +288,19 @@ def load_settings() -> Settings:
         broadcast_max_signals=_get_int("BROADCAST_MAX_SIGNALS", 3),
         broadcast_cooldown_hours=_get_float("BROADCAST_COOLDOWN_HOURS", 4.0),
         trading_mode=os.environ.get("TRADING_MODE", "dry_run").strip().lower(),
-        risk_per_trade_pct=_get_float("RISK_PER_TRADE_PCT", 1.0),
-        max_leverage=_get_int("MAX_LEVERAGE", 5),
-        max_open_positions=_get_int("MAX_OPEN_POSITIONS", 3),
-        daily_loss_limit_pct=_get_float("DAILY_LOSS_LIMIT_PCT", 3.0),
-        weekly_loss_limit_pct=_get_float("WEEKLY_LOSS_LIMIT_PCT", 6.0),
-        max_symbol_exposure_pct=_get_float("MAX_SYMBOL_EXPOSURE_PCT", 150.0),
-        max_total_exposure_pct=_get_float("MAX_TOTAL_EXPOSURE_PCT", 300.0),
-        min_risk_reward=_get_float("MIN_RISK_REWARD", 1.5),
-        max_consecutive_losses=_get_int("MAX_CONSECUTIVE_LOSSES", 3),
+        risk_per_trade_pct=_get_float("RISK_PER_TRADE_PCT", 1.0, critical=True),
+        max_leverage=_get_int("MAX_LEVERAGE", 5, critical=True),
+        max_open_positions=_get_int("MAX_OPEN_POSITIONS", 3, critical=True),
+        daily_loss_limit_pct=_get_float("DAILY_LOSS_LIMIT_PCT", 3.0, critical=True),
+        weekly_loss_limit_pct=_get_float("WEEKLY_LOSS_LIMIT_PCT", 6.0, critical=True),
+        max_symbol_exposure_pct=_get_float("MAX_SYMBOL_EXPOSURE_PCT", 150.0, critical=True),
+        max_total_exposure_pct=_get_float("MAX_TOTAL_EXPOSURE_PCT", 300.0, critical=True),
+        min_risk_reward=_get_float("MIN_RISK_REWARD", 1.5, critical=True),
+        max_consecutive_losses=_get_int("MAX_CONSECUTIVE_LOSSES", 3, critical=True),
+        consecutive_loss_window_hours=_get_int("CONSECUTIVE_LOSS_WINDOW_HOURS", 24),
+        protection_working_type=os.environ.get("PROTECTION_WORKING_TYPE", "MARK_PRICE").strip().upper(),
+        reconciler_enabled=_get_bool("RECONCILER_ENABLED", True),
+        reconciler_interval_sec=_get_int("RECONCILER_INTERVAL_SEC", 60),
         risk_state_path=os.environ.get("RISK_STATE_PATH", "data/risk_state.json").strip(),
         protection_retries=_get_int("PROTECTION_RETRIES", 3),
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
@@ -251,5 +315,5 @@ def load_settings() -> Settings:
         web_host=os.environ.get("WEB_HOST", "127.0.0.1").strip(),
         web_port=_get_int("WEB_PORT", 8000),
         allow_insecure_web=_get_bool("ALLOW_INSECURE_WEB", False),
-        max_entry_deviation_pct=_get_float("MAX_ENTRY_DEVIATION_PCT", 0.3),
+        max_entry_deviation_pct=_get_float("MAX_ENTRY_DEVIATION_PCT", 0.3, critical=True),
     )

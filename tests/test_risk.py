@@ -21,7 +21,13 @@ class FakeBinance:
     def positions(self, symbol=None):
         return list(self._positions)
 
-    def income_history(self, limit=100):
+    def income_history(self, limit=100, start_time=None, end_time=None, income_type=None):
+        rows = self._incomes
+        if start_time is not None:
+            rows = [r for r in rows if int(r.get("time", 0)) >= start_time]
+        if income_type:
+            rows = [r for r in rows if r.get("incomeType") == income_type]
+        return rows[:limit]
         return list(self._incomes)
 
 
@@ -106,15 +112,33 @@ def test_daily_loss_lock_persists(tmp_path):
 
 
 def test_consecutive_losses_block(tmp_path):
+    import time as _time
+
+    now = int(_time.time() * 1000)
     incomes = [
-        {"incomeType": "REALIZED_PNL", "income": "-10", "time": 3000},
-        {"incomeType": "REALIZED_PNL", "income": "-5", "time": 2000},
-        {"incomeType": "REALIZED_PNL", "income": "-7", "time": 1000},
-        {"incomeType": "REALIZED_PNL", "income": "50", "time": 500},
+        {"incomeType": "REALIZED_PNL", "income": "-10", "time": now - 1000},
+        {"incomeType": "REALIZED_PNL", "income": "-5", "time": now - 2000},
+        {"incomeType": "REALIZED_PNL", "income": "-7", "time": now - 3000},
+        {"incomeType": "REALIZED_PNL", "income": "50", "time": now - 4000},
     ]
     rm = RiskManager(_settings(tmp_path), FakeBinance(incomes=incomes), FakeSymbols())
     d = rm.evaluate(_signal())
     assert not d.allowed and any("beruntun" in r for r in d.reasons)
+
+
+def test_consecutive_losses_outside_window_ignored(tmp_path):
+    """Fase 2.1: rugi beruntun di LUAR jendela 24 jam tidak lagi mengunci."""
+    import time as _time
+
+    now = int(_time.time() * 1000)
+    old = now - 48 * 3600 * 1000  # 48 jam lalu — di luar jendela bawaan 24 jam
+    incomes = [
+        {"incomeType": "REALIZED_PNL", "income": "-10", "time": old},
+        {"incomeType": "REALIZED_PNL", "income": "-5", "time": old - 1000},
+        {"incomeType": "REALIZED_PNL", "income": "-7", "time": old - 2000},
+    ]
+    rm = RiskManager(_settings(tmp_path), FakeBinance(incomes=incomes), FakeSymbols())
+    assert rm.evaluate(_signal()).allowed
 
 
 def test_existing_position_same_symbol_rejected(tmp_path):

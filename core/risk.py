@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -95,9 +95,15 @@ class RiskManager:
             log.error("Gagal menyimpan risk_state: %s", exc)
 
     def _sync_baselines(self, state: dict, equity: float) -> dict:
-        """Catat baseline awal hari/minggu pada evaluasi pertama periodenya."""
-        today = date.today().isoformat()
-        iso = date.today().isocalendar()
+        """Catat baseline awal hari/minggu pada evaluasi pertama periodenya.
+
+        Satu sumber waktu untuk seluruh sistem risiko: UTC (sama seperti
+        hari perdagangan Binance & jendela streak) — bukan jam lokal mesin
+        yang bisa berbeda zona dan menggeser batas harian/mingguan.
+        """
+        today_utc = datetime.now(timezone.utc).date()
+        today = today_utc.isoformat()
+        iso = today_utc.isocalendar()
         week = f"{iso[0]}-W{iso[1]:02d}"
         changed = False
         if state.get("day") != today:
@@ -111,13 +117,42 @@ class RiskManager:
         return state
 
     def _consecutive_losses(self) -> int:
-        """Hitung realisasi rugi berturut-turut dari riwayat income Binance."""
+        """Hitung realisasi rugi berturut-turut dalam jendela waktu.
+
+        Hanya realisasi REALIZED_PNL dalam `CONSECUTIVE_LOSS_WINDOW_HOURS`
+        jam terakhir (bawaan 24) yang dihitung — kerugian lama tidak
+        mengunci akun selamanya; setelah jendela berlalu streak menyusut
+        dengan sendirinya (perilaku cooldown alami). Pengambilan memakai
+        startTime + paginasi agar tidak bergantung pada 100 baris
+        terakhir yang tercampur jenis income lain (funding fee, komisi).
+        """
+        import time as _time
+
+        window_ms = int(getattr(self._settings, "consecutive_loss_window_hours", 24)) * 3600 * 1000
+        start_ms = int(_time.time() * 1000) - window_ms
+        rows: list[dict] = []
         try:
-            rows = self._binance.income_history(limit=100)
+            cursor = start_ms
+            for _ in range(5):  # maks 5 halaman × 1000 baris
+                page = self._binance.income_history(
+                    limit=1000, start_time=cursor, income_type="REALIZED_PNL"
+                )
+                if not page:
+                    break
+                rows.extend(page)
+                if len(page) < 1000:
+                    break
+                last_time = int(page[-1].get("time", cursor))
+                if last_time <= cursor:
+                    break
+                cursor = last_time + 1
         except Exception as exc:  # pemeriksaan tambahan — kegagalan API dicatat, bukan disembunyikan
             log.warning("Riwayat income tidak terbaca untuk cek rugi beruntun: %s", exc)
             return 0
-        realized = [r for r in rows if r.get("incomeType") == "REALIZED_PNL"]
+        realized = [
+            r for r in rows
+            if r.get("incomeType") == "REALIZED_PNL" and int(r.get("time", 0)) >= start_ms
+        ]
         realized.sort(key=lambda r: int(r.get("time", 0)), reverse=True)
         streak = 0
         for row in realized:
@@ -295,6 +330,12 @@ class RiskManager:
         base.leverage = leverage
         base.notional = notional
         base.risk_amount = risk_amount
+        # Pembulatan SL/TP ke tick (floor untuk keduanya). Catatan arah:
+        # risiko DOLAR tidak berubah oleh pembulatan ini karena kuantitas
+        # dihitung dari jarak SL final (qty = risk/jarak) — jarak yang
+        # bergeser karena pembulatan otomatis mengecilkan/membesarkan qty
+        # secara kompensasi. Untuk SHORT, floor menggeser SL sedikit lebih
+        # dekat ke entri (stop lebih ketat, bukan lebih longgar).
         base.stop_loss = filters.round_price(sl)
         base.take_profit = filters.round_price(tp)
         base.reasons.append(

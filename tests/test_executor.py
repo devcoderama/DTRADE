@@ -64,7 +64,8 @@ class FakeBinance:
 
     # --- Algo Order API (jalur SL/TP sejak migrasi Binance) ---
     def place_algo_order(self, symbol, side, order_type, trigger_price,
-                         quantity=None, close_position=False, client_algo_id=None):
+                         quantity=None, close_position=False, client_algo_id=None,
+                         working_type=None):
         if order_type == "STOP_MARKET" and self.fail_sl:
             raise BinanceAPIError(400, -4120, "simulasi penolakan algo order")
         order = {

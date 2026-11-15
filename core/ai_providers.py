@@ -64,6 +64,12 @@ class BaseAIProvider:
             "ok": None,  # None = tidak diperiksa lewat jaringan
         }
 
+    def list_models(self) -> list[dict]:
+        """Daftar model dari provider (publik — pengganti akses `._client`).
+
+        Bawaan: kosong (provider tanpa endpoint daftar model)."""
+        return []
+
     def chat(self, messages: list[dict[str, str]]) -> tuple[str, str]:
         """Kirim percakapan, kembalikan (teks_balasan, model_yang_menjawab)."""
         raise NotImplementedError
@@ -173,6 +179,18 @@ class OpenAICompatibleProvider(BaseAIProvider):
         except (KeyError, IndexError, TypeError) as exc:
             raise AIClientError(f"[{self.name}] Bentuk balasan tidak dikenal: {str(data)[:300]}") from exc
         return content, str(data.get("model", self.model))
+
+    def list_models(self) -> list[dict]:
+        resp = self._session.get(
+            f"{self._base}/models",
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            return []
+        data = resp.json()
+        models = data.get("data") if isinstance(data, dict) else None
+        return models if isinstance(models, list) else []
 
     def health(self) -> dict:
         base = super().health()
@@ -284,6 +302,9 @@ class BangunWebProvider(BaseAIProvider):
 
     def account(self) -> dict:
         return self._client.account()
+
+    def list_models(self) -> list[dict]:
+        return self._client.list_models()
 
 
 # ----------------------------------------------------------------------

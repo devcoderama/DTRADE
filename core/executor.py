@@ -198,6 +198,7 @@ class OrderExecutor:
                     trigger_price=stop_price,
                     close_position=True,
                     client_algo_id=client_algo_id,
+                    working_type=getattr(self._settings, "protection_working_type", "MARK_PRICE"),
                 )
             except Exception as exc:  # kegagalan APA PUN dihitung sebagai percobaan gagal
                 last_error = exc

@@ -160,9 +160,15 @@ class SignalEngine:
         """Ganti provider AI saat runtime (Web UI / CLI) tanpa restart."""
         self._ai = ai
 
+    @property
+    def ai_name(self) -> Optional[str]:
+        """Nama provider AI aktif (untuk pencatatan jurnal)."""
+        return getattr(self._ai, "name", None) if self._ai is not None else None
+
     def snapshot_for(self, symbol: str, interval: Optional[str] = None) -> dict:
         interval = interval or self._settings.default_interval
-        klines = self._binance.klines(symbol, interval=interval, limit=200)
+        # 300 candle agar EMA200 terhitung dari data yang cukup (bukan pas-pasan).
+        klines = self._binance.klines(symbol, interval=interval, limit=300)
         ticker = self._binance.ticker_24h(symbol)
         funding = self._binance.funding_rate(symbol)
         try:
@@ -170,7 +176,7 @@ class SignalEngine:
         except Exception as exc:  # OI bersifat pelengkap; kegagalannya tidak fatal
             log.debug("Open interest %s tidak tersedia: %s", symbol, exc)
             oi = None
-        return build_snapshot(symbol, klines, ticker, funding, open_interest=oi)
+        return build_snapshot(symbol, klines, ticker, funding, open_interest=oi, interval=interval)
 
     def analyze(
         self,
@@ -208,7 +214,17 @@ class SignalEngine:
         result = self._analyze_fresh(symbol, interval, use_ai=use_ai)
         if ttl > 0:
             with self._cache_lock:
-                self._analysis_cache[key] = (time.time(), result)
+                # Sapu entri kedaluwarsa + batasi ukuran (buang terlama)
+                # agar cache tidak tumbuh tanpa batas pada pemindaian massal.
+                now = time.time()
+                expired = [k for k, (ts, _) in self._analysis_cache.items() if now - ts >= ttl]
+                for k in expired:
+                    self._analysis_cache.pop(k, None)
+                if len(self._analysis_cache) >= 512:
+                    oldest = sorted(self._analysis_cache, key=lambda k: self._analysis_cache[k][0])
+                    for k in oldest[: len(self._analysis_cache) - 511]:
+                        self._analysis_cache.pop(k, None)
+                self._analysis_cache[key] = (now, result)
         return copy.deepcopy(result)
 
     def _analyze_fresh(self, symbol: str, interval: Optional[str] = None, use_ai: bool = True) -> TradeSignal:
@@ -339,7 +355,7 @@ class SignalEngine:
         ticker & funding memakai hasil panggilan massal, open interest dilewati."""
         interval = interval or self._settings.default_interval
         klines = self._binance.klines(symbol, interval=interval, limit=200)
-        return build_snapshot(symbol, klines, ticker, funding, open_interest=None)
+        return build_snapshot(symbol, klines, ticker, funding, open_interest=None, interval=interval)
 
     def _score_snapshot(self, snapshot: dict, min_abs_score: int) -> Optional[TradeSignal]:
         """Ubah snapshot menjadi TradeSignal teknikal (None bila skor terlalu kecil)."""
