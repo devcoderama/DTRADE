@@ -18,11 +18,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 
 from config.settings import Settings, load_settings
 from core.ai_providers import create_ai_provider, describe_providers
+from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.executor import OrderExecutor
+from core.journal import TradeJournal
 from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
@@ -58,6 +61,7 @@ class App:
         self.binance = BinanceFuturesClient(settings)
         self.ai = create_ai_provider(settings)
         self.notifier = build_notifier(settings)
+        self.journal = TradeJournal(settings.trade_journal_path)
         self.symbols = SymbolManager(self.binance, settings)
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
@@ -186,6 +190,7 @@ def cmd_trade(app: App, args) -> int:
     result = app.executor.execute(decision, signal.price)
     for note in result.notes:
         _print(f"  {note}")
+    app.journal.record_execution(decision, result, signal.price)
     if app.notifier.enabled:
         sent = app.notifier.notify_execution(decision, result, signal.price)
         _print(f"  [telegram] Notifikasi {'terkirim' if sent else 'gagal terkirim (cek log)'}")
@@ -214,6 +219,92 @@ def cmd_ai_account(app: App, _args) -> int:
         _print(f"  Terpakai (kunci): {info.get('key_tokens_used')}")
         last7 = info.get("last_7_days") or {}
         _print(f"  7 hari terakhir: {last7.get('requests')} request, {last7.get('billed_tokens')} token")
+    return 0
+
+
+def cmd_backtest(app: App, args) -> int:
+    config = BacktestConfig(
+        initial_balance=args.balance,
+        risk_pct=args.risk,
+        min_score=args.min_score,
+    )
+    result = Backtester(app.binance).run(args.symbol, interval=args.interval, limit=args.limit, config=config)
+    d = result.to_dict()
+    _print(f"[bold]Backtest {d['symbol']} ({d['interval']}, {d['candles']} candle)[/bold]")
+    _print(f"  Saldo awal : {d['initial_balance']:.2f} USDT")
+    _print(f"  Saldo akhir: {d['final_balance']:.2f} USDT  ({d['return_pct']:+.2f}%)")
+    _print(f"  Trade      : {d['trades_count']}  (menang {d['wins']} / kalah {d['losses']}, win rate {d['win_rate']}%)")
+    pf = d["profit_factor"]
+    _print(f"  Profit factor: {pf if pf is not None else '∞ (belum ada kerugian)'}")
+    _print(f"  Max drawdown : {d['max_drawdown_pct']:.2f}%")
+    if result.trades:
+        table = Table(title="10 trade terakhir", header_style="bold")
+        for col in ("Sisi", "Entri", "Keluar", "Alasan", "PnL (USDT)"):
+            table.add_column(col)
+        for t in result.trades[-10:]:
+            table.add_row(
+                t.side,
+                fmt_price(t.entry_price),
+                fmt_price(t.exit_price),
+                t.exit_reason,
+                f"{t.pnl:+.2f}",
+            )
+        _print(table)
+    _print("[dim]Catatan: backtest memakai skor teknikal murni (tanpa AI) agar deterministik.[/dim]")
+    return 0
+
+
+def cmd_watch(app: App, args) -> int:
+    symbols = app.symbols.top_by_volume(args.top)
+    _print(
+        f"[bold]Mode pantau[/bold]: {len(symbols)} simbol, putaran tiap {args.every} menit, "
+        f"notifikasi Telegram untuk sinyal ≥{args.min_confidence}%."
+    )
+    _print("[dim]Tekan Ctrl+C untuk berhenti. Mode ini TIDAK mengeksekusi order — hanya memantau & memberi tahu.[/dim]")
+    rounds = 0
+    try:
+        while True:
+            rounds += 1
+            signals = app.engine.scan(symbols, use_ai=True)
+            _print(f"\n[bold]Putaran {rounds}[/bold] — {time.strftime('%H:%M:%S')}")
+            for s in signals[: args.top]:
+                _print(
+                    f"  {s.symbol:<14} {s.side:<8} keyakinan {s.confidence:>3}%  "
+                    f"skor {s.technical_score:+d}  harga {fmt_price(s.price)}"
+                )
+            strong = [s for s in signals if s.side != "NEUTRAL" and s.confidence >= args.min_confidence]
+            for s in strong:
+                if app.notifier.enabled:
+                    sent = app.notifier.notify_signal(s)
+                    _print(f"  [telegram] Sinyal {s.symbol} {'terkirim' if sent else 'gagal terkirim'}")
+            if args.iterations and rounds >= args.iterations:
+                break
+            time.sleep(args.every * 60)
+    except KeyboardInterrupt:
+        _print("\nMode pantau dihentikan.")
+    return 0
+
+
+def cmd_journal(app: App, args) -> int:
+    rows = app.journal.recent(args.limit)
+    if not rows:
+        _print("Jurnal masih kosong — belum ada eksekusi yang tercatat.")
+        return 0
+    table = Table(title=f"Jurnal perdagangan ({len(rows)} entri terakhir)", header_style="bold")
+    for col in ("Waktu", "Simbol", "Sisi", "Qty", "Harga ref", "Mode", "Notional"):
+        table.add_column(col)
+    for r in rows:
+        when = time.strftime("%d-%m %H:%M", time.localtime(r.get("time", 0) / 1000))
+        table.add_row(
+            when,
+            str(r.get("symbol")),
+            str(r.get("side")),
+            str(r.get("quantity")),
+            fmt_price(float(r.get("reference_price", 0) or 0)),
+            "DRY-RUN" if r.get("dry_run") else "LIVE",
+            f"{float(r.get('notional', 0) or 0):.2f}",
+        )
+    _print(table)
     return 0
 
 
@@ -257,6 +348,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("ai-account", help="Status provider AI (+ sisa token BangunWeb bila aktif)")
     sub.add_parser("notify-test", help="Kirim pesan uji ke Telegram")
+
+    p = sub.add_parser("backtest", help="Uji strategi pada data historis (skor teknikal murni)")
+    p.add_argument("symbol")
+    p.add_argument("--interval", default=None)
+    p.add_argument("--limit", type=int, default=1000, help="Jumlah candle (maks 1500)")
+    p.add_argument("--balance", type=float, default=1000.0)
+    p.add_argument("--risk", type=float, default=1.0, help="%% risiko per trade")
+    p.add_argument("--min-score", type=int, default=40)
+
+    p = sub.add_parser("watch", help="Pantau pasar berkala & kirim sinyal kuat ke Telegram (tanpa eksekusi)")
+    p.add_argument("--top", type=int, default=10)
+    p.add_argument("--every", type=int, default=15, help="Jeda antar putaran (menit)")
+    p.add_argument("--min-confidence", type=int, default=60)
+    p.add_argument("--iterations", type=int, default=0, help="0 = tanpa batas")
+
+    p = sub.add_parser("journal", help="Lihat jurnal eksekusi terakhir")
+    p.add_argument("--limit", type=int, default=20)
     return parser
 
 
@@ -276,6 +384,9 @@ def main(argv: list[str] | None = None) -> int:
         "close": cmd_close,
         "ai-account": cmd_ai_account,
         "notify-test": cmd_notify_test,
+        "backtest": cmd_backtest,
+        "watch": cmd_watch,
+        "journal": cmd_journal,
     }
     try:
         if settings.has_binance_keys and args.command not in {"ai-account"}:

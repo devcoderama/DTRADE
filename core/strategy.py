@@ -107,9 +107,15 @@ def technical_score(snapshot: dict) -> tuple[int, list[str]]:
             reasons.append(f"Momentum 1 jam lemah ({change_1h:+.2f}%) -10")
 
     funding = snapshot.get("funding_rate") or 0.0
-    if funding > 0.0005:
+    if funding >= 0.001:
+        score -= 10
+        reasons.append(f"Funding ekstrem positif ({funding * 100:.3f}%) — long sangat jenuh -10")
+    elif funding > 0.0005:
         score -= 5
         reasons.append("Funding sangat positif (long jenuh) -5")
+    elif funding <= -0.001:
+        score += 10
+        reasons.append(f"Funding ekstrem negatif ({funding * 100:.3f}%) — short sangat jenuh +10")
     elif funding < -0.0005:
         score += 5
         reasons.append("Funding sangat negatif (short jenuh) +5")
@@ -144,7 +150,12 @@ class SignalEngine:
         klines = self._binance.klines(symbol, interval=interval, limit=200)
         ticker = self._binance.ticker_24h(symbol)
         funding = self._binance.funding_rate(symbol)
-        return build_snapshot(symbol, klines, ticker, funding)
+        try:
+            oi = self._binance.open_interest(symbol)
+        except Exception as exc:  # OI bersifat pelengkap; kegagalannya tidak fatal
+            log.debug("Open interest %s tidak tersedia: %s", symbol, exc)
+            oi = None
+        return build_snapshot(symbol, klines, ticker, funding, open_interest=oi)
 
     def analyze(self, symbol: str, interval: Optional[str] = None, use_ai: bool = True) -> TradeSignal:
         symbol = symbol.upper()

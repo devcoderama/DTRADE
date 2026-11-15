@@ -85,6 +85,9 @@ class Settings:
     ai_custom_api_key: str = ""
     ai_custom_model: str = ""
 
+    # --- Jurnal perdagangan ---
+    trade_journal_path: str = "logs/trades.jsonl"
+
     # --- Notifikasi Telegram ---
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
@@ -173,6 +176,7 @@ def load_settings() -> Settings:
         ai_custom_base_url=os.environ.get("AI_CUSTOM_BASE_URL", "").strip().rstrip("/"),
         ai_custom_api_key=os.environ.get("AI_CUSTOM_API_KEY", "").strip(),
         ai_custom_model=os.environ.get("AI_CUSTOM_MODEL", "").strip(),
+        trade_journal_path=os.environ.get("TRADE_JOURNAL_PATH", "logs/trades.jsonl").strip(),
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),

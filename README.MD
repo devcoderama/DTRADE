@@ -41,6 +41,15 @@ Tersedia dalam dua antarmuka di atas core yang sama:
   langsung dari data Binance, dengan pilihan interval 1m–1d.
 - **Notifikasi Telegram** — hasil eksekusi (dan pesan uji) dikirim ke user id
   atau channel Telegram Anda lewat bot (@BotFather).
+- **Backtest** — uji aturan strategi pada hingga 1.500 candle historis dengan
+  aturan biaya & SL/TP yang sama seperti live: win rate, profit factor,
+  max drawdown, dan kurva ekuitas (CLI & Web UI).
+- **Mode pantau (watch)** — pemindaian berkala yang mengirim sinyal kuat ke
+  Telegram; memantau saja, tidak pernah mengeksekusi order.
+- **Jurnal perdagangan** — setiap eksekusi dicatat ke `logs/trades.jsonl`
+  sebagai jejak audit yang bisa ditinjau kembali.
+- **Data futures lengkap** — snapshot memuat funding rate bertingkat
+  (kejenuhan long/short memengaruhi skor) dan open interest untuk konteks AI.
 - **Cross-platform** — Python murni; berjalan di macOS, Windows, Linux, dan
   Android (Termux). Untuk iOS: jalankan server di komputer/VPS, buka Web UI
   dari Safari/Chrome ponsel.
@@ -178,6 +187,9 @@ python run.py cli trade BTCUSDT --side LONG   # eksekusi (dry-run kecuali live)
 python run.py cli close BTCUSDT           # tutup posisi satu simbol
 python run.py cli ai-account              # status provider AI (+ sisa token BangunWeb bila aktif)
 python run.py cli notify-test             # kirim pesan uji ke Telegram
+python run.py cli backtest BTCUSDT --limit 1000   # uji strategi pada data historis
+python run.py cli watch --top 10 --every 15       # pantau pasar, sinyal kuat → Telegram
+python run.py cli journal                 # lihat jurnal eksekusi terakhir
 ```
 
 Perintah `trade` dalam mode `live` meminta konfirmasi pengetikan ulang simbol

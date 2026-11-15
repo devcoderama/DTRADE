@@ -106,6 +106,7 @@ select {
   border-radius: 8px; padding: 8px 10px; font-size: 13px;
 }
 .small-note { font-size: 11px; margin: 8px 0 0; }
+.equity-wrap { height: 180px; margin-top: 12px; }
 
 @media (max-width: 640px) {
   .chart-wrap { height: 240px; }

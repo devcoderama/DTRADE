@@ -140,6 +140,7 @@ async function analyze(symbol) {
       </div>`;
     chartSymbol = s.symbol;
     $("chart-block").hidden = false;
+    $("backtest-block").hidden = false;
     $("chart-title").textContent = "Grafik Candlestick — " + s.symbol;
     loadChart(s.symbol);
   } catch (e) {
@@ -303,7 +304,76 @@ function drawCandles() {
 }
 
 $("chart-interval").addEventListener("change", () => { if (chartSymbol) loadChart(chartSymbol); });
-window.addEventListener("resize", drawCandles);
+window.addEventListener("resize", () => { drawCandles(); drawEquity(); });
+
+/* ---------------- backtest ---------------- */
+let lastEquity = [];
+
+async function runBacktest() {
+  if (!chartSymbol) return;
+  const btn = $("btn-backtest");
+  btn.disabled = true;
+  $("backtest-stats").textContent = "Menjalankan backtest…";
+  try {
+    const interval = $("chart-interval").value;
+    const d = await api("/api/backtest/" + encodeURIComponent(chartSymbol) + "?interval=" + interval + "&limit=1000");
+    const pf = d.profit_factor === null ? "∞" : d.profit_factor;
+    $("backtest-stats").innerHTML =
+      '<div class="kv"><span>Saldo awal → akhir</span><b>' + fmtUSD(d.initial_balance) + " → " + fmtUSD(d.final_balance) + '</b></div>' +
+      '<div class="kv"><span>Return</span><b class="' + (d.return_pct >= 0 ? "pos" : "neg") + '">' + fmtPct(d.return_pct) + '</b></div>' +
+      '<div class="kv"><span>Trade</span><b>' + d.trades_count + " (" + d.wins + " menang / " + d.losses + ' kalah)</b></div>' +
+      '<div class="kv"><span>Win rate</span><b>' + d.win_rate + '%</b></div>' +
+      '<div class="kv"><span>Profit factor</span><b>' + pf + '</b></div>' +
+      '<div class="kv"><span>Max drawdown</span><b class="neg">' + d.max_drawdown_pct + '%</b></div>' +
+      '<p class="muted small-note">Atas ' + d.candles + ' candle ' + d.interval + ' · risiko 1%/trade · fee taker 0,05%/sisi · SL 1,5×ATR / TP 2,5×ATR. Hasil masa lalu bukan jaminan hasil mendatang.</p>';
+    lastEquity = d.equity_curve || [];
+    $("equity-wrap").hidden = lastEquity.length < 2;
+    drawEquity();
+    const rows = (d.trades || []).slice(-10).reverse().map((t) =>
+      "<tr><td>" + t.side + "</td><td>" + fmtPrice(t.entry_price) + "</td><td>" + fmtPrice(t.exit_price) +
+      "</td><td>" + t.exit_reason + '</td><td class="' + (t.pnl >= 0 ? "pos" : "neg") + '">' + fmtUSD(t.pnl) + "</td></tr>"
+    ).join("");
+    $("backtest-trades").innerHTML = rows
+      ? '<table style="margin-top:12px"><thead><tr><th>Sisi</th><th>Entri</th><th>Keluar</th><th>Alasan</th><th>PnL</th></tr></thead><tbody>' + rows + "</tbody></table>"
+      : "";
+  } catch (e) {
+    $("backtest-stats").textContent = "Backtest gagal: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function drawEquity() {
+  const canvas = $("equity-chart");
+  if (!canvas || lastEquity.length < 2 || $("equity-wrap").hidden) return;
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const vals = lastEquity.map((p) => p.equity);
+  let hi = Math.max(...vals), lo = Math.min(...vals);
+  const pad = (hi - lo) * 0.1 || 1; hi += pad; lo -= pad;
+  const x = (i) => (i / (vals.length - 1)) * (W - 70);
+  const y = (v) => H - ((v - lo) / (hi - lo)) * H;
+  ctx.strokeStyle = "rgba(132,142,156,.18)";
+  ctx.fillStyle = "#848e9c"; ctx.font = "10px sans-serif";
+  for (let i = 0; i <= 3; i++) {
+    const v = lo + ((hi - lo) * i) / 3, yy = y(v);
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - 70, yy); ctx.stroke();
+    ctx.fillText(fmtUSD(v), W - 64, yy + 3);
+  }
+  const rising = vals[vals.length - 1] >= vals[0];
+  ctx.strokeStyle = rising ? "#0ecb81" : "#f6465d";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  vals.forEach((v, i) => { if (i === 0) ctx.moveTo(x(i), y(v)); else ctx.lineTo(x(i), y(v)); });
+  ctx.stroke();
+}
+
+$("btn-backtest").addEventListener("click", runBacktest);
 
 /* ---------------- ikat event ---------------- */
 $("btn-analyze").addEventListener("click", () => {

@@ -143,6 +143,13 @@ class BinanceFuturesClient:
         data = self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol})
         return data if isinstance(data, dict) else {}
 
+    def open_interest(self, symbol: str) -> float:
+        """Open interest terkini (dalam unit aset dasar)."""
+        data = self._request("GET", "/fapi/v1/openInterest", {"symbol": symbol})
+        if isinstance(data, dict):
+            return float(data.get("openInterest", 0) or 0)
+        return 0.0
+
     # ------------------------------------------------------------------
     # Endpoint bertanda tangan — akun & posisi
     # ------------------------------------------------------------------

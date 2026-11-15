@@ -30,8 +30,10 @@ from pydantic import BaseModel
 
 from config.settings import load_settings
 from core.ai_providers import create_ai_provider, describe_providers
+from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.executor import OrderExecutor
+from core.journal import TradeJournal
 from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
@@ -46,6 +48,8 @@ settings = load_settings()
 binance = BinanceFuturesClient(settings)
 ai_client = create_ai_provider(settings)
 notifier = build_notifier(settings)
+journal = TradeJournal(settings.trade_journal_path)
+backtester = Backtester(binance)
 symbol_manager = SymbolManager(binance, settings)
 engine = SignalEngine(settings, binance, ai_client)
 risk_manager = RiskManager(settings, binance, symbol_manager)
@@ -199,6 +203,7 @@ def trade(req: TradeRequest) -> dict:
                 "signal": _signal_payload(signal),
             }
         result = executor.execute(decision, signal.price)
+        journal.record_execution(decision, result, signal.price)
         if notifier.enabled:
             notifier.notify_execution(decision, result, signal.price)
         return {
@@ -234,6 +239,30 @@ def ai_account() -> dict:
         return payload
 
     return _guard(_load)
+
+
+@app.get("/api/backtest/{symbol}")
+def backtest(
+    symbol: str,
+    interval: Optional[str] = None,
+    limit: int = Query(1000, ge=100, le=1500),
+    balance: float = Query(1000.0, gt=0),
+    risk: float = Query(1.0, gt=0, le=10),
+    min_score: int = Query(40, ge=10, le=100),
+) -> dict:
+    def _run():
+        config = BacktestConfig(initial_balance=balance, risk_pct=risk, min_score=min_score)
+        result = backtester.run(
+            symbol.upper(), interval=interval or settings.default_interval, limit=limit, config=config
+        )
+        return result.to_dict()
+
+    return _guard(_run)
+
+
+@app.get("/api/journal")
+def journal_entries(limit: int = Query(20, ge=1, le=200)) -> dict:
+    return {"entries": journal.recent(limit)}
 
 
 @app.post("/api/notify/test")

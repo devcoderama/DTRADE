@@ -110,7 +110,13 @@ def pct_change(values: list[float], lookback: int) -> Optional[float]:
     return (values[-1] / values[-lookback - 1] - 1.0) * 100.0
 
 
-def build_snapshot(symbol: str, klines: list[list], ticker24h: dict, funding: dict) -> dict:
+def build_snapshot(
+    symbol: str,
+    klines: list[list],
+    ticker24h: dict,
+    funding: dict,
+    open_interest: float | None = None,
+) -> dict:
     """Ubah klines mentah Binance menjadi snapshot indikator yang ringkas.
 
     Snapshot inilah yang dinilai strategi lokal DAN dikirim ke AI —
@@ -158,4 +164,6 @@ def build_snapshot(symbol: str, klines: list[list], ticker24h: dict, funding: di
         "last_volume": volumes[-1] if volumes else None,
         "funding_rate": float(funding.get("lastFundingRate", 0) or 0),
         "mark_price": float(funding.get("markPrice", price) or price),
+        "open_interest": open_interest,
+        "open_interest_usd": (open_interest * price) if open_interest else None,
     }

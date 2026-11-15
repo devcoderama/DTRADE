@@ -68,6 +68,16 @@
       <div class="chart-wrap"><canvas id="candle-chart"></canvas></div>
       <p class="muted small-note">Garis oranye = EMA20 · batang di bagian bawah = volume · data langsung dari Binance Futures</p>
     </div>
+
+    <div id="backtest-block" class="chart-block" hidden>
+      <div class="row space-between">
+        <h3>Backtest Strategi (skor teknikal murni)</h3>
+        <button class="primary" id="btn-backtest">Jalankan Backtest</button>
+      </div>
+      <div id="backtest-stats" class="muted" style="margin-top:10px">Uji aturan strategi pada 1.000 candle terakhir simbol ini — tanpa AI, dengan fee & aturan SL/TP yang sama seperti live.</div>
+      <div class="chart-wrap equity-wrap" id="equity-wrap" hidden><canvas id="equity-chart"></canvas></div>
+      <div id="backtest-trades"></div>
+    </div>
   </section>
 
   <!-- Pemindai -->
