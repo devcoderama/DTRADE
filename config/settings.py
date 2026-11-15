@@ -93,6 +93,10 @@ class Settings:
     telegram_chat_id: str = ""
     telegram_notifications: bool = True
 
+    # Cache hasil analisis AI (detik) agar Web UI, siaran Telegram, dan CLI
+    # menampilkan sinyal yang sama untuk momen yang sama; 0 = nonaktif.
+    analysis_cache_ttl_sec: int = 180
+
     # --- Siaran sinyal otomatis ke Telegram (berjalan selama server web) ---
     broadcast_enabled: bool = True
     broadcast_interval_minutes: int = 30
@@ -190,6 +194,7 @@ def load_settings() -> Settings:
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),
+        analysis_cache_ttl_sec=_get_int("ANALYSIS_CACHE_TTL_SEC", 180),
         broadcast_enabled=_get_bool("BROADCAST_ENABLED", True),
         broadcast_interval_minutes=_get_int("BROADCAST_INTERVAL_MINUTES", 30),
         broadcast_min_score=_get_int("BROADCAST_MIN_SCORE", 50),
