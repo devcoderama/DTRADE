@@ -133,6 +133,7 @@ class Settings:
     cors_origins: str = ""
     rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
     mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
+    market_ws_enabled: bool = True    # WebSocket data pasar real-time untuk grafik Web UI
 
     # --- Web UI ---
     web_host: str = "0.0.0.0"
@@ -239,6 +240,7 @@ def load_settings() -> Settings:
         cors_origins=os.environ.get("CORS_ORIGINS", "").strip(),
         rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
         mtf_enabled=_get_bool("MTF_ENABLED", True),
+        market_ws_enabled=_get_bool("MARKET_WS_ENABLED", True),
         default_interval=os.environ.get("DEFAULT_INTERVAL", "15m").strip(),
         quote_asset=os.environ.get("QUOTE_ASSET", "USDT").strip().upper(),
         web_host=os.environ.get("WEB_HOST", "0.0.0.0").strip(),

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -31,6 +32,55 @@ log = get_logger(__name__)
 
 class AIClientError(Exception):
     pass
+
+
+def is_retryable_status(status: int) -> bool:
+    """Kegagalan sementara yang layak dicoba lagi: rate limit & error server."""
+    return status == 429 or status >= 500
+
+
+def post_with_retry(
+    session: requests.Session,
+    url: str,
+    *,
+    provider: str,
+    max_retries: int = 2,
+    backoff: tuple = (1.0, 3.0),
+    **kwargs,
+):
+    """POST dengan retry terbatas untuk kegagalan SEMENTARA saja.
+
+    - Timeout/koneksi putus dan HTTP 429/5xx → dicoba lagi (maks
+      `max_retries` kali) dengan jeda bertingkat.
+    - HTTP 4xx lain (auth, request buruk) → langsung dikembalikan agar
+      pemanggil menanganinya; mengulanginya hanya membuang waktu & token.
+    - Bila semua percobaan gagal di level jaringan, RequestException
+      terakhir dilempar kembali — tidak pernah disembunyikan.
+    """
+    attempts = max(0, max_retries) + 1
+    for attempt in range(attempts):
+        try:
+            resp = session.post(url, **kwargs)
+        except requests.RequestException as exc:
+            if attempt >= attempts - 1:
+                raise
+            delay = backoff[min(attempt, len(backoff) - 1)]
+            log.warning(
+                "[%s] POST %s gagal jaringan (%s) — percobaan %d/%d dalam %.0f dtk…",
+                provider, url.rsplit("/", 1)[-1], exc, attempt + 2, attempts, delay,
+            )
+            time.sleep(delay)
+            continue
+        if is_retryable_status(resp.status_code) and attempt < attempts - 1:
+            delay = backoff[min(attempt, len(backoff) - 1)]
+            log.warning(
+                "[%s] POST %s → HTTP %d — percobaan %d/%d dalam %.0f dtk…",
+                provider, url.rsplit("/", 1)[-1], resp.status_code, attempt + 2, attempts, delay,
+            )
+            time.sleep(delay)
+            continue
+        return resp
+    raise AIClientError(f"[{provider}] POST {url} gagal tanpa respons")  # tak tercapai
 
 
 @dataclass
@@ -120,8 +170,10 @@ class BangunWebAIClient:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        resp = self._session.post(
+        resp = post_with_retry(
+            self._session,
             f"{self._base}/chat/completions",
+            provider="bangunweb",
             headers=self._headers(),
             json=payload,
             timeout=self._timeout,

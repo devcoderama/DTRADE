@@ -493,9 +493,84 @@ async function loadChart(symbol) {
     const data = await api("/api/klines/" + encodeURIComponent(symbol) + "?interval=" + interval + "&limit=200");
     lastCandles = data.candles || [];
     renderChart();
+    connectLive(symbol, interval);
   } catch (e) {
     toast("Gagal memuat grafik: " + e.message);
   }
+}
+
+/* ---------------- grafik real-time (WebSocket) ----------------
+   Riwayat dimuat lewat REST di atas; socket ini hanya mendorong candle
+   yang sedang berjalan. Bila socket gagal/putus, grafik REST tetap
+   berfungsi — reconnect dicoba sekali tiap 5 detik selama simbol yang
+   sama masih ditampilkan. */
+let liveSocket = null, liveKey = "", liveRetry = null;
+
+function disconnectLive() {
+  if (liveRetry) { clearTimeout(liveRetry); liveRetry = null; }
+  if (liveSocket) {
+    const ws = liveSocket;
+    liveSocket = null;
+    try { ws.close(); } catch (e) { /* sudah tertutup */ }
+  }
+  liveKey = "";
+}
+
+function connectLive(symbol, interval) {
+  const key = symbol + "@" + interval;
+  if (liveSocket && liveKey === key) return;
+  disconnectLive();
+  liveKey = key;
+  const token = localStorage.getItem("baf-api-token");
+  const proto = location.protocol === "https:" ? "wss://" : "ws://";
+  let url = proto + location.host + "/api/ws/klines/" + encodeURIComponent(symbol) +
+    "?interval=" + encodeURIComponent(interval);
+  if (token) url += "&token=" + encodeURIComponent(token);
+  let ws;
+  try { ws = new WebSocket(url); } catch (e) { return; }
+  liveSocket = ws;
+  ws.onmessage = (ev) => {
+    try {
+      const payload = JSON.parse(ev.data);
+      if (payload && payload.candle) applyLiveCandle(payload.candle);
+    } catch (e) { /* abaikan pesan yang tidak valid */ }
+  };
+  ws.onclose = () => {
+    if (liveSocket === ws) {
+      liveSocket = null;
+      liveRetry = setTimeout(() => {
+        if (chartSymbol === symbol) connectLive(symbol, interval);
+      }, 5000);
+    }
+  };
+  ws.onerror = () => { try { ws.close(); } catch (e) { /* pemicu onclose */ } };
+}
+
+function applyLiveCandle(c) {
+  if (!lwChart || !lwCandles || !lastCandles.length) return;
+  const tsec = Math.floor(c.time / 1000);
+  const last = lastCandles[lastCandles.length - 1];
+  if (Math.floor(last.time / 1000) === tsec) {
+    lastCandles[lastCandles.length - 1] = c;
+  } else if (c.time > last.time) {
+    lastCandles.push(c);
+    if (lastCandles.length > 300) lastCandles.shift();
+  } else {
+    return;
+  }
+  candleByTime.set(tsec, c);
+  lwCandles.update({ time: tsec, open: c.open, high: c.high, low: c.low, close: c.close });
+  const closes = lastCandles.map((x) => x.close);
+  const idx = lastCandles.length - 1;
+  const e20 = emaSeries(closes, 20)[idx];
+  const e50 = emaSeries(closes, 50)[idx];
+  if (typeof e20 === "number") lwEma20.update({ time: tsec, value: e20 });
+  if (typeof e50 === "number") lwEma50.update({ time: tsec, value: e50 });
+  lwVolume.update({
+    time: tsec, value: c.volume,
+    color: c.close >= c.open ? "rgba(14,203,129,.5)" : "rgba(246,70,93,.5)",
+  });
+  updateLegend(c);
 }
 
 function renderChart() {

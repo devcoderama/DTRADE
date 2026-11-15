@@ -29,7 +29,7 @@ from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +52,7 @@ from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.broadcaster import run_broadcast
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
+from core.market_stream import MarketStream
 from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
@@ -88,6 +89,7 @@ def _refresh_ai_from_store() -> None:
         log.info("Pilihan AI dimuat ulang: %s:%s", provider, model)
 risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager)
+market_stream = MarketStream(settings)
 
 app = FastAPI(title="binance-ai-future", version="1.0.0")
 
@@ -304,7 +306,56 @@ def _signal_payload(signal) -> dict:
 # ----------------------------------------------------------------------
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "service": "binance-ai-future", "config": settings.public_summary()}
+    return {
+        "ok": True,
+        "service": "binance-ai-future",
+        "config": settings.public_summary(),
+        "market_stream": market_stream.health(),
+    }
+
+
+@app.websocket("/api/ws/klines/{symbol}")
+async def ws_klines(websocket: WebSocket, symbol: str, interval: Optional[str] = None) -> None:
+    """Dorong pembaruan candle real-time ke grafik Web UI.
+
+    Riwayat tetap dimuat lewat REST; endpoint ini hanya meneruskan
+    candle yang sedang berjalan dari MarketStream (Binance WebSocket).
+    Autentikasi diperiksa manual di sini (middleware HTTP tidak menjangkau
+    WebSocket): token dari query `?token=` atau cookie sesi.
+    """
+    import asyncio
+
+    if settings.web_api_token:
+        token = websocket.query_params.get("token") or websocket.cookies.get("baf_token") or ""
+        if token not in {settings.web_api_token, settings.web_viewer_token} - {""}:
+            await websocket.close(code=4401)
+            return
+    await websocket.accept()
+    if not settings.market_ws_enabled:
+        await websocket.send_json({"type": "disabled"})
+        await websocket.close()
+        return
+
+    symbol = symbol.upper()
+    interval = interval or settings.default_interval
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def _listener(kind: str, payload: dict) -> None:
+        if kind == "kline" and payload.get("symbol") == symbol and payload.get("interval") == interval:
+            loop.call_soon_threadsafe(queue.put_nowait, payload)
+
+    market_stream.add_listener(_listener)
+    market_stream.subscribe_kline(symbol, interval)
+    try:
+        while True:
+            payload = await queue.get()
+            await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        market_stream.remove_listener(_listener)
+        market_stream.unsubscribe_kline(symbol, interval)
 
 
 @app.get("/api/config")
@@ -482,6 +533,14 @@ def ai_account() -> dict:
         providers = describe_providers(settings_with_choice(settings))
         active = next((p for p in providers if p["active"]), None)
         payload: dict = {"providers": providers, "active": active}
+        if ai_client is not None:
+            payload["last_usage"] = getattr(ai_client, "last_usage", None)
+            health = getattr(ai_client, "health", None)
+            if callable(health):
+                try:
+                    payload["health"] = health()
+                except Exception as exc:  # health bersifat informatif
+                    payload["health"] = {"ok": False, "error": str(exc)[:160]}
         if ai_client is not None and ai_client.name == "bangunweb" and ai_client.is_configured():
             payload["bangunweb_account"] = ai_client.account()
             payload["tokens_remaining"] = payload["bangunweb_account"].get("tokens_remaining")

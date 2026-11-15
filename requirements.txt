@@ -1,5 +1,6 @@
 # binance-ai-future — dependensi Python (semua cross-platform: macOS/Windows/Linux)
 requests>=2.32,<3
+websocket-client>=1.8,<2
 python-dotenv>=1.0,<2
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1

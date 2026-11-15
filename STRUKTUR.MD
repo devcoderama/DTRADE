@@ -45,6 +45,7 @@ binance-ai-future/
 │   ├── executor.py          ← eksekusi order berstatus (state machine), idempotency, verifikasi fill & proteksi, emergency close
 │   ├── backtest.py          ← mesin backtest deterministik atas klines historis
 │   ├── journal.py           ← jurnal perdagangan JSONL (jejak audit eksekusi)
+│   ├── market_stream.py     ← WebSocket data pasar real-time (kline + mark price, reconnect & deteksi basi)
 │   ├── notifier.py          ← notifikasi Telegram (teks + foto) untuk eksekusi & sinyal
 │   ├── chart_image.py       ← render grafik candlestick PNG (matplotlib) untuk siaran Telegram
 │   └── broadcaster.py       ← putaran siaran: pindai → saring → AI → kirim sinyal + grafik ke Telegram
@@ -105,7 +106,9 @@ binance-ai-future/
 │   ├── test_risk.py         ← validasi SL/TP, R/R, kunci harian persisten, rugi beruntun
 │   ├── test_executor.py     ← state machine: jalur sukses, SL gagal → emergency close, rekonsiliasi entri
 │   ├── test_backtest.py     ← expectancy, Sharpe, Sortino, rugi beruntun maksimum
-│   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit
+│   ├── test_market_stream.py ← parsing pesan WS, cache candle, backoff reconnect, deteksi basi
+│   ├── test_ai_retry.py     ← klasifikasi error AI & retry post_with_retry
+│   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit, endpoint WS
 │
 ├── data/                    ← DATA RUNTIME (dibuat otomatis, di-gitignore)
 │   ├── ai_settings.json     ← pilihan provider+model AI yang dipilih lewat Web UI / CLI
@@ -144,7 +147,8 @@ build Android (`android/app/build/`, `android/.gradle/`).
 | `cli/terminal.py` | Antarmuka terminal: menerjemahkan perintah user → panggilan core. Perintah: `balance`, `symbols`, `scan`, `analyze`, `positions`, `trade`, `close`, `backtest`, `watch`, `journal`, `broadcast`, `notify-test`, `ai-account`, `ai-model`, `dashboard`, `chart`. Juga banner branding Rich | Logika bisnis sendiri |
 | `cli/dashboard.py` | Dashboard terminal interaktif (Textual): header + jam live, Market Overview, grafik, tabel sinyal (backtest / hasil pindai), metrik kunci; penyegaran ringan berkala tanpa memanggil AI. Hanya memantau | Mengeksekusi order |
 | `cli/term_chart.py` | Merender klines mentah menjadi grafik candlestick ANSI (plotext 5.x): candle + EMA20/EMA50 + panel volume; ukuran dibatasi ukuran terminal. Dipakai perintah `chart` dan dashboard Textual | Mengambil data sendiri |
-| `web/app.py` | Antarmuka web: endpoint REST tipis di atas core yang sama persis dengan CLI (`/api/analyze`, `/api/scan`, `/api/klines`, `/api/backtest`, `/api/trade`, `/api/broadcast`, `/api/ai/model`, `/api/config`, `/api/auth/login`, ...), middleware keamanan (autentikasi token admin/viewer, CORS non-wildcard dari `.env`, rate limit per IP, batas ukuran request), validasi startup + pemeriksaan pemulihan eksekusi, melayani berkas statis, dan menjalankan thread siaran otomatis berkala bila Telegram terkonfigurasi | Logika bisnis sendiri |
+| `core/market_stream.py` | Satu koneksi WebSocket Binance (combined stream) untuk kline + mark price simbol yang dipantau: reconnect exponential backoff, heartbeat, deteksi data basi, cache candle terakhir, dan daftar pendengar. Riwayat tetap dari REST — modul ini hanya mendorong pembaruan | Menempatkan order; mengambil keputusan |
+| `web/app.py` | Antarmuka web: endpoint REST tipis di atas core yang sama persis dengan CLI (`/api/analyze`, `/api/scan`, `/api/klines`, `/api/backtest`, `/api/trade`, `/api/broadcast`, `/api/ai/model`, `/api/config`, `/api/auth/login`, ...), endpoint WebSocket `/api/ws/klines/{symbol}` (autentikasi token manual) yang meneruskan candle real-time dari `market_stream.py` ke grafik, middleware keamanan (autentikasi token admin/viewer, CORS non-wildcard dari `.env`, rate limit per IP, batas ukuran request), validasi startup + pemeriksaan pemulihan eksekusi, melayani berkas statis, dan menjalankan thread siaran otomatis berkala bila Telegram terkonfigurasi | Logika bisnis sendiri |
 | `web/static/index.html` | Struktur halaman: sidebar, hero, kartu statistik, workspace analisis (panel analisis + grafik + sentimen), baris sinyal, panel AI, pemindai, posisi | — |
 | `web/static/app.js` | Logika frontend: fetch API, render analisis/sentimen/gauge, grafik Lightweight Charts (EMA20/50, volume, crosshair OHLCV), backtest + kurva ekuitas, dan pengelola tata letak resizable (seret panel, sembunyikan, maximize, Reset Layout, tersimpan di localStorage) | Menyimpan kunci API |
 | `web/static/style.css` | Tema gelap ala Binance (emas #F0B90B), ikon Font Awesome, tata letak responsif desktop/tablet/mobile + navigasi bawah, dan gaya workspace resizable (gagang seret, rel panel) | — |

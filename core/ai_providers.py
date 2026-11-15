@@ -37,6 +37,7 @@ from core.ai_client import (
     BangunWebAIClient,
     _extract_json,
     _to_float,
+    post_with_retry,
 )
 from utils.logger import get_logger
 
@@ -48,9 +49,20 @@ class BaseAIProvider:
 
     name: str = "base"
     model: str = ""
+    last_usage: Optional[dict] = None  # usage token dari respons terakhir (bila dilaporkan)
 
     def is_configured(self) -> bool:
         raise NotImplementedError
+
+    def health(self) -> dict:
+        """Pemeriksaan kesehatan ringan. Provider dapat menimpanya dengan
+        panggilan jaringan murah (daftar model / endpoint health)."""
+        return {
+            "provider": self.name,
+            "model": self.model,
+            "configured": bool(self.is_configured()),
+            "ok": None,  # None = tidak diperiksa lewat jaringan
+        }
 
     def chat(self, messages: list[dict[str, str]]) -> tuple[str, str]:
         """Kirim percakapan, kembalikan (teks_balasan, model_yang_menjawab)."""
@@ -138,25 +150,51 @@ class OpenAICompatibleProvider(BaseAIProvider):
             "temperature": 0.2,
             "response_format": {"type": "json_object"},
         }
-        resp = self._session.post(
-            f"{self._base}/chat/completions", headers=headers, json=payload, timeout=self._timeout
+        resp = post_with_retry(
+            self._session, f"{self._base}/chat/completions",
+            provider=self.name, headers=headers, json=payload, timeout=self._timeout,
         )
         if resp.status_code == 400:
             # Sebagian gateway menolak response_format — coba lagi tanpanya.
             payload.pop("response_format", None)
-            resp = self._session.post(
-                f"{self._base}/chat/completions", headers=headers, json=payload, timeout=self._timeout
+            resp = post_with_retry(
+                self._session, f"{self._base}/chat/completions",
+                provider=self.name, headers=headers, json=payload, timeout=self._timeout,
             )
         if resp.status_code >= 400:
             raise AIClientError(
                 f"[{self.name}] POST /chat/completions gagal: HTTP {resp.status_code} {resp.text[:300]}"
             )
         data = resp.json()
+        if isinstance(data.get("usage"), dict):
+            self.last_usage = data["usage"]
         try:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise AIClientError(f"[{self.name}] Bentuk balasan tidak dikenal: {str(data)[:300]}") from exc
         return content, str(data.get("model", self.model))
+
+    def health(self) -> dict:
+        base = super().health()
+        if not base["configured"]:
+            return {**base, "ok": False, "error": "belum dikonfigurasi"}
+        import time as _time
+
+        started = _time.time()
+        try:
+            resp = self._session.get(
+                f"{self._base}/models",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                timeout=10,
+            )
+            return {
+                **base,
+                "ok": resp.status_code < 400,
+                "latency_ms": int((_time.time() - started) * 1000),
+                "error": None if resp.status_code < 400 else f"HTTP {resp.status_code}",
+            }
+        except requests.RequestException as exc:
+            return {**base, "ok": False, "latency_ms": int((_time.time() - started) * 1000), "error": str(exc)[:160]}
 
 
 # ----------------------------------------------------------------------
@@ -193,8 +231,10 @@ class AnthropicProvider(BaseAIProvider):
         }
         if system:
             payload["system"] = system
-        resp = self._session.post(
+        resp = post_with_retry(
+            self._session,
             f"{self._base}/v1/messages",
+            provider="anthropic",
             headers={
                 "x-api-key": self._api_key,
                 "anthropic-version": "2023-06-01",
@@ -208,6 +248,8 @@ class AnthropicProvider(BaseAIProvider):
                 f"[anthropic] POST /v1/messages gagal: HTTP {resp.status_code} {resp.text[:300]}"
             )
         data = resp.json()
+        if isinstance(data.get("usage"), dict):
+            self.last_usage = data["usage"]
         try:
             text = "".join(
                 block.get("text", "") for block in data["content"] if block.get("type") == "text"

@@ -78,3 +78,43 @@ def test_trade_request_validation():
         webapp.TradeRequest(symbol="BTCUSDT", side="SIDEWAYS")
     ok = webapp.TradeRequest(symbol="btcusdt", side="long")
     assert ok.symbol == "BTCUSDT" and ok.side == "LONG"
+
+
+class _StubStream:
+    """Pengganti MarketStream: langsung memberi satu candle ke listener."""
+
+    def __init__(self):
+        self.listeners = []
+
+    def add_listener(self, fn):
+        self.listeners.append(fn)
+        fn("kline", {
+            "symbol": "BTCUSDT", "interval": "15m",
+            "candle": {"time": 1, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0},
+            "closed": False,
+        })
+
+    def remove_listener(self, fn):
+        self.listeners.remove(fn)
+
+    def subscribe_kline(self, symbol, interval):
+        pass
+
+    def unsubscribe_kline(self, symbol, interval):
+        pass
+
+    def health(self):
+        return {"connected": True, "stale": False, "subscriptions": ["BTCUSDT@15m"]}
+
+
+def test_ws_requires_token_and_streams(monkeypatch):
+    from starlette.websockets import WebSocketDisconnect
+
+    monkeypatch.setattr(webapp, "market_stream", _StubStream())
+    client.cookies.clear()  # uji login sebelumnya menyimpan cookie sesi di client bersama
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/api/ws/klines/BTCUSDT") as ws:
+            ws.receive_json()
+    with client.websocket_connect("/api/ws/klines/BTCUSDT?token=token-utama-uji") as ws:
+        payload = ws.receive_json()
+        assert payload["symbol"] == "BTCUSDT" and payload["candle"]["close"] == 1.0
