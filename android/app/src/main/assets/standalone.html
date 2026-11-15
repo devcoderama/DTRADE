@@ -49,6 +49,10 @@
   .sym .nm small{color:var(--muted);font-weight:400}
   .sym .pr{text-align:right;margin-left:auto}
   .sym .pr .p{font-weight:700;font-variant-numeric:tabular-nums}
+  .coin{position:relative;flex:none;border-radius:50%;overflow:hidden;background:var(--panel2)}
+  .coinf{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-weight:800;color:#fff}
+  .coini{position:absolute;inset:0;width:100%;height:100%;border-radius:50%}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
   .up{color:var(--green)} .dn{color:var(--red)}
   .chip{flex:none;min-width:86px;text-align:center;border-radius:9px;padding:6px 7px;
@@ -138,6 +142,7 @@ tanpa AI, tanpa eksekusi order.</div>
 <div class="detail" id="detailView">
   <div class="dhead">
     <button class="iconbtn" id="btnBack" aria-label="Kembali">←</button>
+    <span id="dCoin"></span>
     <div>
       <div class="nm" id="dSymbol">—</div>
       <div class="chg" id="dSub">—</div>
@@ -370,10 +375,13 @@ async function loadList() {
         .filter(s => s.contractType === "PERPETUAL" && s.quoteAsset === "USDT" && s.status === "TRADING")
         .map(s => s.symbol)
     );
+    const baseOf = {};
+    info.symbols.forEach(s => { baseOf[s.symbol] = s.baseAsset; });
     symbols = tickers
       .filter(t => tradable.has(t.symbol))
       .map(t => ({
         symbol: t.symbol,
+        base: baseOf[t.symbol] || t.symbol.replace(/USDT$/, ""),
         price: parseFloat(t.lastPrice),
         change: parseFloat(t.priceChangePercent),
         volume: parseFloat(t.quoteVolume),
@@ -428,6 +436,36 @@ async function computeSignals(run) {
   await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
 }
 
+/* Logo koin seperti aplikasi Binance: CDN resmi bin.bnbstatic.com,
+   cadangan CDN ikon kripto, terakhir avatar huruf berwarna deterministik. */
+const LOGO_BASE = params.get("logo") || "https://bin.bnbstatic.com/static/assets/logos/";
+const ICON2_BASE = "https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/";
+function coinHue(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+function iconErr(img, base) {
+  const plain = base.replace(/^1000/, "");
+  if (!img.dataset.r1 && plain !== base) {
+    img.dataset.r1 = "1";
+    img.src = LOGO_BASE + plain + ".png";
+  } else if (!img.dataset.r2) {
+    img.dataset.r2 = "1";
+    img.src = ICON2_BASE + plain.toLowerCase() + ".svg";
+  } else {
+    img.style.display = "none";
+  }
+}
+function coinHtml(s, size) {
+  const base = (s && s.base) || (s ? s.symbol : "?").replace(/USDT$/, "");
+  const plain = base.replace(/^1000/, "");
+  return '<div class="coin" style="width:' + size + "px;height:" + size + 'px">' +
+    '<div class="coinf" style="background:hsl(' + coinHue(plain) + ',45%,30%);font-size:' +
+    Math.round(size * 0.44) + 'px">' + plain.charAt(0) + "</div>" +
+    '<img class="coini" loading="lazy" alt="" src="' + LOGO_BASE + base + '.png" ' +
+    'onerror="iconErr(this,\'' + base + '\')"></div>';
+}
 function chipHtml(s) {
   if (s.scoreObj) {
     const o = s.scoreObj;
@@ -440,7 +478,8 @@ function chipHtml(s) {
   return '<div class="chip load">ketuk ›</div>';
 }
 function rowHtml(s) {
-  return '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small></div>' +
+  return coinHtml(s, 34) +
+    '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small></div>' +
     '<div class="pr"><div class="p">' + fmtPrice(s.price) + '</div>' +
     '<div class="chg ' + (s.change >= 0 ? "up" : "dn") + '">' +
     (s.change >= 0 ? "+" : "") + s.change.toFixed(2) + '%</div></div>' + chipHtml(s);
@@ -527,6 +566,8 @@ function closeDetail() {
 async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
   $("dSymbol").textContent = currentSymbol;
+  $("dCoin").innerHTML = coinHtml(
+    symbols.find(x => x.symbol === currentSymbol) || { symbol: currentSymbol }, 38);
   $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
   try {
     detailKlines = await api("/fapi/v1/klines?symbol=" + currentSymbol +

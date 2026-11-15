@@ -51,6 +51,15 @@ panel angka + garis putus-putus ENTRY/TP/SL langsung di grafik.
 Level dihitung ulang setiap candle ditutup; sinyal NETRAL tidak
 memunculkan rencana.
 
+Sejak v1.5.0, daftar simbol dan header detail menampilkan **logo
+koin** seperti aplikasi Binance: gambar dimuat dari CDN resmi
+Binance (`bin.bnbstatic.com/static/assets/logos/<BASE>.png`, memakai
+`baseAsset` dari exchangeInfo; awalan `1000` dicoba dilepas), cadangan
+CDN cryptocurrency-icons (jsDelivr), dan bila keduanya tidak punya
+ikonnya, tampil avatar huruf berwarna deterministik dari nama koin —
+tidak pernah ada gambar rusak. Logo dimuat sebagai subresource gambar
+biasa (bukan navigasi), jadi daftar-izin host WebView tidak berubah.
+
 Catatan teknis: halaman dimuat lewat `loadDataWithBaseURL` (base host
 semu `dtrade.local`, jadi `allowFileAccess` tetap `false`), dan panggilan
 REST-nya lewat jembatan `AndroidBridge` yang **hanya** mengizinkan GET
