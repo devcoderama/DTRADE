@@ -35,7 +35,7 @@ const ARC_LEN = 163.4; // panjang busur setengah lingkaran r=52 pada viewBox 120
 function gaugeCard(id, title, frac, color, value, label) {
   const f = Math.max(0, Math.min(1, frac || 0));
   $(id).innerHTML =
-    '<div class="g-title">' + title + "</div>" +
+    '<div class="g-title">' + title + ' <i class="fa-solid fa-circle-info g-info"></i></div>' +
     '<div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 120 68">' +
     '<path d="M 8 62 A 52 52 0 0 1 112 62" fill="none" stroke="#2b3139" stroke-width="9" stroke-linecap="round"/>' +
     '<path d="M 8 62 A 52 52 0 0 1 112 62" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" ' +
@@ -82,10 +82,10 @@ async function loadConfig() {
     }
     const bc = $("badge-broadcast");
     if (cfg.broadcast_enabled && cfg.telegram_configured) {
-      bc.textContent = "📣 Siaran Otomatis " + cfg.broadcast_interval_minutes + " mnt";
+      bc.textContent = "Siaran Otomatis " + cfg.broadcast_interval_minutes + " mnt";
       bc.classList.add("ok");
     } else {
-      bc.textContent = "📣 Siaran Nonaktif";
+      bc.textContent = "Siaran Nonaktif";
       bc.classList.remove("ok");
     }
   } catch (e) { /* server belum siap */ }
@@ -258,7 +258,7 @@ async function analyze(symbol) {
 
     /* --- panel sinyal gabungan --- */
     $("signal-panel").innerHTML =
-      '<div class="signal-head">✅ Sinyal Gabungan: <span class="pill ' + s.side.toLowerCase() + '">' + s.side + "</span>" +
+      '<div class="signal-head"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Sinyal Gabungan: <span class="pill ' + s.side.toLowerCase() + '">' + s.side + "</span>" +
       (s.side !== "NEUTRAL" ? '<span class="muted" style="font-size:13px">keyakinan ' + s.confidence + "%</span>" : "") + "</div>" +
       (s.ai ? '<p class="signal-why">' + s.ai.reasoning + "</p>" : "") +
       '<ul class="reasons">' + s.reasons.map((r) => "<li>" + r + "</li>").join("") + "</ul>";
@@ -281,10 +281,10 @@ async function analyze(symbol) {
 
     /* --- kartu eksekusi --- */
     $("execute-card").innerHTML =
-      '<button class="primary exec-main" onclick="tradeSymbol(\'' + s.symbol + '\', null)">⚡ Eksekusi Sinyal ›</button>' +
+      '<button class="primary exec-main" onclick="tradeSymbol(\'' + s.symbol + '\', null)"><i class="fa-solid fa-bolt"></i> Eksekusi Sinyal <i class="fa-solid fa-chevron-right"></i></button>' +
       '<div class="exec-sub"><button onclick="tradeSymbol(\'' + s.symbol + '\', \'LONG\')">Paksa LONG</button>' +
       '<button onclick="tradeSymbol(\'' + s.symbol + '\', \'SHORT\')">Paksa SHORT</button></div>' +
-      '<div class="exec-note">ⓘ Pastikan analisis sebelum trading.</div>';
+      '<div class="exec-note"><i class="fa-solid fa-circle-info"></i> Pastikan analisis sebelum trading.</div>';
     $("signal-row").hidden = false;
 
     renderSentiment(s);
@@ -351,8 +351,9 @@ async function scan() {
 /* ---------------- siaran sinyal ke Telegram ---------------- */
 async function broadcast() {
   const btn = $("btn-broadcast");
+  const label = btn.querySelector("span");
   btn.disabled = true;
-  btn.textContent = "📣 Menyaring & mengirim…";
+  label.textContent = "Menyaring & mengirim…";
   try {
     const res = await api("/api/broadcast", { method: "POST" });
     if (res.sent && res.sent.length) {
@@ -366,7 +367,7 @@ async function broadcast() {
     toast("Siaran gagal: " + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = "📣 Siaran ke Telegram";
+    label.textContent = "Siaran ke Telegram";
   }
 }
 $("btn-broadcast").addEventListener("click", broadcast);

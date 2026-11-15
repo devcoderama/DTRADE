@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>binance-ai-future — Dashboard Trading AI</title>
+<link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -30,11 +31,11 @@
     </div>
 
     <nav class="side-nav">
-      <button class="nav-item active" data-target="top"><span class="nav-ico">⌂</span> Dashboard</button>
-      <button class="nav-item" data-target="panel-analysis"><span class="nav-ico">📊</span> Analysis</button>
-      <button class="nav-item" data-target="panel-scan"><span class="nav-ico">⚡</span> Trade Signals</button>
-      <button class="nav-item" data-target="panel-positions"><span class="nav-ico">🌐</span> Market Overview</button>
-      <button class="nav-item" data-target="panel-ai"><span class="nav-ico">⚙️</span> Settings</button>
+      <button class="nav-item active" data-target="top"><span class="nav-ico"><i class="fa-solid fa-house"></i></span> Dashboard</button>
+      <button class="nav-item" data-target="panel-analysis"><span class="nav-ico"><i class="fa-solid fa-chart-line"></i></span> Analysis</button>
+      <button class="nav-item" data-target="panel-scan"><span class="nav-ico"><i class="fa-solid fa-bolt"></i></span> Trade Signals</button>
+      <button class="nav-item" data-target="panel-positions"><span class="nav-ico"><i class="fa-solid fa-globe"></i></span> Market Overview</button>
+      <button class="nav-item" data-target="panel-ai"><span class="nav-ico"><i class="fa-solid fa-gear"></i></span> Settings</button>
     </nav>
 
     <div class="promo-card">
@@ -42,13 +43,13 @@
       <div class="promo-body">
         <h3>Smarter Trading<br>with AI</h3>
         <p>Analyze · Predict · Trade</p>
-        <button class="primary" id="promo-start">Start Analysis →</button>
+        <button class="primary" id="promo-start">Start Analysis <i class="fa-solid fa-arrow-right"></i></button>
       </div>
     </div>
 
     <div class="side-foot">
       <span class="live-dot"></span> Live Market
-      <span class="foot-bars">▂▄▆█</span>
+      <span class="foot-bars"><i class="fa-solid fa-signal"></i></span>
     </div>
   </aside>
   <div class="scrim" id="scrim" hidden></div>
@@ -56,16 +57,16 @@
   <!-- ================= Konten ================= -->
   <div class="content">
     <header class="topbar">
-      <button class="hamburger" id="btn-menu" aria-label="Menu">☰</button>
+      <button class="hamburger" id="btn-menu" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
       <div class="search-box">
-        <span class="search-ico">🔍</span>
+        <span class="search-ico"><i class="fa-solid fa-magnifying-glass"></i></span>
         <input id="top-search" list="symbol-list" placeholder="Search coin, pair, or analysis..." autocomplete="off">
       </div>
       <div class="badges">
         <span id="badge-network" class="badge">…</span>
         <span id="badge-mode" class="badge">…</span>
         <span id="badge-ai" class="badge">…</span>
-        <span id="badge-broadcast" class="badge">📣 Siaran …</span>
+        <span id="badge-broadcast" class="badge">Siaran …</span>
       </div>
     </header>
 
@@ -76,30 +77,32 @@
         <div class="hero-text">
           <h1>binance-<span class="gold">ai</span>-future</h1>
           <p>Leverage the power of AI for smarter crypto trading decisions.</p>
-          <button class="primary hero-btn" id="btn-start">Start Analysis →</button>
+          <button class="primary hero-btn" id="btn-start">Start Analysis <i class="fa-solid fa-arrow-right"></i></button>
         </div>
       </section>
 
       <!-- Ringkasan akun -->
       <section class="cards">
         <div class="card stat-card">
-          <span class="stat-icon">👛</span>
+          <span class="stat-icon"><i class="fa-solid fa-wallet"></i></span>
           <div class="stat-text">
             <span class="label">Saldo Dompet</span>
             <strong id="acc-wallet">—</strong>
           </div>
+          <span class="card-afford"><i class="fa-regular fa-eye"></i></span>
           <svg class="spark" viewBox="0 0 74 26" preserveAspectRatio="none"><path d="M0 20 L10 16 L20 18 L30 10 L40 13 L50 6 L60 9 L74 3" fill="none" stroke="#0ecb81" stroke-width="1.8"/></svg>
         </div>
         <div class="card stat-card">
-          <span class="stat-icon">🪙</span>
+          <span class="stat-icon"><i class="fa-solid fa-coins"></i></span>
           <div class="stat-text">
             <span class="label">Tersedia</span>
             <strong id="acc-available">—</strong>
           </div>
+          <span class="card-afford"><i class="fa-solid fa-chevron-right"></i></span>
           <svg class="spark" viewBox="0 0 74 26" preserveAspectRatio="none"><path d="M0 18 L12 19 L24 12 L36 15 L48 8 L60 11 L74 5" fill="none" stroke="#0ecb81" stroke-width="1.8"/></svg>
         </div>
         <div class="card stat-card">
-          <span class="stat-icon">📊</span>
+          <span class="stat-icon"><i class="fa-solid fa-chart-column"></i></span>
           <div class="stat-text">
             <span class="label">PnL Belum Realisasi</span>
             <strong id="acc-upnl">—</strong>
@@ -107,11 +110,12 @@
           <svg class="spark" viewBox="0 0 74 26" preserveAspectRatio="none"><path d="M0 14 L14 12 L28 15 L42 9 L56 12 L74 7" fill="none" stroke="#0ecb81" stroke-width="1.8"/></svg>
         </div>
         <div class="card stat-card">
-          <span class="stat-icon">💎</span>
+          <span class="stat-icon"><i class="fa-solid fa-gem"></i></span>
           <div class="stat-text">
             <span class="label" id="acc-ai-label">Token AI Tersisa</span>
             <strong id="acc-ai">—</strong>
           </div>
+          <span class="card-afford"><i class="fa-solid fa-chevron-right"></i></span>
           <svg class="spark" viewBox="0 0 74 26" preserveAspectRatio="none"><path d="M0 8 L14 11 L28 7 L42 12 L56 9 L74 13" fill="none" stroke="#f0b90b" stroke-width="1.8"/></svg>
         </div>
       </section>
@@ -125,11 +129,12 @@
 
         <div class="analysis-layout">
           <div class="an-left">
-            <h2 class="panel-title">📊 Analisis Simbol</h2>
+            <h2 class="panel-title"><i class="fa-solid fa-chart-line title-ico"></i> Analisis Simbol</h2>
             <div class="row">
+              <span class="coin-badge"><i class="fa-solid fa-coins"></i></span>
               <input id="symbol-input" list="symbol-list" placeholder="cth: BTCUSDT" autocomplete="off">
               <datalist id="symbol-list"></datalist>
-              <button id="btn-analyze" class="primary">✦ Analisis + AI</button>
+              <button id="btn-analyze" class="primary"><i class="fa-solid fa-wand-magic-sparkles"></i> Analisis + AI</button>
             </div>
             <div id="analysis" class="analysis-empty">Pilih simbol lalu klik Analisis untuk melihat snapshot teknikal dan penilaian AI.</div>
           </div>
@@ -172,7 +177,7 @@
 
           <aside class="an-right">
             <div class="sentiment-card">
-              <h3>📊 Market Sentiment</h3>
+              <h3><i class="fa-solid fa-chart-column title-ico"></i> Market Sentiment</h3>
               <div class="gauge-wrap">
                 <svg class="gauge-svg" viewBox="0 0 120 68">
                   <defs>
@@ -192,7 +197,7 @@
               </div>
               <div class="sent-row"><span class="muted">Posisi Market</span><b id="sent-position">—</b></div>
               <div class="insight">
-                <h4>💡 Key Insight</h4>
+                <h4><i class="fa-solid fa-lightbulb"></i> Key Insight</h4>
                 <p id="sent-insight" class="muted">Belum ada analisis. Jalankan analisis untuk melihat sentimen dan insight AI.</p>
               </div>
             </div>
@@ -211,7 +216,7 @@
       <!-- Provider & model AI -->
       <section class="panel" id="panel-ai">
         <div class="row space-between">
-          <h2 style="margin:0">🤖 Provider &amp; Model AI</h2>
+          <h2 style="margin:0"><i class="fa-solid fa-robot title-ico"></i> Provider &amp; Model AI</h2>
           <span class="muted small" id="ai-current">…</span>
         </div>
         <div class="row" style="margin-top:10px">
@@ -226,10 +231,10 @@
       <!-- Pemindai -->
       <section class="panel" id="panel-scan">
         <div class="row space-between">
-          <h2>⚡ Pemindai Semua Simbol</h2>
+          <h2><i class="fa-solid fa-bolt title-ico"></i> Pemindai Semua Simbol</h2>
           <div class="row">
             <label class="check"><input type="checkbox" id="scan-ai"> Nilai AI untuk 5 teratas</label>
-            <button id="btn-broadcast" class="ghost">📣 Siaran ke Telegram</button>
+            <button id="btn-broadcast" class="ghost"><i class="fa-solid fa-bullhorn"></i> <span>Siaran ke Telegram</span></button>
             <button id="btn-scan" class="primary">Pindai Sekarang</button>
           </div>
         </div>
@@ -247,8 +252,8 @@
       <!-- Posisi -->
       <section class="panel" id="panel-positions">
         <div class="row space-between">
-          <h2>🌐 Posisi Terbuka</h2>
-          <button id="btn-refresh" class="ghost">↻ Muat Ulang</button>
+          <h2><i class="fa-solid fa-briefcase title-ico"></i> Posisi Terbuka</h2>
+          <button id="btn-refresh" class="ghost"><i class="fa-solid fa-rotate-right"></i> Muat Ulang</button>
         </div>
         <div class="table-wrap">
           <table id="pos-table">
@@ -261,7 +266,7 @@
       </section>
 
       <p class="disclaimer">
-        ⚠️ Trading futures berisiko tinggi. Mode <b>dry-run</b> hanya mensimulasikan order.
+        <i class="fa-solid fa-triangle-exclamation"></i> Trading futures berisiko tinggi. Mode <b>dry-run</b> hanya mensimulasikan order.
         AI memberikan penilaian, bukan jaminan. Selalu periksa sebelum eksekusi live.
       </p>
     </main>
@@ -270,11 +275,11 @@
 
 <!-- Navigasi bawah (mobile) -->
 <nav class="bottom-nav">
-  <button class="bnav-item active" data-target="top"><span>⌂</span>Home</button>
-  <button class="bnav-item" data-target="panel-analysis"><span>📊</span>Analysis</button>
-  <button class="bnav-item" data-target="panel-scan"><span>⚡</span>Signals</button>
-  <button class="bnav-item" data-target="panel-positions"><span>🌐</span>Market</button>
-  <button class="bnav-item" data-target="panel-ai"><span>⚙️</span>More</button>
+  <button class="bnav-item active" data-target="top"><i class="fa-solid fa-house"></i>Home</button>
+  <button class="bnav-item" data-target="panel-analysis"><i class="fa-solid fa-chart-line"></i>Analysis</button>
+  <button class="bnav-item" data-target="panel-scan"><i class="fa-solid fa-bolt"></i>Signals</button>
+  <button class="bnav-item" data-target="panel-positions"><i class="fa-solid fa-globe"></i>Market</button>
+  <button class="bnav-item" data-target="panel-ai"><i class="fa-solid fa-gear"></i>More</button>
 </nav>
 
 <div id="toast"></div>
