@@ -8,14 +8,20 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 /**
  * D TRADE — aplikasi Android pendamping binance-ai-future.
@@ -24,6 +30,11 @@ import android.widget.TextView
  * seluruh logika trading tetap berjalan di backend Python (komputer/VPS
  * pengguna), aplikasi hanya menampilkannya di ponsel. Alamat server dapat
  * diganti dari menu "Alamat Server" dan tersimpan di perangkat.
+ *
+ * Mode mandiri (sejak v1.2.0): bila server tidak terjangkau — atau dipilih
+ * dari menu — aplikasi menampilkan halaman bawaan (assets/standalone.html)
+ * berisi sinyal teknikal + grafik candlestick semua simbol Binance Futures
+ * dari API publik Binance. Tanpa AI, tanpa eksekusi, tanpa kredensial.
  */
 class MainActivity : Activity() {
 
@@ -31,6 +42,12 @@ class MainActivity : Activity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: TextView
     private lateinit var prefs: SharedPreferences
+
+    /** true selama halaman mode mandiri yang sedang ditampilkan. */
+    private var standaloneMode = false
+
+    /** Isi assets/standalone.html, dibaca sekali lalu disimpan di memori. */
+    private var standaloneHtml: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,14 +66,15 @@ class MainActivity : Activity() {
             useWideViewPort = true
             builtInZoomControls = false
             // Pengerasan: WebView hanya boleh memuat URL server backend —
-            // tidak ada akses berkas lokal / content provider, dan tidak
-            // ada jembatan JavaScript ke kode native (addJavascriptInterface
-            // memang tidak pernah dipakai). Tidak ada kredensial apa pun
-            // yang disimpan aplikasi ini; autentikasi API (bila aktif)
-            // hidup di cookie sesi WebView milik server.
+            // tidak ada akses berkas lokal / content provider. Jembatan
+            // JavaScript (ApiBridge) hanya mengekspos GET read-only ke
+            // API publik Binance untuk mode mandiri; tidak ada kredensial
+            // apa pun yang disimpan aplikasi ini — autentikasi API (bila
+            // aktif) hidup di cookie sesi WebView milik server.
             allowFileAccess = false
             allowContentAccess = false
         }
+        webView.addJavascriptInterface(ApiBridge(), "AndroidBridge")
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -71,17 +89,17 @@ class MainActivity : Activity() {
             }
 
             // Fase 6-C3: daftar-izin host — WebView HANYA boleh bernavigasi
-            // ke host server yang dikonfigurasi pengguna. Tautan/redirect
-            // ke host lain diblokir agar halaman server yang terkompromi
-            // tidak dapat membawa WebView (beserta cookie sesi) ke situs
-            // asing.
+            // ke host server yang dikonfigurasi pengguna, atau host semu
+            // halaman mode mandiri (dtrade.local). Tautan/redirect ke host
+            // lain diblokir agar halaman server yang terkompromi tidak
+            // dapat membawa WebView (beserta cookie sesi) ke situs asing.
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
                 val target = request?.url ?: return false
                 val allowedHost = android.net.Uri.parse(serverUrl()).host
-                return target.host != allowedHost
+                return target.host != allowedHost && target.host != STANDALONE_HOST
             }
 
             override fun onReceivedError(
@@ -89,7 +107,22 @@ class MainActivity : Activity() {
                 request: WebResourceRequest?,
                 error: WebResourceError?
             ) {
-                if (request?.isForMainFrame == true) showError()
+                if (request?.isForMainFrame == true) {
+                    // Server tidak terjangkau → jatuh ke mode mandiri.
+                    if (!standaloneMode) loadStandalone() else showError()
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?
+            ) {
+                if (request?.isForMainFrame == true &&
+                    (errorResponse?.statusCode ?: 0) >= 500 && !standaloneMode
+                ) {
+                    loadStandalone()
+                }
             }
         }
         errorView.setOnClickListener { showUrlDialog() }
@@ -108,7 +141,33 @@ class MainActivity : Activity() {
     }
 
     private fun loadHome() {
+        standaloneMode = false
         webView.loadUrl(serverUrl())
+    }
+
+    /**
+     * Mode mandiri: muat halaman bawaan (sinyal + grafik dari API publik
+     * Binance) tanpa perlu server. HTML dibaca dari aset lalu dimuat dengan
+     * base URL https semu agar tidak perlu akses berkas (allowFileAccess
+     * tetap false).
+     */
+    private fun loadStandalone() {
+        standaloneMode = true
+        val html = standaloneHtml ?: try {
+            assets.open("standalone.html").bufferedReader().readText()
+        } catch (e: Exception) {
+            showError()
+            return
+        }
+        standaloneHtml = html
+        Toast.makeText(
+            this,
+            "Server tidak terjangkau — mode mandiri (data Binance langsung)",
+            Toast.LENGTH_LONG
+        ).show()
+        webView.loadDataWithBaseURL(
+            "https://$STANDALONE_HOST/", html, "text/html", "UTF-8", null
+        )
     }
 
     private fun showError() {
@@ -138,7 +197,8 @@ class MainActivity : Activity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_HOME, 0, "Beranda")
+        menu.add(0, MENU_HOME, 0, "Beranda Server")
+        menu.add(0, MENU_STANDALONE, 0, "Mode Mandiri")
         menu.add(0, MENU_RELOAD, 0, "Muat Ulang")
         menu.add(0, MENU_URL, 0, "Alamat Server")
         return true
@@ -147,6 +207,7 @@ class MainActivity : Activity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             MENU_HOME -> loadHome()
+            MENU_STANDALONE -> loadStandalone()
             MENU_RELOAD -> webView.reload()
             MENU_URL -> showUrlDialog()
             else -> return super.onOptionsItemSelected(item)
@@ -164,14 +225,72 @@ class MainActivity : Activity() {
         webView.saveState(outState)
     }
 
+    /**
+     * Jembatan JavaScript untuk halaman mode mandiri. Permukaan yang
+     * diekspos sengaja sempit dan read-only:
+     * - fetch(): GET https HANYA ke host API publik Binance (daftar-izin
+     *   di bawah); hasil dikembalikan sebagai teks lewat __apiResolve.
+     * - getServerUrl(): alamat server yang dikonfigurasi (untuk label).
+     * - openServer(): kembali memuat Web UI server.
+     * Tidak ada kredensial, tidak ada penulisan, tidak ada host lain.
+     */
+    inner class ApiBridge {
+        @JavascriptInterface
+        fun fetch(callbackId: Int, url: String) {
+            Thread {
+                var body = ""
+                var error: String? = null
+                try {
+                    val parsed = URL(url)
+                    if (parsed.protocol != "https" || parsed.host !in BINANCE_HOSTS) {
+                        throw SecurityException("host tidak diizinkan")
+                    }
+                    val conn = parsed.openConnection() as HttpURLConnection
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 15000
+                    conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
+                    val code = conn.responseCode
+                    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                    body = stream?.bufferedReader()?.readText() ?: ""
+                    if (code !in 200..299) error = "HTTP $code"
+                } catch (e: Exception) {
+                    error = e.message ?: "network error"
+                }
+                val payload = JSONObject()
+                    .put("id", callbackId)
+                    .put("body", body)
+                    .put("error", error ?: JSONObject.NULL)
+                webView.post {
+                    webView.evaluateJavascript("window.__apiResolve($payload)", null)
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun getServerUrl(): String = serverUrl()
+
+        @JavascriptInterface
+        fun openServer() {
+            webView.post { loadHome() }
+        }
+    }
+
     companion object {
         private const val PREFS = "dtrade"
         private const val KEY_URL = "server_url"
 
         /** Bawaan untuk emulator Android (10.0.2.2 = localhost komputer host). */
         private const val DEFAULT_URL = "http://10.0.2.2:8000"
+
+        /** Host semu (base URL) halaman mode mandiri. */
+        private const val STANDALONE_HOST = "dtrade.local"
+
+        /** Satu-satunya host yang boleh dihubungi jembatan mode mandiri. */
+        private val BINANCE_HOSTS = setOf("fapi.binance.com", "testnet.binancefuture.com")
+
         private const val MENU_HOME = 1
         private const val MENU_RELOAD = 2
         private const val MENU_URL = 3
+        private const val MENU_STANDALONE = 4
     }
 }

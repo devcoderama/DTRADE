@@ -23,6 +23,24 @@ ponsel dengan nama **D TRADE**.
 > Bawaan alamat server adalah `http://10.0.2.2:8000` (localhost komputer
 > host dari emulator Android) — ganti sesuai alamat backend Anda.
 
+## Mode Mandiri (sejak v1.2.0)
+
+Bila server tidak terjangkau, aplikasi otomatis beralih ke **mode
+mandiri** (bisa juga dipilih manual lewat menu ⋮ → **Mode Mandiri**):
+halaman bawaan `assets/standalone.html` menampilkan **sinyal teknikal**
+dan **grafik candlestick semua simbol USDT perpetual Binance Futures**
+langsung dari API publik Binance — tanpa AI, tanpa eksekusi, tanpa kunci
+API. Skor −100…+100 dihitung di perangkat dari EMA20/50, MACD, RSI, dan
+Bollinger Bands; ketuk simbol untuk grafik (15m/1h/4h/1d) + rincian
+alasannya. Tersedia sakelar Mainnet/Testnet di kanan atas.
+
+Catatan teknis: halaman dimuat lewat `loadDataWithBaseURL` (base host
+semu `dtrade.local`, jadi `allowFileAccess` tetap `false`), dan panggilan
+datanya lewat jembatan `AndroidBridge` yang **hanya** mengizinkan GET
+https ke `fapi.binance.com` / `testnet.binancefuture.com`. Tombol
+"Hubungkan" di halaman mandiri (atau menu **Beranda Server**) kembali ke
+Web UI server.
+
 ## Catatan Keamanan Jaringan (penting sejak pengerasan 2026-11-16)
 
 Aplikasi kini **menolak HTTP (cleartext) secara bawaan**; hanya

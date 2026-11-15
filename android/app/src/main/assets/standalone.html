@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>D TRADE — Mode Mandiri</title>
+<style>
+  :root{
+    --bg:#0b0e11; --panel:#12161c; --panel2:#171c24; --line:#232a33;
+    --text:#e8ecf1; --muted:#9aa7b4; --gold:#f0b90b; --green:#0ecb81; --red:#f6465d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    font-size:15px;line-height:1.45}
+  button{font-family:inherit}
+  .top{position:sticky;top:0;z-index:20;background:rgba(11,14,17,.95);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 14px}
+  .top .row1{display:flex;align-items:center;gap:10px}
+  .logo{font-weight:800;font-size:1.05rem}
+  .logo span{color:var(--gold)}
+  .mode{margin-left:auto;display:flex;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;overflow:hidden}
+  .mode button{background:none;border:none;color:var(--muted);padding:6px 12px;
+    font-size:.82rem;font-weight:700;cursor:pointer}
+  .mode button.on{background:var(--gold);color:#0b0e11}
+  .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
+    border-radius:9px;width:36px;height:36px;font-size:1rem;cursor:pointer;flex:none}
+  .info{margin:10px 14px 0;background:rgba(240,185,11,.07);border:1px solid rgba(240,185,11,.3);
+    border-radius:10px;padding:9px 12px;color:#e7cf8a;font-size:.83rem}
+  .serverbar{margin:10px 14px 0;display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;
+    font-size:.83rem;color:var(--muted)}
+  .serverbar b{color:var(--text);word-break:break-all}
+  .serverbar button{margin-left:auto;background:var(--gold);border:none;color:#0b0e11;
+    font-weight:700;border-radius:8px;padding:7px 13px;cursor:pointer;flex:none}
+  .controls{display:flex;gap:8px;padding:12px 14px 4px}
+  .controls input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    color:var(--text);padding:10px 12px;font-size:.95rem;outline:none;min-width:0}
+  .controls select{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    color:var(--text);padding:10px 8px;font-size:.88rem;outline:none}
+  .status{padding:6px 16px 2px;color:var(--muted);font-size:.8rem}
+  .list{padding:6px 10px 24px}
+  .sym{display:flex;align-items:center;gap:10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:0 4px 8px;
+    cursor:pointer}
+  .sym:active{border-color:rgba(240,185,11,.5)}
+  .sym .nm{font-weight:700;font-size:.98rem}
+  .sym .nm small{color:var(--muted);font-weight:400}
+  .sym .pr{text-align:right;margin-left:auto}
+  .sym .pr .p{font-weight:700;font-variant-numeric:tabular-nums}
+  .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
+  .up{color:var(--green)} .dn{color:var(--red)}
+  .chip{flex:none;min-width:86px;text-align:center;border-radius:9px;padding:6px 7px;
+    font-size:.78rem;font-weight:800;line-height:1.25}
+  .chip small{display:block;font-weight:600;font-size:.7rem;opacity:.85}
+  .chip.long{background:rgba(14,203,129,.13);color:var(--green);border:1px solid rgba(14,203,129,.4)}
+  .chip.short{background:rgba(246,70,93,.12);color:var(--red);border:1px solid rgba(246,70,93,.4)}
+  .chip.neu{background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+  .chip.load{background:var(--panel2);color:var(--muted);border:1px solid var(--line);font-weight:600}
+  .err{margin:14px;background:rgba(246,70,93,.08);border:1px solid rgba(246,70,93,.45);
+    color:#f3c1c9;border-radius:10px;padding:12px 14px;font-size:.9rem}
+  /* ---------- Detail ---------- */
+  .detail{display:none;padding:0 0 28px}
+  .detail.open{display:block}
+  .dhead{display:flex;align-items:center;gap:10px;padding:12px 14px 4px}
+  .dhead .nm{font-size:1.15rem;font-weight:800}
+  .dhead .pr{margin-left:auto;text-align:right}
+  .dhead .pr .p{font-size:1.08rem;font-weight:800;font-variant-numeric:tabular-nums}
+  .tabs{display:flex;gap:7px;padding:10px 14px 2px}
+  .tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:6px 13px;font-weight:700;font-size:.85rem;cursor:pointer}
+  .tabs button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
+  .chartbox{margin:10px 12px 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px 6px 6px}
+  canvas{width:100%;display:block}
+  .verdict{margin:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:13px 15px;display:flex;align-items:center;gap:14px}
+  .verdict .big{font-size:1.5rem;font-weight:800}
+  .verdict .lbl{font-size:.8rem;color:var(--muted)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .stat .k{color:var(--muted);font-size:.75rem}
+  .stat .v{font-weight:700;font-variant-numeric:tabular-nums}
+  .reasons{margin:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 15px}
+  .reasons h4{margin:0 0 7px;font-size:.9rem;color:var(--gold)}
+  .reasons li{margin:3px 0;color:#cfd8e0;font-size:.88rem}
+  .foot{padding:8px 18px 30px;color:var(--muted);font-size:.78rem;text-align:center}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="row1">
+    <div class="logo">D <span>TRADE</span> · Mandiri</div>
+    <div class="mode" role="group" aria-label="Jaringan Binance">
+      <button id="btnMainnet" class="on">Mainnet</button>
+      <button id="btnTestnet">Testnet</button>
+    </div>
+    <button class="iconbtn" id="btnRefresh" aria-label="Muat ulang">⟳</button>
+  </div>
+</div>
+
+<div class="info">Mode mandiri: aplikasi tidak terhubung ke server binance-ai-future, jadi yang
+ditampilkan hanya <b>sinyal teknikal</b> dan <b>grafik candlestick</b> dari API publik Binance —
+tanpa AI, tanpa eksekusi order.</div>
+
+<div class="serverbar" id="serverBar">
+  <div>Server: <b id="serverUrl">—</b></div>
+  <button id="btnServer">Hubungkan</button>
+</div>
+
+<div id="listView">
+  <div class="controls">
+    <input id="q" type="search" placeholder="Cari simbol… (cth: BTC)" autocomplete="off">
+    <select id="sort">
+      <option value="volume">Volume 24j</option>
+      <option value="signal">Sinyal terkuat</option>
+      <option value="change">Perubahan 24j</option>
+    </select>
+  </div>
+  <div class="status" id="status">Memuat daftar simbol…</div>
+  <div class="list" id="list"></div>
+  <div class="err hidden" id="listErr"></div>
+</div>
+
+<div class="detail" id="detailView">
+  <div class="dhead">
+    <button class="iconbtn" id="btnBack" aria-label="Kembali">←</button>
+    <div>
+      <div class="nm" id="dSymbol">—</div>
+      <div class="chg" id="dSub">—</div>
+    </div>
+    <div class="pr">
+      <div class="p" id="dPrice">—</div>
+      <div class="chg" id="dChange">—</div>
+    </div>
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-iv="15m">15m</button>
+    <button data-iv="1h" class="on">1h</button>
+    <button data-iv="4h">4h</button>
+    <button data-iv="1d">1d</button>
+  </div>
+  <div class="chartbox"><canvas id="chart" height="340"></canvas></div>
+  <div class="verdict" id="verdict"></div>
+  <div class="stats" id="stats"></div>
+  <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
+</div>
+
+<div class="foot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
+Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
+
+<script>
+"use strict";
+/* ================= Transportasi data =================
+   Di dalam aplikasi Android, panggilan API lewat jembatan native
+   (AndroidBridge) agar bebas CORS. Di browser biasa, pakai fetch. */
+const BASES = {
+  mainnet: "https://fapi.binance.com",
+  testnet: "https://testnet.binancefuture.com"
+};
+const params = new URLSearchParams(location.search);
+let network = params.get("bn") === "testnet" ? "testnet" : "mainnet";
+/* Pengait pengujian: ?api=http://host:port mengganti basis API. */
+if (params.get("api")) {
+  BASES.mainnet = params.get("api");
+  BASES.testnet = params.get("api");
+}
+
+let cbSeq = 0;
+const cbs = {};
+window.__apiResolve = function (p) {
+  const c = cbs[p.id];
+  if (!c) return;
+  delete cbs[p.id];
+  if (p.error) c.reject(new Error(p.error)); else c.resolve(p.body);
+};
+function bridgeFetch(url) {
+  return new Promise((resolve, reject) => {
+    const id = ++cbSeq;
+    cbs[id] = { resolve, reject };
+    window.AndroidBridge.fetch(id, url);
+  });
+}
+async function api(path) {
+  const url = BASES[network] + path;
+  let text;
+  if (window.AndroidBridge && window.AndroidBridge.fetch) {
+    text = await bridgeFetch(url);
+  } else {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    text = await r.text();
+  }
+  return JSON.parse(text);
+}
+
+/* ================= Indikator ================= */
+function emaSeries(values, period) {
+  const k = 2 / (period + 1);
+  const out = new Array(values.length).fill(null);
+  let e = null;
+  for (let i = 0; i < values.length; i++) {
+    e = e === null ? values[i] : values[i] * k + e * (1 - k);
+    if (i >= period - 1) out[i] = e;
+  }
+  return out;
+}
+function rsiLast(closes, period) {
+  period = period || 14;
+  if (closes.length < period + 1) return null;
+  let gain = 0, loss = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gain += d; else loss -= d;
+  }
+  let avgG = gain / period, avgL = loss / period;
+  // Pemulusan Wilder untuk sisa data sebelum jendela terakhir tidak
+  // diperlukan: hitung ulang penuh secara iteratif agar akurat.
+  avgG = 0; avgL = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) avgG += d / period; else avgL -= d / period;
+  }
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgG = (avgG * (period - 1) + Math.max(d, 0)) / period;
+    avgL = (avgL * (period - 1) + Math.max(-d, 0)) / period;
+  }
+  if (avgL === 0) return 100;
+  return 100 - 100 / (1 + avgG / avgL);
+}
+function macdLast(closes) {
+  const fast = emaSeries(closes, 12), slow = emaSeries(closes, 26);
+  const line = closes.map((_, i) => (fast[i] !== null && slow[i] !== null) ? fast[i] - slow[i] : null);
+  const valid = line.filter(v => v !== null);
+  const sig = emaSeries(valid, 9);
+  const m = valid[valid.length - 1], s = sig[sig.length - 1];
+  if (m === undefined || s === null || s === undefined) return null;
+  return { line: m, signal: s, hist: m - s };
+}
+function bollLast(closes, period) {
+  period = period || 20;
+  if (closes.length < period) return null;
+  const w = closes.slice(-period);
+  const mid = w.reduce((a, b) => a + b, 0) / period;
+  const sd = Math.sqrt(w.reduce((a, b) => a + (b - mid) * (b - mid), 0) / period);
+  const upper = mid + 2 * sd, lower = mid - 2 * sd;
+  const last = closes[closes.length - 1];
+  return { mid, upper, lower, pctB: upper === lower ? 0.5 : (last - lower) / (upper - lower) };
+}
+
+/* Skor teknikal -100..+100 (semangat yang sama dengan backend:
+   tren EMA + MACD, momentum RSI, posisi Bollinger, momentum harga). */
+function scoreSymbol(closes) {
+  const reasons = [];
+  let score = 0;
+  const last = closes[closes.length - 1];
+  const e20s = emaSeries(closes, 20), e50s = emaSeries(closes, 50);
+  const e20 = e20s[e20s.length - 1], e50 = e50s[e50s.length - 1];
+  if (e20 !== null && e50 !== null) {
+    if (last > e20) { score += 6; reasons.push("Harga di atas EMA20 (+6)"); }
+    else { score -= 6; reasons.push("Harga di bawah EMA20 (−6)"); }
+    if (e20 > e50) { score += 10; reasons.push("EMA20 di atas EMA50 — tren naik (+10)"); }
+    else { score -= 10; reasons.push("EMA20 di bawah EMA50 — tren turun (−10)"); }
+    if (last > e50) { score += 8; reasons.push("Harga di atas EMA50 (+8)"); }
+    else { score -= 8; reasons.push("Harga di bawah EMA50 (−8)"); }
+  }
+  const m = macdLast(closes);
+  if (m) {
+    if (m.hist > 0) { score += 10; reasons.push("MACD histogram positif (+10)"); }
+    else { score -= 10; reasons.push("MACD histogram negatif (−10)"); }
+    if (m.line > 0) { score += 4; reasons.push("MACD di atas nol (+4)"); }
+    else { score -= 4; reasons.push("MACD di bawah nol (−4)"); }
+  }
+  const rsi = rsiLast(closes);
+  if (rsi !== null) {
+    let pts = Math.max(-12, Math.min(12, (rsi - 50) * 0.6));
+    if (rsi > 75) pts = Math.min(pts, 4);
+    if (rsi < 25) pts = Math.max(pts, -4);
+    pts = Math.round(pts);
+    score += pts;
+    reasons.push("RSI " + rsi.toFixed(1) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+  }
+  const b = bollLast(closes);
+  if (b) {
+    const pts = Math.round((b.pctB - 0.5) * 16);
+    score += pts;
+    reasons.push("Posisi Bollinger %B " + b.pctB.toFixed(2) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+  }
+  if (closes.length > 10) {
+    const mom = (last / closes[closes.length - 11] - 1) * 100;
+    const pts = Math.round(Math.max(-10, Math.min(10, mom * 2)));
+    score += pts;
+    reasons.push("Momentum 10 candle " + mom.toFixed(2) + "% (" + (pts >= 0 ? "+" + pts : pts) + ")");
+  }
+  score = Math.max(-100, Math.min(100, Math.round(score)));
+  const side = score >= 25 ? "LONG" : score <= -25 ? "SHORT" : "NETRAL";
+  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, reasons };
+}
+
+/* ================= Daftar simbol ================= */
+const SIGNAL_LIMIT = 80;      // sinyal dihitung untuk 80 simbol tervolume dulu
+const KLINE_LIMIT = 100;
+let symbols = [];             // {symbol, price, change, volume, scoreObj|null, loading}
+let tickerTimer = null, signalAbort = 0;
+
+const fmtPrice = p => {
+  if (p >= 100) return p.toFixed(2);
+  if (p >= 1) return p.toFixed(3);
+  if (p >= 0.01) return p.toFixed(5);
+  return p.toFixed(7);
+};
+const $ = id => document.getElementById(id);
+
+async function loadList() {
+  const myRun = ++signalAbort;
+  $("listErr").classList.add("hidden");
+  $("status").textContent = "Memuat daftar simbol…";
+  try {
+    const [info, tickers] = await Promise.all([
+      api("/fapi/v1/exchangeInfo"),
+      api("/fapi/v1/ticker/24hr")
+    ]);
+    const tradable = new Set(
+      info.symbols
+        .filter(s => s.contractType === "PERPETUAL" && s.quoteAsset === "USDT" && s.status === "TRADING")
+        .map(s => s.symbol)
+    );
+    symbols = tickers
+      .filter(t => tradable.has(t.symbol))
+      .map(t => ({
+        symbol: t.symbol,
+        price: parseFloat(t.lastPrice),
+        change: parseFloat(t.priceChangePercent),
+        volume: parseFloat(t.quoteVolume),
+        scoreObj: null, loading: false
+      }))
+      .sort((a, b) => b.volume - a.volume);
+    renderList();
+    $("status").textContent = symbols.length + " simbol USDT perpetual · " +
+      new Date().toLocaleTimeString("id-ID") + " · menghitung sinyal " +
+      Math.min(SIGNAL_LIMIT, symbols.length) + " teratas…";
+    computeSignals(myRun);
+    scheduleTickerRefresh();
+    const autoSym = params.get("symbol");
+    if (autoSym && symbols.some(s => s.symbol === autoSym)) openDetail(autoSym);
+  } catch (e) {
+    $("status").textContent = "";
+    const el = $("listErr");
+    el.classList.remove("hidden");
+    el.textContent = "Gagal memuat data Binance (" + e.message + "). " +
+      (String(e.message).includes("451")
+        ? "Jaringan Anda tampaknya dibatasi secara wilayah oleh Binance — coba Testnet atau jaringan lain."
+        : "Periksa koneksi internet Anda lalu ketuk tombol muat ulang.");
+  }
+}
+
+async function computeSignals(run) {
+  const targets = symbols.slice(0, SIGNAL_LIMIT);
+  let done = 0;
+  const queue = targets.slice();
+  async function worker() {
+    while (queue.length) {
+      if (run !== signalAbort) return;
+      const s = queue.shift();
+      s.loading = true; paintRow(s);
+      try {
+        const kl = await api("/fapi/v1/klines?symbol=" + s.symbol + "&interval=1h&limit=" + KLINE_LIMIT);
+        s.scoreObj = scoreSymbol(kl.map(k => parseFloat(k[4])));
+      } catch (e) { s.scoreObj = null; }
+      s.loading = false; done++;
+      paintRow(s);
+      if (done === targets.length && run === signalAbort) {
+        $("status").textContent = symbols.length + " simbol · sinyal 1h terhitung " +
+          new Date().toLocaleTimeString("id-ID");
+        if ($("sort").value === "signal") renderList();
+      }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+}
+
+function chipHtml(s) {
+  if (s.scoreObj) {
+    const o = s.scoreObj;
+    const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+    return '<div class="chip ' + cls + '">' + o.side +
+      '<small>skor ' + (o.score > 0 ? "+" : "") + o.score +
+      (o.rsi !== null ? " · RSI " + o.rsi.toFixed(0) : "") + "</small></div>";
+  }
+  if (s.loading) return '<div class="chip load">menghitung…</div>';
+  return '<div class="chip load">ketuk ›</div>';
+}
+function rowHtml(s) {
+  return '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small></div>' +
+    '<div class="pr"><div class="p">' + fmtPrice(s.price) + '</div>' +
+    '<div class="chg ' + (s.change >= 0 ? "up" : "dn") + '">' +
+    (s.change >= 0 ? "+" : "") + s.change.toFixed(2) + '%</div></div>' + chipHtml(s);
+}
+function visibleSymbols() {
+  const q = $("q").value.trim().toUpperCase();
+  let arr = symbols.filter(s => !q || s.symbol.includes(q));
+  const mode = $("sort").value;
+  if (mode === "signal") {
+    arr = arr.slice().sort((a, b) =>
+      Math.abs((b.scoreObj || { score: -1 }).score) - Math.abs((a.scoreObj || { score: -1 }).score));
+  } else if (mode === "change") {
+    arr = arr.slice().sort((a, b) => b.change - a.change);
+  }
+  return arr;
+}
+function renderList() {
+  const list = $("list");
+  list.innerHTML = "";
+  visibleSymbols().forEach(s => {
+    const d = document.createElement("div");
+    d.className = "sym"; d.dataset.symbol = s.symbol;
+    d.innerHTML = rowHtml(s);
+    d.addEventListener("click", () => openDetail(s.symbol));
+    list.appendChild(d);
+  });
+}
+function paintRow(s) {
+  const d = $("list").querySelector('[data-symbol="' + s.symbol + '"]');
+  if (d) d.innerHTML = rowHtml(s);
+}
+function scheduleTickerRefresh() {
+  if (tickerTimer) clearInterval(tickerTimer);
+  tickerTimer = setInterval(async () => {
+    if (document.hidden || currentSymbol) return;
+    try {
+      const tickers = await api("/fapi/v1/ticker/24hr");
+      const by = {};
+      tickers.forEach(t => { by[t.symbol] = t; });
+      symbols.forEach(s => {
+        const t = by[s.symbol];
+        if (t) { s.price = parseFloat(t.lastPrice); s.change = parseFloat(t.priceChangePercent); paintRow(s); }
+      });
+    } catch (e) { /* abaikan kegagalan refresh */ }
+  }, 60000);
+}
+
+/* ================= Detail & grafik ================= */
+let currentSymbol = null, currentInterval = "1h", detailTimer = null;
+
+async function openDetail(symbol) {
+  currentSymbol = symbol;
+  $("listView").classList.add("hidden");
+  $("detailView").classList.add("open");
+  window.scrollTo(0, 0);
+  await loadDetail();
+  if (detailTimer) clearInterval(detailTimer);
+  detailTimer = setInterval(() => { if (!document.hidden) loadDetail(true); }, 30000);
+}
+function closeDetail() {
+  currentSymbol = null;
+  if (detailTimer) clearInterval(detailTimer);
+  $("detailView").classList.remove("open");
+  $("listView").classList.remove("hidden");
+}
+async function loadDetail(keepScroll) {
+  const s = symbols.find(x => x.symbol === currentSymbol);
+  $("dSymbol").textContent = currentSymbol;
+  $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
+  try {
+    const kl = await api("/fapi/v1/klines?symbol=" + currentSymbol +
+      "&interval=" + currentInterval + "&limit=" + KLINE_LIMIT);
+    const closes = kl.map(k => parseFloat(k[4]));
+    const o = scoreSymbol(closes);
+    if (s) { s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s); }
+    const last = closes[closes.length - 1], first = closes[0];
+    const chg = (last / first - 1) * 100;
+    $("dPrice").textContent = fmtPrice(last);
+    const dc = $("dChange");
+    dc.textContent = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "% (jendela grafik)";
+    dc.className = "chg " + (chg >= 0 ? "up" : "dn");
+    const v = $("verdict");
+    const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+    v.innerHTML = '<div class="chip ' + cls + '" style="min-width:104px;font-size:.95rem">' +
+      o.side + '<small>skor teknikal</small></div>' +
+      '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
+      '<div class="lbl">dari rentang −100 … +100 · interval ' + currentInterval + '</div></div>';
+    const stats = [
+      ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
+      ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
+      ["EMA20", o.ema20 !== null && o.ema20 !== undefined ? fmtPrice(o.ema20) : "—"],
+      ["EMA50", o.ema50 !== null && o.ema50 !== undefined ? fmtPrice(o.ema50) : "—"],
+      ["Bollinger atas", o.boll ? fmtPrice(o.boll.upper) : "—"],
+      ["Bollinger bawah", o.boll ? fmtPrice(o.boll.lower) : "—"]
+    ];
+    $("stats").innerHTML = stats.map(x =>
+      '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
+    $("reasons").innerHTML = o.reasons.map(r => "<li>" + r + "</li>").join("");
+    drawChart(kl);
+    if (!keepScroll) window.scrollTo(0, 0);
+  } catch (e) {
+    $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + e.message + "</div>";
+  }
+}
+
+function drawChart(kl) {
+  const canvas = $("chart");
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = 340;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const closes = kl.map(k => parseFloat(k[4]));
+  const e20 = emaSeries(closes, 20), e50 = emaSeries(closes, 50);
+  const vols = kl.map(k => parseFloat(k[5]));
+  const maxV = Math.max.apply(null, vols) || 1;
+  let hi = -Infinity, lo = Infinity;
+  kl.forEach(k => { hi = Math.max(hi, parseFloat(k[2])); lo = Math.min(lo, parseFloat(k[3])); });
+  const pad = (hi - lo) * 0.07 || 1; hi += pad; lo -= pad;
+  const priceH = H * 0.78, volTop = H * 0.84, volH = H * 0.14;
+  const labelW = 56, cw = (W - labelW) / kl.length;
+  const y = p => priceH - (p - lo) / (hi - lo) * priceH;
+  ctx.font = "10px sans-serif";
+  // Garis kisi + label harga
+  ctx.strokeStyle = "#232a33"; ctx.fillStyle = "#9aa7b4"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + (hi - lo) * i / 4, yy = y(p);
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - labelW, yy); ctx.stroke();
+    ctx.fillText(fmtPrice(p), W - labelW + 5, yy < 8 ? yy + 10 : yy + 3);
+  }
+  // Volume
+  kl.forEach((k, i) => {
+    const up = parseFloat(k[4]) >= parseFloat(k[1]);
+    ctx.fillStyle = up ? "rgba(14,203,129,.45)" : "rgba(246,70,93,.45)";
+    const h = vols[i] / maxV * volH;
+    ctx.fillRect(i * cw + 0.5, volTop + volH - h, Math.max(cw - 1, 0.6), h);
+  });
+  // Candle
+  kl.forEach((k, i) => {
+    const o = parseFloat(k[1]), h = parseFloat(k[2]), l = parseFloat(k[3]), c = parseFloat(k[4]);
+    const up = c >= o, col = up ? "#0ecb81" : "#f6465d";
+    const x = i * cw + cw / 2;
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(x, y(h)); ctx.lineTo(x, y(l)); ctx.stroke();
+    const bw = Math.max(cw * 0.62, 0.8);
+    const t = y(Math.max(o, c)), b = y(Math.min(o, c));
+    ctx.fillRect(x - bw / 2, t, bw, Math.max(b - t, 1));
+  });
+  // EMA
+  function line(series, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
+    let started = false;
+    series.forEach((v, i) => {
+      if (v === null) return;
+      const x = i * cw + cw / 2;
+      if (!started) { ctx.moveTo(x, y(v)); started = true; } else ctx.lineTo(x, y(v));
+    });
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+  line(e20, "#f0b90b");
+  line(e50, "#4f8ff7");
+  // Harga terakhir
+  const last = closes[closes.length - 1];
+  ctx.strokeStyle = "rgba(240,185,11,.55)";
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, y(last)); ctx.lineTo(W - labelW, y(last)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#f0b90b";
+  ctx.fillText("EMA20", 6, 14);
+  ctx.fillStyle = "#4f8ff7";
+  ctx.fillText("EMA50", 48, 14);
+}
+
+/* ================= Peristiwa ================= */
+$("btnRefresh").addEventListener("click", () => { closeDetail(); loadList(); });
+$("q").addEventListener("input", renderList);
+$("sort").addEventListener("change", renderList);
+$("btnBack").addEventListener("click", closeDetail);
+$("tabs").querySelectorAll("button").forEach(b => {
+  b.addEventListener("click", () => {
+    $("tabs").querySelectorAll("button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    currentInterval = b.dataset.iv;
+    loadDetail();
+  });
+});
+function setNetwork(n) {
+  network = n;
+  $("btnMainnet").classList.toggle("on", n === "mainnet");
+  $("btnTestnet").classList.toggle("on", n === "testnet");
+  closeDetail();
+  loadList();
+}
+$("btnMainnet").addEventListener("click", () => setNetwork("mainnet"));
+$("btnTestnet").addEventListener("click", () => setNetwork("testnet"));
+if (network === "testnet") {
+  $("btnMainnet").classList.remove("on");
+  $("btnTestnet").classList.add("on");
+}
+/* Bilah server: hanya di dalam aplikasi (ada jembatan native). */
+if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
+  $("serverUrl").textContent = window.AndroidBridge.getServerUrl();
+  $("btnServer").addEventListener("click", () => window.AndroidBridge.openServer());
+} else {
+  $("serverBar").classList.add("hidden");
+}
+loadList();
+</script>
+</body>
+</html>
