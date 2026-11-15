@@ -10,8 +10,8 @@ def _klines(closes, vol=100.0):
     for i, c in enumerate(closes):
         o = price
         h = max(o, c) * 1.001
-        l = min(o, c) * 0.999
-        rows.append([i * 900_000, o, h, l, c, vol])
+        lo = min(o, c) * 0.999
+        rows.append([i * 900_000, o, h, lo, c, vol])
         price = c
     return rows
 

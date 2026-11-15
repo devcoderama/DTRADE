@@ -19,7 +19,7 @@ Semua fungsi murni atas daftar klines (tanpa jaringan) agar teruji.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -203,7 +203,6 @@ def _random_run(
             wins += 1
         i = j + 1
     total = balance - config.initial_balance
-    wr = wins / trades * 100.0 if trades else 0.0
     return total, trades, wins if trades else 0
 
 
@@ -222,7 +221,8 @@ def random_baseline(
     pnls: list[float] = []
     win_rates: list[float] = []
     for seed in range(1, seeds + 1):
-        pnl, trades, wins = _random_run(candles, config, target_trades, random.Random(seed))
+        # Baseline memang SENGAJA pseudo-random & ter-seed (reprodusibel).
+        pnl, trades, wins = _random_run(candles, config, target_trades, random.Random(seed))  # nosec B311
         pnls.append(pnl)
         win_rates.append(wins / trades * 100.0 if trades else 0.0)
     if not pnls:

@@ -12,6 +12,4 @@ matplotlib>=3.8,<4
 # (candlestick/build tidak tersedia lagi di sana).
 textual>=8,<9
 plotext>=5.3,<6
-# --- Pengembangan & pengujian (tidak dibutuhkan saat menjalankan aplikasi) ---
-pytest>=8,<9
-httpx>=0.27,<1
+# Dependensi pengembangan/pengujian dipindah ke requirements-dev.txt (Fase 5).

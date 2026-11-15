@@ -21,7 +21,7 @@ import sys
 import time
 
 from config.settings import Settings, load_settings
-from core.ai_providers import create_ai_provider, describe_providers
+from core.ai_providers import describe_providers
 from core.ai_choice import (
     KNOWN_MODELS as AI_KNOWN_MODELS,
     PROVIDERS as AI_PROVIDERS,
@@ -437,6 +437,24 @@ def cmd_reconcile(app: App, args) -> int:
     return 0
 
 
+def cmd_selfcheck(app: App, args) -> int:
+    from core.selfcheck import run_selfcheck, selfcheck_failed
+
+    checks = run_selfcheck(
+        app.settings, binance=app.binance, database=app.database,
+        ai=app.ai, allow_network=True,
+    )
+    _print("[bold]Selfcheck binance-ai-future[/bold]")
+    for c in checks:
+        mark = "[green]OK[/green]" if c.ok else ("[red]GAGAL[/red]" if c.ok is False else "[dim]LEWATI[/dim]")
+        _print(f"  {mark}  {c.name}: {c.detail}")
+    if selfcheck_failed(checks):
+        _print("[red]Ada pemeriksaan yang gagal — perbaiki sebelum menjalankan server/trading.[/red]")
+        return 1
+    _print("[green]Semua pemeriksaan wajib lulus.[/green]")
+    return 0
+
+
 def cmd_research(app: App, args) -> int:
     from core.backtest import BacktestConfig
     from core.history import load_history
@@ -599,6 +617,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("reconcile", help="Jalankan satu putaran rekonsiliasi posisi ↔ proteksi ↔ jurnal")
 
+    sub.add_parser("selfcheck", help="Diagnosis kesiapan: konfigurasi, kunci, database, AI, konektivitas")
+
     p = sub.add_parser("research", help="Riset walk-forward + baseline acak → laporan Markdown di reports/")
     p.add_argument("symbol")
     p.add_argument("--interval", default=None)
@@ -640,6 +660,7 @@ def main(argv: list[str] | None = None) -> int:
         "performance": cmd_performance,
         "reconcile": cmd_reconcile,
         "research": cmd_research,
+        "selfcheck": cmd_selfcheck,
         "broadcast": cmd_broadcast,
     }
     try:

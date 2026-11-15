@@ -488,7 +488,7 @@ class SignalEngine:
                 and ((side == "LONG" and ai_result.stop_loss < price < ai_result.take_profit)
                      or (side == "SHORT" and ai_result.stop_loss > price > ai_result.take_profit))
             )
-            if ai_levels_ok and atr_v:
+            if ai_levels_ok and atr_v and ai_result is not None and ai_result.stop_loss and ai_result.take_profit:
                 # Validasi jarak vs ATR: SL dalam 0,5–3× ATR, TP ≤ 5× ATR.
                 sl_dist = abs(price - float(ai_result.stop_loss))
                 tp_dist = abs(float(ai_result.take_profit) - price)
@@ -498,7 +498,7 @@ class SignalEngine:
                         f"Level AI di luar rentang ATR (SL {sl_dist / atr_v:.2f}×ATR, "
                         f"TP {tp_dist / atr_v:.2f}×ATR) — diganti level ATR"
                     )
-            if ai_levels_ok:
+            if ai_levels_ok and ai_result is not None:
                 stop_loss, take_profit = ai_result.stop_loss, ai_result.take_profit
                 reasons.append("Level SL/TP dari AI (lolos validasi arah & rentang ATR)")
             else:

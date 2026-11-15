@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -267,7 +267,7 @@ class RiskManager:
         try:
             from core.indicators import ema
 
-            trends = []
+            trends: list[Optional[str]] = []
             for tf in ("1h", "4h"):
                 klines = self._binance.klines("BTCUSDT", interval=tf, limit=120)
                 closes = [float(k[4]) for k in klines]

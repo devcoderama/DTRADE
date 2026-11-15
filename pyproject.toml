@@ -1,0 +1,24 @@
+# Konfigurasi alat kualitas (Fase 5). Runtime tetap dikendalikan .env.
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# E: pycodestyle, F: pyflakes (bug nyata: nama tak terdefinisi, impor mati).
+select = ["E", "F"]
+ignore = [
+    "E501", # panjang baris: gaya lama dibiarkan; baris baru dijaga manual
+]
+
+[tool.mypy]
+python_version = "3.10"
+# Pemeriksaan tipe difokuskan ke modul kritis dana (risk & executor)
+# lewat daftar file di CI; modul lain belum diwajibkan lolos.
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = true
+
+[tool.bandit]
+# Lewati direktori uji; temuan ditinjau manual, CI memakai ambang medium.
+skips = ["B101"]  # assert dipakai di jalur internal yang sudah teruji

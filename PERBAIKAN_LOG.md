@@ -204,3 +204,104 @@ Perilaku yang sengaja berubah & test-nya disesuaikan: `test_database.py`
   `reports/` masuk .gitignore (artefak hasil, bukan kode).
 - Catatan: suite test kini ~80 detik karena uji walk-forward/riset
   menjalankan banyak backtest penuh; itu harga kejujuran statistiknya.
+
+## Fase 5 — Kualitas & Operasi — SELESAI, 108 test hijau (102 → +6)
+
+- **5.1 Alat kualitas.** Dependensi dev dipisah ke
+  `requirements-dev.txt` (pytest, pytest-cov, httpx, ruff, mypy, bandit,
+  pip-audit); `requirements.txt` kini murni runtime. `pyproject.toml`
+  memuat konfigurasi ruff (E/F), mypy, bandit. Hasil lokal: **ruff
+  bersih** (13 temuan awal diperbaiki: impor mati, variabel tak
+  terpakai, satu import tengah-file), **mypy bersih** untuk
+  `core/risk.py` & `core/executor.py` (9 error diperbaiki, termasuk
+  penyempitan tipe pada validasi level AI), **bandit 0 temuan**
+  (SHA1 id-order ditandai `usedforsecurity=False`; 4 try/except-pass
+  best-effort diberi `# nosec` beralasan), **pip-audit: tidak ada
+  kerentanan dikenal** pada requirements runtime.
+- **5.2 Cakupan modul kritis.** Cakupan `core/risk.py` naik 72% → 78%
+  dan `core/executor.py` 75% → 77% lewat test celah kritis: penjaga
+  funding, filter BTC (dua arah + pengecualian BTC sendiri), dan
+  emergency close saat avgPrice membatalkan SL/TP. CI mengunci gerbang
+  `--cov-fail-under=70` untuk kedua modul.
+- **5.3 Selfcheck BARU** (`core/selfcheck.py` + CLI `selfcheck`):
+  tujuh pemeriksaan — konfigurasi, mode trading (live tanpa token web
+  = GAGAL), kunci Binance, direktori data, database, provider AI, dan
+  konektivitas (hanya bila kunci ada & diminta). Kode keluar 1 bila ada
+  kegagalan wajib.
+- **5.4 CI diperluas**: install runtime+dev, ruff, mypy (risk/executor),
+  bandit, pip-audit, pytest dengan gerbang cakupan. (File workflow
+  hanya bisa diubah lewat antarmuka web GitHub — aplikasi GitHub Muse
+  tidak memiliki izin workflows.)
+- **5.5 Dokumentasi**: README memuat perintah baru
+  (research/performance/reconcile/selfcheck) dan bagian pengembangan;
+  STRUKTUR.MD diperbarui.
+
+---
+
+# LAPORAN AKHIR PROGRAM PERBAIKAN (Fase 1–5)
+
+## Ringkasan per fase
+1. **Keamanan & eksekusi** (61 test): web aman secara bawaan (token
+   wajib untuk bind non-loopback/live, compare_digest, login 5/mnt,
+   cookie Secure, health minimal), frontend anti-XSS & token cookie,
+   Android cleartext terbatas, urutan close_position aman, tanpa jendela
+   tanpa SL (database asinkron + jaring exception pasca-fill), data
+   segar wajib untuk eksekusi (TradingService atomik), redaksi log,
+   sinkronisasi waktu + retry -1021.
+2. **Keandalan & logika** (79 test): streak rugi berjendela 24 jam,
+   presisi Decimal, `cli watch` diperbaiki (top_by_volume tidak ada
+   sebelumnya), indikator per-interval & EMA seed SMA, ConfigError +
+   validasi rentang, Reconciler posisi, jurnal penutupan + metrik
+   performa, lifespan, workingType algo.
+3. **Strategi sinyal** (93 test): candle tertutup saja, gerbang keras
+   MTF/rezim/ADX, skor v2 per kategori dengan syarat 2 kategori
+   sepakat, AI hanya konfirmasi/veto + konteks diperkaya + validasi
+   level vs ATR + skema pydantic, PositionManager (BE/trailing/TP
+   parsial/batas waktu — bawaan mati), risiko portofolio.
+4. **Backtest & riset** (102 test): paginasi klines + cache disk,
+   jendela indikator tetap 300, slippage/funding/gap-through-stop,
+   Sharpe/Sortino berbasis waktu, paritas model keluar di backtest,
+   walk-forward + baseline acak + laporan Markdown jujur.
+5. **Kualitas & operasi** (108 test): requirements-dev terpisah,
+   ruff/mypy/bandit/pip-audit bersih, gerbang cakupan risk/executor,
+   selfcheck, CI diperluas, dokumentasi.
+
+## Belum selesai / TODO(verify)
+- `TODO(verify)` tunggal di kode: parameter `workingType` pada Algo
+  Order API (`core/binance_client.py`) — nama parameter mengikuti
+  dokumentasi Binance yang dikenal saat penulisan; verifikasi ulang ke
+  dokumentasi resmi sebelum mode live. Nilai tidak valid akan DITOLAK
+  bursa dengan error parameter (gagal terlihat, bukan diam-diam).
+- Riset pasar nyata (`cli research` atas data Binance sungguhan)
+  SENGAJA tidak dijalankan oleh agen: aturan keras program melarang
+  akses jaringan ke Binance selama pengembangan. Perintahnya siap;
+  jalankan di mesin pengguna.
+- Kalibrasi confidence AI & fallback provider otomatis: di luar cakupan
+  prompt program ini (AI kini berperan veto/konfirmasi saja).
+
+## Hasil riset
+Tidak ada hasil riset pasar yang diklaim — lihat butir di atas.
+Kerangka validasinya (walk-forward + baseline acak) teruji pada data
+sintetis dan selalu menerbitkan peringatan ketidakpastian.
+
+## Setting baru penting (bawaan)
+USE_CLOSED_CANDLES_ONLY=true, SCORING_VERSION=1, AI_CAN_INITIATE=false,
+ADX_MIN=20, MTF_GATE_ENABLED=true, REGIME_GATE_ENABLED=true,
+CONSECUTIVE_LOSS_WINDOW_HOURS=24, PROTECTION_WORKING_TYPE=MARK_PRICE,
+RECONCILER_ENABLED=true, MAX_SAME_DIRECTION_POSITIONS=2,
+MAX_OPEN_RISK_PCT=0 (=2× risiko/trade); manajemen keluar
+(MOVE_SL_TO_BE/TRAILING_STOP_ENABLED/PARTIAL_TP_ENABLED/MAX_HOLD_HOURS)
+dan filter tambahan (MIN_QUOTE_VOLUME_USD/FUNDING_GUARD_MINUTES/
+BTC_FILTER) semua BAWAAAN MATI.
+
+## Langkah lanjutan yang disarankan
+1. `git pull`, `pip install -r requirements.txt`, restart; jalankan
+   `python run.py cli selfcheck`.
+2. Forward-test di testnet/dry-run 4–8 minggu; pantau
+   `cli performance` dan jurnal keputusan AI.
+3. Jalankan `cli research BTCUSDT --days 90` (dan beberapa simbol)
+   untuk bukti out-of-sample sebelum mempertimbangkan dana nyata.
+4. Aktifkan fitur Fase 3 satu per satu (skor v2 dulu, lalu gerbang
+   sudah aktif; manajemen keluar terakhir) sambil membandingkan metrik.
+5. Jangan mengaktifkan TRADING_MODE=live sebelum langkah 2–3 memberi
+   bukti, dan rotasi kredensial apa pun yang pernah terekspos di chat.

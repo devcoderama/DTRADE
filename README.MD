@@ -253,10 +253,20 @@ python run.py cli ai-model                # provider+model AI aktif saat ini
 python run.py cli ai-model --provider bangunweb --model bw-pro   # ganti model (tanpa edit .env)
 python run.py cli notify-test             # kirim pesan uji ke Telegram
 python run.py cli backtest BTCUSDT --limit 1000   # uji strategi pada data historis
+python run.py cli research BTCUSDT --days 90      # walk-forward + baseline acak → laporan di reports/
+python run.py cli performance             # metrik performa dari jurnal (win rate, PF, expectancy)
+python run.py cli reconcile               # satu putaran rekonsiliasi posisi ↔ proteksi ↔ jurnal
+python run.py cli selfcheck               # diagnosis kesiapan: konfigurasi, kunci, DB, AI, koneksi
 python run.py cli watch --top 10 --every 15       # pantau pasar, sinyal kuat → Telegram
 python run.py cli broadcast               # siaran sinyal terbaik + grafik ke Telegram
 python run.py cli journal                 # lihat jurnal eksekusi terakhir
 ```
+
+Pengembangan: `pip install -r requirements-dev.txt` menambahkan pytest,
+ruff, mypy, bandit, dan pip-audit. CI menjalankan lint, pemeriksaan tipe
+(modul risk & executor), audit keamanan, dan pytest dengan gerbang
+cakupan ≥70% untuk `core/risk.py` & `core/executor.py`. Riwayat lengkap
+perbaikan lima fase ada di `PERBAIKAN_LOG.md`.
 
 Perintah `trade` dalam mode `live` meminta konfirmasi pengetikan ulang simbol
 sebelum order dikirim.

@@ -65,8 +65,6 @@ def build_app(cli_app, symbol: str, interval: str):
 
     from cli.term_chart import render_chart
 
-    GOLD = "#f0b90b"
-
     class _InfoScreen(ModalScreen):
         """Layar modal sederhana berisi teks (Bantuan / Pengaturan)."""
 
@@ -270,7 +268,8 @@ def build_app(cli_app, symbol: str, interval: str):
                 self._render_chart()
                 self._apply_metrics(data["account"], None, keep_updated=False)
             except Exception:
-                pass  # penyegaran ringan bersifat best-effort
+                # Penyegaran ringan bersifat best-effort; kegagalan diabaikan.
+                pass  # nosec B110
 
         def _fetch_light(self, symbol: str, interval: str) -> dict:
             account = None

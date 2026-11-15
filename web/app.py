@@ -26,6 +26,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -46,7 +47,7 @@ from core.ai_choice import (
     settings_with_choice,
     state_mtime,
 )
-from core.ai_providers import create_ai_provider, describe_providers
+from core.ai_providers import describe_providers
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.broadcaster import run_broadcast
@@ -99,7 +100,6 @@ trading_service = TradingService(settings, risk_manager, executor, binance)
 position_manager = PositionManager(settings, binance, executor, journal, symbol_manager)
 reconciler = Reconciler(settings, binance, executor, journal, position_manager=position_manager)
 
-from contextlib import asynccontextmanager
 
 
 @asynccontextmanager

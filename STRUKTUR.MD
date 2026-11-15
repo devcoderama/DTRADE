@@ -46,6 +46,7 @@ binance-ai-future/
 │   ├── backtest.py          ← mesin backtest deterministik atas klines historis
 │   ├── history.py           ← pengambil riwayat klines panjang (paginasi) + cache disk data/kline_cache/
 │   ├── research.py          ← riset walk-forward + baseline acak + laporan Markdown ke reports/
+│   ├── selfcheck.py         ← diagnosis kesiapan instalasi (konfigurasi, kunci, DB, AI, konektivitas)
 │   ├── journal.py           ← jurnal perdagangan JSONL (jejak audit eksekusi)
 │   ├── service.py           ← TradingService: pintu eksekusi tunggal Web & CLI (lock atomik + validasi harga segar)
 │   ├── reconciler.py        ← penjaga posisi ↔ SL algo ↔ jurnal (SL hilang dipasang ulang, algo yatim dibatalkan, penutupan dicatat)
@@ -119,6 +120,7 @@ binance-ai-future/
 │   ├── test_phase2.py       ← Fase 2: presisi Decimal, validasi Settings, indikator, jurnal performa, reconciler
 │   ├── test_phase3.py       ← Fase 3: candle tertutup, gerbang keras, skor v2, peran AI, risiko portofolio, PositionManager
 │   ├── test_phase4.py       ← Fase 4: paginasi, cache riwayat, biaya backtest (slippage/funding/gap), model keluar, riset
+│   ├── test_phase5.py       ← Fase 5: selfcheck, penjaga funding, filter BTC, emergency close vs avgPrice
 │   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit, endpoint WS
 │
 ├── data/                    ← DATA RUNTIME (dibuat otomatis, di-gitignore)

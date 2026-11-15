@@ -145,7 +145,8 @@ class OrderExecutor:
     # ------------------------------------------------------------------
     @staticmethod
     def _make_client_order_id(symbol: str, side: str, quantity: float) -> str:
-        digest = hashlib.sha1(f"{symbol}|{side}|{quantity}".encode()).hexdigest()[:6]
+        # SHA1 di sini HANYA untuk id idempotensi order (bukan keamanan).
+        digest = hashlib.sha1(f"{symbol}|{side}|{quantity}".encode(), usedforsecurity=False).hexdigest()[:6]
         return f"baf-{int(time.time() * 1000):x}-{digest}"[:36]
 
     def _find_order(self, symbol: str, client_order_id: str) -> Optional[dict]:

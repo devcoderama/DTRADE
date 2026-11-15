@@ -72,7 +72,8 @@ def render_chart(
     try:
         plt.xticks([], [])
     except Exception:
-        pass
+        # Label sumbu plotext bersifat kosmetik; kegagalan diabaikan.
+        pass  # nosec B110
     plt.plotsize(width, price_h)
 
     # --- panel volume: batang hijau/merah mengikuti arah candle ---
@@ -85,7 +86,8 @@ def render_chart(
     try:
         plt.xticks(tick_pos, [times[i] for i in tick_pos])
     except Exception:
-        pass
+        # Label sumbu plotext bersifat kosmetik; kegagalan diabaikan.
+        pass  # nosec B110
     plt.plotsize(width, vol_h)
 
     return plt.build()

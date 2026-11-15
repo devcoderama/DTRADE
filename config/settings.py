@@ -19,8 +19,8 @@ try:  # python-dotenv bersifat opsional saat runtime bila env sudah diset OS
     from dotenv import load_dotenv
 
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except Exception:  # pragma: no cover - dotenv tidak terpasang
-    pass
+except Exception:  # pragma: no cover - dotenv tidak terpasang; env OS tetap terbaca
+    pass  # nosec B110
 
 
 def _get_bool(name: str, default: bool) -> bool:

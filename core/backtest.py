@@ -279,7 +279,6 @@ def run_backtest(symbol: str, interval: str, klines: list[list], config: Backtes
 
     def slipped(price: float, side: str, is_entry: bool) -> float:
         """Harga pengisian setelah slippage (selalu merugikan trader)."""
-        direction = 1.0 if side == "LONG" else -1.0
         # Entri LONG = beli (naik), keluar LONG = jual (turun); SHORT sebaliknya.
         buy = (side == "LONG") == is_entry
         return price * (1 + slip) if buy else price * (1 - slip)
@@ -301,7 +300,8 @@ def run_backtest(symbol: str, interval: str, klines: list[list], config: Backtes
     def close_leg(qty: float, raw_exit: float, exit_time: int, reason: str, final: bool) -> None:
         """Tutup sebagian/seluruh posisi; akumulasi PnL ke trade saat final."""
         nonlocal balance, position
-        assert position is not None
+        if position is None:
+            return
         direction = 1.0 if position["side"] == "LONG" else -1.0
         exit_price = slipped(raw_exit, position["side"], is_entry=False)
         gross = (exit_price - position["entry_price"]) * qty * direction
