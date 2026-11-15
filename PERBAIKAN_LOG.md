@@ -454,3 +454,56 @@ header X-API-Token menggantikan `?token=` yang dihapus.
 `test_phase6_c.py` membaca token/klien secara malas per uji karena
 `test_security` me-reload modul web.app saat impor (menangkapnya saat
 impor mengikat instance lama).
+
+### E2E Testnet — selesai (skrip: scripts/e2e_testnet.py + scripts/e2e_web_testnet.py)
+
+Semua skenario dijalankan terhadap Binance Futures TESTNET sungguhan
+(penjaga base URL di kedua skrip menolak non-testnet). Order kecil
+sungguhan, risiko 0,1%/trade. Laporan mentah tersanitasi ada di
+`reports/` lokal (tidak di-commit, sesuai aturan program).
+
+**CLI (8/8 LULUS):** (1) fungsi baca — selfcheck hijau, saldo, 528
+simbol, snapshot, analyze AI (BangunWeb deepseek-v4-flash), backtest
+7 hari, jurnal; (2) trade live BTCUSDT LONG → state PROTECTED, SL/TP
+algo terpasang, jurnal tercatat; (3) close_position bersih, tidak di
+pending_recovery; (4) simbol harga mikro JCTUSDT @0,0020950 entri &
+tutup tanpa error -1100 (A2 terbukti di bursa); (5) penolakan deviasi
+harga, kunci harian, dan streak rugi — ketiganya dengan alasan benar;
+(6) rekonsiliasi: SL yang dihapus dipasang ulang, algo yatim ETHUSDT
+dibatalkan, tutup eksternal tercatat + PnL; (7) smoke CLI watch 1
+putaran + konstruksi DashboardApp. Catatan jujur: riwayat income akun
+testnet memuat streak rugi lama (18 trade) sehingga RiskManager
+menolak SEMUA trade pada awalnya — proteksi bekerja benar; skenario
+trade memakai konfigurasi sah MAX_CONSECUTIVE_LOSSES=0 dan logika
+streak diverifikasi tersendiri di skenario 5. Kandidat mikro pertama
+(PTBUSDT) juga ditolak penjaga deviasi secara sah (harga mark vs pasar
+menyimpang 6,77% di buku testnet tak likuid).
+
+**Web (9 LULUS, 1 TIDAK TERVERIFIKASI):** W1 matriks auth lengkap
+(401/cookie/viewer 403/logout/batas login 429); W2 dashboard + WS
+klines live; W3 dua tab — menutup satu tab tidak memutus lainnya (B8);
+W4 XSS (respons selalu JSON, app.js esc()); W5 eksekusi & tutup via
+API; **W6 uji ras A1 empiris: 20 siklus buka→tutup dengan reconciler
+5 detik — 20/20 bersih, NOL RECOVERY_REQUIRED, nol posisi sehat
+ditutup reconciler**; W8 kemurnian jurnal dry-run (A3) di server web;
+W9 **workingType='MARK_PRICE' diterima testnet** — TODO(verify) di
+`core/binance_client.py` terjawab dan komentarnya diperbarui;
+W10 server live menolak start pada Hedge Mode dan akun dikembalikan
+ke One-way. **W7 TIDAK TERVERIFIKASI:** dalam tiga jendela pengamatan
+8 menit, harga BTC tidak pernah mencapai pemicu 0,3R sehingga geseran
+SL oleh PositionManager (BE/trailing) tidak teramati di pasar —
+bukan kegagalan kode; logikanya teruji di unit test Fase 3/B1.
+
+Kejadian selama E2E (dicatat apa adanya): jalan-ulang web ke-2
+terputus oleh penggantian VM runtime di tengah fase W7; posisi sisa
+LONG 0,0169 BTC ditemukan saat pemeriksaan pasca-putus dan ditutup
+bersih lewat executor; mode akun tidak sempat berubah. Ekspektasi
+skrip diperbaiki dua kali (batas login dapat aktif di percobaan ke-5
+karena login berhasil ikut terhitung; penolakan RiskManager pada uji
+ras dihitung sebagai skip-ulang, bukan kegagalan) — keduanya perbaikan
+skrip uji, bukan kode aplikasi.
+
+**Pembersihan akhir:** akun testnet datar terverifikasi (nol posisi,
+nol order biasa, nol algo order), mode One-way, `.env` lokal berisi
+kunci testnet DIHAPUS dari mesin agen. Saldo akhir 4.926,87 USDT
+(virtual testnet).

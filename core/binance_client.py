@@ -397,10 +397,10 @@ class BinanceFuturesClient:
             "type": order_type,
             "triggerPrice": trigger_price,
         }
-        # TODO(verify): nama parameter `workingType` (MARK_PRICE/CONTRACT_PRICE)
-        # mengikuti dokumentasi Algo Order API Binance; verifikasi ulang saat
-        # ada akses dokumentasi resmi — nilai tidak valid ditolak bursa dengan
-        # error parameter, bukan dieksekusi diam-diam.
+        # TERVERIFIKASI (Fase 6, E2E testnet 2026-11-16): nama parameter
+        # `workingType` dengan nilai MARK_PRICE diterima Binance Futures
+        # testnet — algo order SL terbaca kembali dengan
+        # workingType='MARK_PRICE' (skenario W9 scripts/e2e_web_testnet.py).
         if working_type:
             params["workingType"] = working_type
         if client_algo_id:
