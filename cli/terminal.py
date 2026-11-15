@@ -24,6 +24,7 @@ from config.settings import Settings, load_settings
 from core.ai_providers import create_ai_provider, describe_providers
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
+from core.broadcaster import run_broadcast
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.notifier import build_notifier
@@ -308,6 +309,41 @@ def cmd_journal(app: App, args) -> int:
     return 0
 
 
+def cmd_broadcast(app: App, args) -> int:
+    symbols = app.symbols.all_symbols()
+    cache: dict[str, float] = {}
+    putaran = 0
+    _print(
+        f"[bold]Siaran sinyal ke Telegram[/bold]: pindai {len(symbols)} simbol, "
+        f"ambang skor ≥{args.min_score}, maks {args.max} sinyal/putaran"
+        + (f", putaran tiap {args.loop} menit, jeda siar ulang {args.cooldown} jam." if args.loop else ".")
+    )
+    try:
+        while True:
+            putaran += 1
+            summary = run_broadcast(
+                app.settings, app.engine, app.binance, app.notifier, symbols,
+                min_score=args.min_score, max_signals=args.max,
+                sent_cache=cache if args.loop else None,
+                cooldown_sec=int(args.cooldown * 3600),
+            )
+            _print(
+                f"\n[bold]Putaran {putaran}[/bold] — kandidat: {summary['candidates']}, "
+                f"terkirim: {', '.join(summary['sent']) if summary['sent'] else '—'}"
+            )
+            for d in summary["details"]:
+                _print(f"  {d.get('symbol', '?'):<14} {d.get('status', '')}")
+            if not summary["telegram_enabled"]:
+                _print("[yellow]Telegram belum dikonfigurasi (.env: TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID) — tidak ada yang terkirim.[/yellow]")
+                return 1
+            if not args.loop:
+                break
+            time.sleep(args.loop * 60)
+    except KeyboardInterrupt:
+        _print("\nSiaran dihentikan.")
+    return 0
+
+
 def cmd_notify_test(app: App, _args) -> int:
     if not app.notifier.enabled:
         _print("Telegram belum dikonfigurasi: isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env")
@@ -365,6 +401,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("journal", help="Lihat jurnal eksekusi terakhir")
     p.add_argument("--limit", type=int, default=20)
+
+    p = sub.add_parser("broadcast", help="Pindai semua simbol → AI → kirim sinyal terbaik + grafik ke Telegram")
+    p.add_argument("--min-score", type=int, default=50, help="Ambang |skor teknikal| kandidat (bawaan 50)")
+    p.add_argument("--max", type=int, default=3, help="Maks sinyal terkirim per putaran (bawaan 3)")
+    p.add_argument("--loop", type=int, default=0, help="Ulangi tiap N menit (0 = sekali jalan)")
+    p.add_argument("--cooldown", type=float, default=4, help="Jeda siar ulang simbol+sisi yang sama (jam, mode loop)")
     return parser
 
 
@@ -387,6 +429,7 @@ def main(argv: list[str] | None = None) -> int:
         "backtest": cmd_backtest,
         "watch": cmd_watch,
         "journal": cmd_journal,
+        "broadcast": cmd_broadcast,
     }
     try:
         if settings.has_binance_keys and args.command not in {"ai-account"}:

@@ -198,6 +198,29 @@ async function scan() {
   }
 }
 
+/* ---------------- siaran sinyal ke Telegram ---------------- */
+async function broadcast() {
+  const btn = $("btn-broadcast");
+  btn.disabled = true;
+  btn.textContent = "📣 Menyaring & mengirim…";
+  try {
+    const res = await api("/api/broadcast", { method: "POST" });
+    if (res.sent && res.sent.length) {
+      toast("📣 Sinyal terkirim ke Telegram: " + res.sent.join(", "));
+    } else if (!res.telegram_enabled) {
+      toast("Telegram belum dikonfigurasi di .env backend.");
+    } else {
+      toast("Tidak ada sinyal kuat yang lolos konfirmasi AI saat ini — tidak ada siaran.");
+    }
+  } catch (e) {
+    toast("Siaran gagal: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📣 Siaran ke Telegram";
+  }
+}
+$("btn-broadcast").addEventListener("click", broadcast);
+
 /* --------- buka detail simbol (dari pemindai / tombol analisis) ---------
    Satu pintu masuk untuk memuat detail: menampilkan animasi loading di
    panel analisis dan mengabaikan ketukan berikutnya selama pemuatan

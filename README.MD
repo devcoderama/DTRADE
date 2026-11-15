@@ -211,11 +211,31 @@ python run.py cli ai-account              # status provider AI (+ sisa token Ban
 python run.py cli notify-test             # kirim pesan uji ke Telegram
 python run.py cli backtest BTCUSDT --limit 1000   # uji strategi pada data historis
 python run.py cli watch --top 10 --every 15       # pantau pasar, sinyal kuat → Telegram
+python run.py cli broadcast               # siaran sinyal terbaik + grafik ke Telegram
 python run.py cli journal                 # lihat jurnal eksekusi terakhir
 ```
 
 Perintah `trade` dalam mode `live` meminta konfirmasi pengetikan ulang simbol
 sebelum order dikirim.
+
+### Siaran sinyal ke Telegram (`broadcast`)
+
+Memindai semua simbol, menyaring sinyal teknikal terkuat
+(`--min-score`, bawaan 50), menganalisis kandidat dengan AI, dan hanya
+mengirim yang terkonfirmasi LONG/SHORT ke channel Telegram Anda —
+lengkap dengan **gambar grafik candlestick** (EMA20/50, volume, RSI,
+garis SL/TP) dan caption ringkasannya:
+
+```bash
+python run.py cli broadcast                       # sekali jalan, maks 3 sinyal
+python run.py cli broadcast --loop 30 --cooldown 4  # berkala tiap 30 menit,
+                                                    # simbol yang sama tidak
+                                                    # disiarkan ulang < 4 jam
+```
+
+Tombol **📣 Siaran ke Telegram** di panel Pemindai Web UI menjalankan
+putaran yang sama. Syarat: `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`
+terisi di `.env` (bot harus menjadi admin channel tujuan).
 
 ## Aplikasi Android — D TRADE
 

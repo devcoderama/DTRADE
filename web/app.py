@@ -32,6 +32,7 @@ from config.settings import load_settings
 from core.ai_providers import create_ai_provider, describe_providers
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
+from core.broadcaster import run_broadcast
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.notifier import build_notifier
@@ -273,6 +274,28 @@ def notify_test() -> dict:
             detail="Telegram belum dikonfigurasi: isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env",
         )
     return {"sent": notifier.notify_test()}
+
+
+@app.post("/api/broadcast")
+def broadcast(min_score: int = Query(50, ge=10, le=100), max_signals: int = Query(3, ge=1, le=5)) -> dict:
+    """Satu putaran siaran sinyal ke Telegram: pindai → saring → AI → foto grafik.
+
+    Hanya sinyal kuat yang dikonfirmasi AI (LONG/SHORT) yang terkirim;
+    bila tidak ada yang lolos, tidak ada pesan yang dikirim.
+    """
+    if not notifier.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram belum dikonfigurasi: isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env",
+        )
+
+    def _run() -> dict:
+        return run_broadcast(
+            settings, engine, binance, notifier, symbol_manager.all_symbols(),
+            min_score=min_score, max_signals=max_signals,
+        )
+
+    return _guard(_run)
 
 
 # ----------------------------------------------------------------------

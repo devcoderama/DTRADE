@@ -68,6 +68,34 @@ class TelegramNotifier:
             log.warning("Gagal mengirim notifikasi Telegram: %s", exc)
             return False
 
+    def send_photo(self, png: bytes, caption: str) -> bool:
+        """Kirim satu foto PNG beserta caption HTML (maks ±1024 karakter).
+
+        Dipakai siaran sinyal: grafik candlestick + ringkasan sinyal.
+        Mengembalikan True bila terkirim; kegagalan hanya dicatat di log.
+        """
+        if not self.enabled:
+            return False
+        try:
+            resp = requests.post(
+                f"{API_BASE}/bot{self._token}/sendPhoto",
+                data={
+                    "chat_id": self._chat_id,
+                    "caption": caption[:1024],
+                    "parse_mode": "HTML",
+                },
+                files={"photo": ("signal.png", png, "image/png")},
+                timeout=30,
+            )
+            data = resp.json()
+            if resp.status_code >= 400 or not data.get("ok", False):
+                log.warning("Telegram menolak foto: %s", str(data)[:300])
+                return False
+            return True
+        except requests.RequestException as exc:
+            log.warning("Gagal mengirim foto Telegram: %s", exc)
+            return False
+
     # ------------------------------------------------------------------
     def notify_execution(self, decision: Any, result: Any, reference_price: float) -> bool:
         mode = "🧪 DRY-RUN (simulasi)" if result.dry_run else "🔴 LIVE"
