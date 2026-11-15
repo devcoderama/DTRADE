@@ -1,1 +1,1 @@
-IyBEIFRSQURFOiBiZWx1bSBhZGEgYXR1cmFuIFByb0d1YXJkIGtodXN1cyAobWluaWZ5IG5vbmFrdGlmIHBhZGEgcmlsaXMgMS4wLjApLgo=
+# D TRADE: belum ada aturan ProGuard khusus (minify nonaktif pada rilis 1.0.0).

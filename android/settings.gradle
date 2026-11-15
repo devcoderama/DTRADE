@@ -1,1 +1,2 @@
-cm9vdFByb2plY3QubmFtZSA9ICJEVHJhZGUiCmluY2x1ZGUgIjphcHAiCg==
+rootProject.name = "DTrade"
+include ":app"

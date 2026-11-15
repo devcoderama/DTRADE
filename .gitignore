@@ -1,1 +1,31 @@
-IyBLcmVkZW5zaWFsICYga29uZmlndXJhc2kgbG9rYWwg4oCUIEpBTkdBTiBQRVJOQUggREktQ09NTUlUCi5lbnYKKi5lbnYKIS5lbnYuZXhhbXBsZQoKIyBQeXRob24KX19weWNhY2hlX18vCioucHlbY29kXQoqLmVnZy1pbmZvLwoudmVudi8KdmVudi8KLnB5dGVzdF9jYWNoZS8KCiMgTG9nICYgZGF0YSBydW50aW1lCmxvZ3MvCmRhdGEvCioubG9nCgojIE9TIC8gZWRpdG9yCi5EU19TdG9yZQpUaHVtYnMuZGIKLmlkZWEvCi52c2NvZGUvCgojIEFuZHJvaWQgc2lnbmluZyAobG9rYWwsIGphbmdhbiBkaS1jb21taXQpCmFuZHJvaWQva2V5c3RvcmUucHJvcGVydGllcwoqLmprcwphbmRyb2lkL2FwcC9idWlsZC8KYW5kcm9pZC8uZ3JhZGxlLwphbmRyb2lkL2xvY2FsLnByb3BlcnRpZXMKYW5kcm9pZC9idWlsZC8K
+# Kredensial & konfigurasi lokal — JANGAN PERNAH DI-COMMIT
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Log & data runtime
+logs/
+data/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Android signing (lokal, jangan di-commit)
+android/keystore.properties
+*.jks
+android/app/build/
+android/.gradle/
+android/local.properties
+android/build/

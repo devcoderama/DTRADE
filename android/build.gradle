@@ -1,1 +1,18 @@
-Ly8gS29uZmlndXJhc2kgYnVpbGQgdGluZ2thdCBhdGFzIHVudHVrIGFwbGlrYXNpIEFuZHJvaWQgRCBUUkFERS4KYnVpbGRzY3JpcHQgewogICAgcmVwb3NpdG9yaWVzIHsKICAgICAgICBnb29nbGUoKQogICAgICAgIG1hdmVuQ2VudHJhbCgpCiAgICB9CiAgICBkZXBlbmRlbmNpZXMgewogICAgICAgIGNsYXNzcGF0aCAiY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjguNS4yIgogICAgICAgIGNsYXNzcGF0aCAib3JnLmpldGJyYWlucy5rb3RsaW46a290bGluLWdyYWRsZS1wbHVnaW46Mi4wLjIwIgogICAgfQp9CgphbGxwcm9qZWN0cyB7CiAgICByZXBvc2l0b3JpZXMgewogICAgICAgIGdvb2dsZSgpCiAgICAgICAgbWF2ZW5DZW50cmFsKCkKICAgIH0KfQo=
+// Konfigurasi build tingkat atas untuk aplikasi Android D TRADE.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.5.2"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.20"
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}

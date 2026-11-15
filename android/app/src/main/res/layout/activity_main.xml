@@ -1,1 +1,32 @@
-PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPFJlbGF0aXZlTGF5b3V0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCIKICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJtYXRjaF9wYXJlbnQiCiAgICBhbmRyb2lkOmxheW91dF9oZWlnaHQ9Im1hdGNoX3BhcmVudCIKICAgIGFuZHJvaWQ6YmFja2dyb3VuZD0iIzBCMEUxMSI+CgogICAgPFdlYlZpZXcKICAgICAgICBhbmRyb2lkOmlkPSJAK2lkL3dlYnZpZXciCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfd2lkdGg9Im1hdGNoX3BhcmVudCIKICAgICAgICBhbmRyb2lkOmxheW91dF9oZWlnaHQ9Im1hdGNoX3BhcmVudCIgLz4KCiAgICA8UHJvZ3Jlc3NCYXIKICAgICAgICBhbmRyb2lkOmlkPSJAK2lkL3Byb2dyZXNzIgogICAgICAgIHN0eWxlPSI/YW5kcm9pZDphdHRyL3Byb2dyZXNzQmFyU3R5bGVIb3Jpem9udGFsIgogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJtYXRjaF9wYXJlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSI0ZHAiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfYWxpZ25QYXJlbnRUb3A9InRydWUiCiAgICAgICAgYW5kcm9pZDptYXg9IjEwMCIKICAgICAgICBhbmRyb2lkOnZpc2liaWxpdHk9ImdvbmUiIC8+CgogICAgPFRleHRWaWV3CiAgICAgICAgYW5kcm9pZDppZD0iQCtpZC9lcnJvcl92aWV3IgogICAgICAgIGFuZHJvaWQ6bGF5b3V0X3dpZHRoPSJtYXRjaF9wYXJlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfaGVpZ2h0PSJtYXRjaF9wYXJlbnQiCiAgICAgICAgYW5kcm9pZDpsYXlvdXRfY2VudGVySW5QYXJlbnQ9InRydWUiCiAgICAgICAgYW5kcm9pZDpncmF2aXR5PSJjZW50ZXIiCiAgICAgICAgYW5kcm9pZDpwYWRkaW5nPSIyOGRwIgogICAgICAgIGFuZHJvaWQ6dGV4dENvbG9yPSIjRUFFQ0VGIgogICAgICAgIGFuZHJvaWQ6dGV4dFNpemU9IjE1c3AiCiAgICAgICAgYW5kcm9pZDp2aXNpYmlsaXR5PSJnb25lIiAvPgoKPC9SZWxhdGl2ZUxheW91dD4K
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0B0E11">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_alignParentTop="true"
+        android:max="100"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/error_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:gravity="center"
+        android:padding="28dp"
+        android:textColor="#EAECEF"
+        android:textSize="15sp"
+        android:visibility="gone" />
+
+</RelativeLayout>

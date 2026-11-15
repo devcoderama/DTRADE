@@ -1,1 +1,59 @@
-YXBwbHkgcGx1Z2luOiAiY29tLmFuZHJvaWQuYXBwbGljYXRpb24iCmFwcGx5IHBsdWdpbjogIm9yZy5qZXRicmFpbnMua290bGluLmFuZHJvaWQiCgovLyBQZW5hbmRhdGFuZ2FuYW4gcmlsaXMgYmVyc2lmYXQgTE9LQUw6IGJpbGEgYmVya2FzIGtleXN0b3JlLnByb3BlcnRpZXMgYWRhCi8vIChkaXR1bmp1ayBvbGVoIGVudiBEVFJBREVfS0VZU1RPUkVfUFJPUFMsIGF0YXUgZGkgZm9sZGVyIGFuZHJvaWQvKSwKLy8gQVBLIHJpbGlzIGRpdGFuZGF0YW5nYW5pIGRlbmdhbm55YS4gQmVya2FzIGl0dSBUSURBSyBpa3V0IGtlIHJlcG8g4oCUCi8vIGxpaGF0IGFuZHJvaWQvUkVBRE1FLm1kLiBUYW5wYSBiZXJrYXMgaXR1LCBidWlsZCByaWxpcyB0aWRhayBkaXRhbmRhdGFuZ2FuaQovLyAoYnVpbGQgZGVidWcgdGV0YXAgYmVyamFsYW4gbm9ybWFsKS4KZGVmIGtleXN0b3JlUHJvcHMgPSBuZXcgUHJvcGVydGllcygpCmRlZiBrZXlzdG9yZVByb3BzRmlsZSA9IGZpbGUoU3lzdGVtLmdldGVudigiRFRSQURFX0tFWVNUT1JFX1BST1BTIikgPzogIi4uL2tleXN0b3JlLnByb3BlcnRpZXMiKQppZiAoa2V5c3RvcmVQcm9wc0ZpbGUuZXhpc3RzKCkpIHsKICAgIGtleXN0b3JlUHJvcHNGaWxlLndpdGhJbnB1dFN0cmVhbSB7IGtleXN0b3JlUHJvcHMubG9hZChpdCkgfQp9CgphbmRyb2lkIHsKICAgIG5hbWVzcGFjZSAiY29tLmRldmNvZGVyYW1hLmR0cmFkZSIKICAgIGNvbXBpbGVTZGsgMzQKCiAgICBkZWZhdWx0Q29uZmlnIHsKICAgICAgICBhcHBsaWNhdGlvbklkICJjb20uZGV2Y29kZXJhbWEuZHRyYWRlIgogICAgICAgIG1pblNkayAyNAogICAgICAgIHRhcmdldFNkayAzNAogICAgICAgIHZlcnNpb25Db2RlIDEKICAgICAgICB2ZXJzaW9uTmFtZSAiMS4wLjAiCiAgICB9CgogICAgc2lnbmluZ0NvbmZpZ3MgewogICAgICAgIGlmIChrZXlzdG9yZVByb3BzRmlsZS5leGlzdHMoKSkgewogICAgICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAgICAgIHN0b3JlRmlsZSBmaWxlKGtleXN0b3JlUHJvcHNbInN0b3JlRmlsZSJdKQogICAgICAgICAgICAgICAgc3RvcmVQYXNzd29yZCBrZXlzdG9yZVByb3BzWyJzdG9yZVBhc3N3b3JkIl0KICAgICAgICAgICAgICAgIGtleUFsaWFzIGtleXN0b3JlUHJvcHNbImtleUFsaWFzIl0KICAgICAgICAgICAgICAgIGtleVBhc3N3b3JkIGtleXN0b3JlUHJvcHNbImtleVBhc3N3b3JkIl0KICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICBidWlsZFR5cGVzIHsKICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAgbWluaWZ5RW5hYmxlZCBmYWxzZQogICAgICAgICAgICBwcm9ndWFyZEZpbGVzIGdldERlZmF1bHRQcm9ndWFyZEZpbGUoInByb2d1YXJkLWFuZHJvaWQtb3B0aW1pemUudHh0IiksICJwcm9ndWFyZC1ydWxlcy5wcm8iCiAgICAgICAgICAgIGlmIChrZXlzdG9yZVByb3BzRmlsZS5leGlzdHMoKSkgewogICAgICAgICAgICAgICAgc2lnbmluZ0NvbmZpZyBzaWduaW5nQ29uZmlncy5yZWxlYXNlCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9CgogICAgY29tcGlsZU9wdGlvbnMgewogICAgICAgIHNvdXJjZUNvbXBhdGliaWxpdHkgSmF2YVZlcnNpb24uVkVSU0lPTl8xNwogICAgICAgIHRhcmdldENvbXBhdGliaWxpdHkgSmF2YVZlcnNpb24uVkVSU0lPTl8xNwogICAgfQogICAga290bGluT3B0aW9ucyB7CiAgICAgICAganZtVGFyZ2V0ID0gIjE3IgogICAgfQp9CgpkZXBlbmRlbmNpZXMgewogICAgaW1wbGVtZW50YXRpb24gIm9yZy5qZXRicmFpbnMua290bGluOmtvdGxpbi1zdGRsaWI6Mi4wLjIwIgp9Cg==
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+
+// Penandatanganan rilis bersifat LOKAL: bila berkas keystore.properties ada
+// (ditunjuk oleh env DTRADE_KEYSTORE_PROPS, atau di folder android/),
+// APK rilis ditandatangani dengannya. Berkas itu TIDAK ikut ke repo —
+// lihat android/README.md. Tanpa berkas itu, build rilis tidak ditandatangani
+// (build debug tetap berjalan normal).
+def keystoreProps = new Properties()
+def keystorePropsFile = file(System.getenv("DTRADE_KEYSTORE_PROPS") ?: "../keystore.properties")
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace "com.devcoderama.dtrade"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.devcoderama.dtrade"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            release {
+                storeFile file(keystoreProps["storeFile"])
+                storePassword keystoreProps["storePassword"]
+                keyAlias keystoreProps["keyAlias"]
+                keyPassword keystoreProps["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.0.20"
+}

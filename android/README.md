@@ -1,1 +1,53 @@
-IyBEIFRSQURFIOKAlCBBcGxpa2FzaSBBbmRyb2lkIGJpbmFuY2UtYWktZnV0dXJlCgpBcGxpa2FzaSBBbmRyb2lkIHBlbmRhbXBpbmcgKipiaW5hbmNlLWFpLWZ1dHVyZSoqLiBBcGxpa2FzaSBpbmkgYWRhbGFoCldlYlZpZXcgYW1hbiBkaSBhdGFzIFdlYiBVSTogc2VsdXJ1aCBsb2dpa2EgdHJhZGluZyB0ZXRhcCBiZXJqYWxhbiBkaQpiYWNrZW5kIFB5dGhvbiAoa29tcHV0ZXIvVlBTIEFuZGEpLCBhcGxpa2FzaSBoYW55YSBtZW5hbXBpbGthbm55YSBkaQpwb25zZWwgZGVuZ2FuIG5hbWEgKipEIFRSQURFKiouCgotICoqUGFrZXQ6KiogYGNvbS5kZXZjb2RlcmFtYS5kdHJhZGVgCi0gKipNaW4uIEFuZHJvaWQ6KiogNy4wIChBUEkgMjQpIMK3ICoqVGFyZ2V0OioqIEFuZHJvaWQgMTQgKEFQSSAzNCkKLSAqKlN0YWNrOioqIEtvdGxpbiwgc2F0dSBBY3Rpdml0eSwgdGFucGEgQW5kcm9pZFgg4oCUIEFQSyBrZWNpbCAmIGNlcGF0LgoKIyMgQ2FyYSBQYWthaQoKMS4gSmFsYW5rYW4gYmFja2VuZCBkaSBrb21wdXRlci9WUFMgQW5kYTogYHB5dGhvbiBydW4ucHkgd2ViYAogICAoc2VjYXJhIGJhd2FhbiBkaSBgaHR0cDovLzxJUC1rb21wdXRlcj46ODAwMGApLgoyLiBQYXNhbmcgQVBLICoqRCBUUkFERSoqIChkYXJpIGhhbGFtYW4gUmVsZWFzZXMgcmVwbyBpbmkpLgozLiBCdWthIGFwbGlrYXNpIOKGkiBtZW51IOKLriDihpIgKipBbGFtYXQgU2VydmVyKiog4oaSIGlzaSBhbGFtYXQgYmFja2VuZCBBbmRhLAogICBjb250b2ggYGh0dHA6Ly8xOTIuMTY4LjEuMTA6ODAwMGAgKHBvbnNlbCAmIGtvbXB1dGVyIHNhdHUgV2ktRmkpLCBhdGF1CiAgIGRvbWFpbiBWUFMgQW5kYS4gQWxhbWF0IHRlcnNpbXBhbiBkaSBwZXJhbmdrYXQuCjQuIFNlbXVhIGZpdHVyIFdlYiBVSSAoZGFzYm9yLCBzY2FuLCBhbmFsaXNpcyArIGdyYWZpayBjYW5kbGVzdGljaywKICAgYmFja3Rlc3QsIGVrc2VrdXNpKSBiZWtlcmphIHBlcnNpcyBzZXBlcnRpIGRpIGJyb3dzZXIuCgo+IEJhd2FhbiBhbGFtYXQgc2VydmVyIGFkYWxhaCBgaHR0cDovLzEwLjAuMi4yOjgwMDBgIChsb2NhbGhvc3Qga29tcHV0ZXIKPiBob3N0IGRhcmkgZW11bGF0b3IgQW5kcm9pZCkg4oCUIGdhbnRpIHNlc3VhaSBhbGFtYXQgYmFja2VuZCBBbmRhLgoKIyMgQnVpbGQgZGFyaSBTdW1iZXIKClN5YXJhdDogSkRLIDE3ICsgQW5kcm9pZCBTREsgKHBsYXRmb3JtIDM0LCBidWlsZC10b29scyAzNCkuCgpgYGBiYXNoCmNkIGFuZHJvaWQKZ3JhZGxlIGFzc2VtYmxlRGVidWcgICAgICAjIEFQSyBkZWJ1ZwpncmFkbGUgYXNzZW1ibGVSZWxlYXNlICAgICMgQVBLIHJpbGlzIChidXR1aCBrZXlzdG9yZSwgbGloYXQgYmF3YWgpCmBgYAoKIyMjIFBlbmFuZGF0YW5nYW5hbiBSaWxpcwoKQVBLIHJpbGlzIGRpIGhhbGFtYW4gUmVsZWFzZXMgZGl0YW5kYXRhbmdhbmkgZGVuZ2FuIGtleXN0b3JlIHByaWJhZGkKcGVtaWxpayByZXBvIHlhbmcgKip0aWRhayoqIGRpc2VydGFrYW4gZGkgc2luaS4gVW50dWsgbWVuYW5kYXRhbmdhbmkKYnVpbGQgQW5kYSBzZW5kaXJpOgoKMS4gQnVhdCBrZXlzdG9yZToKICAgYGtleXRvb2wgLWdlbmtleXBhaXIgLWtleXN0b3JlIGR0cmFkZS1yZWxlYXNlLmprcyAtYWxpYXMgZHRyYWRlIC1rZXlhbGcgUlNBIC1rZXlzaXplIDIwNDggLXZhbGlkaXR5IDEwMDAwYAoyLiBCdWF0IGJlcmthcyBga2V5c3RvcmUucHJvcGVydGllc2AgKGRpIGx1YXIgcmVwbyAvIGphbmdhbiBkaS1jb21taXQpOgoKICAgYGBgcHJvcGVydGllcwogICBzdG9yZUZpbGU9L3BhdGgva2UvZHRyYWRlLXJlbGVhc2UuamtzCiAgIHN0b3JlUGFzc3dvcmQ94oCmCiAgIGtleUFsaWFzPWR0cmFkZQogICBrZXlQYXNzd29yZD3igKYKICAgYGBgCjMuIEJ1aWxkIGRlbmdhbiBgRFRSQURFX0tFWVNUT1JFX1BST1BTPS9wYXRoL2tlL2tleXN0b3JlLnByb3BlcnRpZXMgZ3JhZGxlIGFzc2VtYmxlUmVsZWFzZWAsCiAgIGF0YXUgc2FsaW4gYmVya2FzbnlhIGtlIGZvbGRlciBgYW5kcm9pZC9gIChzdWRhaCBkaS1naXRpZ25vcmUpLgo=
+# D TRADE — Aplikasi Android binance-ai-future
+
+Aplikasi Android pendamping **binance-ai-future**. Aplikasi ini adalah
+WebView aman di atas Web UI: seluruh logika trading tetap berjalan di
+backend Python (komputer/VPS Anda), aplikasi hanya menampilkannya di
+ponsel dengan nama **D TRADE**.
+
+- **Paket:** `com.devcoderama.dtrade`
+- **Min. Android:** 7.0 (API 24) · **Target:** Android 14 (API 34)
+- **Stack:** Kotlin, satu Activity, tanpa AndroidX — APK kecil & cepat.
+
+## Cara Pakai
+
+1. Jalankan backend di komputer/VPS Anda: `python run.py web`
+   (secara bawaan di `http://<IP-komputer>:8000`).
+2. Pasang APK **D TRADE** (dari halaman Releases repo ini).
+3. Buka aplikasi → menu ⋮ → **Alamat Server** → isi alamat backend Anda,
+   contoh `http://192.168.1.10:8000` (ponsel & komputer satu Wi-Fi), atau
+   domain VPS Anda. Alamat tersimpan di perangkat.
+4. Semua fitur Web UI (dasbor, scan, analisis + grafik candlestick,
+   backtest, eksekusi) bekerja persis seperti di browser.
+
+> Bawaan alamat server adalah `http://10.0.2.2:8000` (localhost komputer
+> host dari emulator Android) — ganti sesuai alamat backend Anda.
+
+## Build dari Sumber
+
+Syarat: JDK 17 + Android SDK (platform 34, build-tools 34).
+
+```bash
+cd android
+gradle assembleDebug      # APK debug
+gradle assembleRelease    # APK rilis (butuh keystore, lihat bawah)
+```
+
+### Penandatanganan Rilis
+
+APK rilis di halaman Releases ditandatangani dengan keystore pribadi
+pemilik repo yang **tidak** disertakan di sini. Untuk menandatangani
+build Anda sendiri:
+
+1. Buat keystore:
+   `keytool -genkeypair -keystore dtrade-release.jks -alias dtrade -keyalg RSA -keysize 2048 -validity 10000`
+2. Buat berkas `keystore.properties` (di luar repo / jangan di-commit):
+
+   ```properties
+   storeFile=/path/ke/dtrade-release.jks
+   storePassword=…
+   keyAlias=dtrade
+   keyPassword=…
+   ```
+3. Build dengan `DTRADE_KEYSTORE_PROPS=/path/ke/keystore.properties gradle assembleRelease`,
+   atau salin berkasnya ke folder `android/` (sudah di-gitignore).

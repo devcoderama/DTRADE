@@ -1,1 +1,155 @@
-cGFja2FnZSBjb20uZGV2Y29kZXJhbWEuZHRyYWRlCgppbXBvcnQgYW5kcm9pZC5hcHAuQWN0aXZpdHkKaW1wb3J0IGFuZHJvaWQuYXBwLkFsZXJ0RGlhbG9nCmltcG9ydCBhbmRyb2lkLmNvbnRlbnQuU2hhcmVkUHJlZmVyZW5jZXMKaW1wb3J0IGFuZHJvaWQuZ3JhcGhpY3MuQml0bWFwCmltcG9ydCBhbmRyb2lkLm9zLkJ1bmRsZQppbXBvcnQgYW5kcm9pZC52aWV3Lk1lbnUKaW1wb3J0IGFuZHJvaWQudmlldy5NZW51SXRlbQppbXBvcnQgYW5kcm9pZC52aWV3LlZpZXcKaW1wb3J0IGFuZHJvaWQud2Via2l0LldlYkNocm9tZUNsaWVudAppbXBvcnQgYW5kcm9pZC53ZWJraXQuV2ViUmVzb3VyY2VFcnJvcgppbXBvcnQgYW5kcm9pZC53ZWJraXQuV2ViUmVzb3VyY2VSZXF1ZXN0CmltcG9ydCBhbmRyb2lkLndlYmtpdC5XZWJWaWV3CmltcG9ydCBhbmRyb2lkLndlYmtpdC5XZWJWaWV3Q2xpZW50CmltcG9ydCBhbmRyb2lkLndpZGdldC5FZGl0VGV4dAppbXBvcnQgYW5kcm9pZC53aWRnZXQuUHJvZ3Jlc3NCYXIKaW1wb3J0IGFuZHJvaWQud2lkZ2V0LlRleHRWaWV3CgovKioKICogRCBUUkFERSDigJQgYXBsaWthc2kgQW5kcm9pZCBwZW5kYW1waW5nIGJpbmFuY2UtYWktZnV0dXJlLgogKgogKiBBcGxpa2FzaSBpbmkgYWRhbGFoIFdlYlZpZXcgYW1hbiBkaSBhdGFzIFdlYiBVSSBiaW5hbmNlLWFpLWZ1dHVyZToKICogc2VsdXJ1aCBsb2dpa2EgdHJhZGluZyB0ZXRhcCBiZXJqYWxhbiBkaSBiYWNrZW5kIFB5dGhvbiAoa29tcHV0ZXIvVlBTCiAqIHBlbmdndW5hKSwgYXBsaWthc2kgaGFueWEgbWVuYW1waWxrYW5ueWEgZGkgcG9uc2VsLiBBbGFtYXQgc2VydmVyIGRhcGF0CiAqIGRpZ2FudGkgZGFyaSBtZW51ICJBbGFtYXQgU2VydmVyIiBkYW4gdGVyc2ltcGFuIGRpIHBlcmFuZ2thdC4KICovCmNsYXNzIE1haW5BY3Rpdml0eSA6IEFjdGl2aXR5KCkgewoKICAgIHByaXZhdGUgbGF0ZWluaXQgdmFyIHdlYlZpZXc6IFdlYlZpZXcKICAgIHByaXZhdGUgbGF0ZWluaXQgdmFyIHByb2dyZXNzQmFyOiBQcm9ncmVzc0JhcgogICAgcHJpdmF0ZSBsYXRlaW5pdCB2YXIgZXJyb3JWaWV3OiBUZXh0VmlldwogICAgcHJpdmF0ZSBsYXRlaW5pdCB2YXIgcHJlZnM6IFNoYXJlZFByZWZlcmVuY2VzCgogICAgb3ZlcnJpZGUgZnVuIG9uQ3JlYXRlKHNhdmVkSW5zdGFuY2VTdGF0ZTogQnVuZGxlPykgewogICAgICAgIHN1cGVyLm9uQ3JlYXRlKHNhdmVkSW5zdGFuY2VTdGF0ZSkKICAgICAgICBzZXRDb250ZW50VmlldyhSLmxheW91dC5hY3Rpdml0eV9tYWluKQogICAgICAgIHRpdGxlID0gIkQgVFJBREUiCgogICAgICAgIHByZWZzID0gZ2V0U2hhcmVkUHJlZmVyZW5jZXMoUFJFRlMsIE1PREVfUFJJVkFURSkKICAgICAgICB3ZWJWaWV3ID0gZmluZFZpZXdCeUlkKFIuaWQud2VidmlldykKICAgICAgICBwcm9ncmVzc0JhciA9IGZpbmRWaWV3QnlJZChSLmlkLnByb2dyZXNzKQogICAgICAgIGVycm9yVmlldyA9IGZpbmRWaWV3QnlJZChSLmlkLmVycm9yX3ZpZXcpCgogICAgICAgIHdpdGgod2ViVmlldy5zZXR0aW5ncykgewogICAgICAgICAgICBqYXZhU2NyaXB0RW5hYmxlZCA9IHRydWUKICAgICAgICAgICAgZG9tU3RvcmFnZUVuYWJsZWQgPSB0cnVlCiAgICAgICAgICAgIGxvYWRXaXRoT3ZlcnZpZXdNb2RlID0gdHJ1ZQogICAgICAgICAgICB1c2VXaWRlVmlld1BvcnQgPSB0cnVlCiAgICAgICAgICAgIGJ1aWx0SW5ab29tQ29udHJvbHMgPSBmYWxzZQogICAgICAgIH0KCiAgICAgICAgd2ViVmlldy53ZWJDaHJvbWVDbGllbnQgPSBvYmplY3QgOiBXZWJDaHJvbWVDbGllbnQoKSB7CiAgICAgICAgICAgIG92ZXJyaWRlIGZ1biBvblByb2dyZXNzQ2hhbmdlZCh2aWV3OiBXZWJWaWV3PywgbmV3UHJvZ3Jlc3M6IEludCkgewogICAgICAgICAgICAgICAgcHJvZ3Jlc3NCYXIucHJvZ3Jlc3MgPSBuZXdQcm9ncmVzcwogICAgICAgICAgICAgICAgcHJvZ3Jlc3NCYXIudmlzaWJpbGl0eSA9IGlmIChuZXdQcm9ncmVzcyBpbiAxLi45OSkgVmlldy5WSVNJQkxFIGVsc2UgVmlldy5HT05FCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgd2ViVmlldy53ZWJWaWV3Q2xpZW50ID0gb2JqZWN0IDogV2ViVmlld0NsaWVudCgpIHsKICAgICAgICAgICAgb3ZlcnJpZGUgZnVuIG9uUGFnZVN0YXJ0ZWQodmlldzogV2ViVmlldz8sIHVybDogU3RyaW5nPywgZmF2aWNvbjogQml0bWFwPykgewogICAgICAgICAgICAgICAgZXJyb3JWaWV3LnZpc2liaWxpdHkgPSBWaWV3LkdPTkUKICAgICAgICAgICAgICAgIHdlYlZpZXcudmlzaWJpbGl0eSA9IFZpZXcuVklTSUJMRQogICAgICAgICAgICB9CgogICAgICAgICAgICBvdmVycmlkZSBmdW4gb25SZWNlaXZlZEVycm9yKAogICAgICAgICAgICAgICAgdmlldzogV2ViVmlldz8sCiAgICAgICAgICAgICAgICByZXF1ZXN0OiBXZWJSZXNvdXJjZVJlcXVlc3Q/LAogICAgICAgICAgICAgICAgZXJyb3I6IFdlYlJlc291cmNlRXJyb3I/CiAgICAgICAgICAgICkgewogICAgICAgICAgICAgICAgaWYgKHJlcXVlc3Q/LmlzRm9yTWFpbkZyYW1lID09IHRydWUpIHNob3dFcnJvcigpCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgZXJyb3JWaWV3LnNldE9uQ2xpY2tMaXN0ZW5lciB7IHNob3dVcmxEaWFsb2coKSB9CgogICAgICAgIGlmIChzYXZlZEluc3RhbmNlU3RhdGUgPT0gbnVsbCkgewogICAgICAgICAgICBsb2FkSG9tZSgpCiAgICAgICAgfSBlbHNlIHsKICAgICAgICAgICAgd2ViVmlldy5yZXN0b3JlU3RhdGUoc2F2ZWRJbnN0YW5jZVN0YXRlKQogICAgICAgIH0KICAgIH0KCiAgICBwcml2YXRlIGZ1biBzZXJ2ZXJVcmwoKTogU3RyaW5nIHsKICAgICAgICB2YXIgdXJsID0gcHJlZnMuZ2V0U3RyaW5nKEtFWV9VUkwsIERFRkFVTFRfVVJMKSA/OiBERUZBVUxUX1VSTAogICAgICAgIGlmICghdXJsLnN0YXJ0c1dpdGgoImh0dHA6Ly8iKSAmJiAhdXJsLnN0YXJ0c1dpdGgoImh0dHBzOi8vIikpIHVybCA9ICJodHRwOi8vJHVybCIKICAgICAgICByZXR1cm4gdXJsLnRyaW1FbmQoJy8nKSArICIvIgogICAgfQoKICAgIHByaXZhdGUgZnVuIGxvYWRIb21lKCkgewogICAgICAgIHdlYlZpZXcubG9hZFVybChzZXJ2ZXJVcmwoKSkKICAgIH0KCiAgICBwcml2YXRlIGZ1biBzaG93RXJyb3IoKSB7CiAgICAgICAgd2ViVmlldy52aXNpYmlsaXR5ID0gVmlldy5HT05FCiAgICAgICAgZXJyb3JWaWV3LnZpc2liaWxpdHkgPSBWaWV3LlZJU0lCTEUKICAgICAgICBlcnJvclZpZXcudGV4dCA9CiAgICAgICAgICAgICJUaWRhayBkYXBhdCB0ZXJodWJ1bmcga2Ugc2VydmVyIGJpbmFuY2UtYWktZnV0dXJlIGRpOlxuJHtzZXJ2ZXJVcmwoKX1cblxuIiArCiAgICAgICAgICAgICAgICAiUGFzdGlrYW4gYmFja2VuZCBiZXJqYWxhbiBkaSBrb21wdXRlci9WUFMgQW5kYTpcbiIgKwogICAgICAgICAgICAgICAgInB5dGhvbiBydW4ucHkgd2ViXG5cbiIgKwogICAgICAgICAgICAgICAgIktldHVrIGRpIHNpbmkgdW50dWsgbWVuZ2F0dXIgYWxhbWF0IHNlcnZlci4iCiAgICB9CgogICAgcHJpdmF0ZSBmdW4gc2hvd1VybERpYWxvZygpIHsKICAgICAgICB2YWwgaW5wdXQgPSBFZGl0VGV4dCh0aGlzKQogICAgICAgIGlucHV0LnNldFRleHQocHJlZnMuZ2V0U3RyaW5nKEtFWV9VUkwsIERFRkFVTFRfVVJMKSkKICAgICAgICBpbnB1dC5oaW50ID0gImN0aDogaHR0cDovLzE5Mi4xNjguMS4xMDo4MDAwIgogICAgICAgIEFsZXJ0RGlhbG9nLkJ1aWxkZXIodGhpcykKICAgICAgICAgICAgLnNldFRpdGxlKCJBbGFtYXQgU2VydmVyIikKICAgICAgICAgICAgLnNldE1lc3NhZ2UoIkFsYW1hdCBXZWIgVUkgYmluYW5jZS1haS1mdXR1cmUgZGkga29tcHV0ZXIvVlBTIEFuZGEgKHNhdHUgamFyaW5nYW4gV2ktRmkgdW50dWsgSVAgbG9rYWwpLiIpCiAgICAgICAgICAgIC5zZXRWaWV3KGlucHV0KQogICAgICAgICAgICAuc2V0UG9zaXRpdmVCdXR0b24oIlNpbXBhbiIpIHsgXywgXyAtPgogICAgICAgICAgICAgICAgcHJlZnMuZWRpdCgpLnB1dFN0cmluZyhLRVlfVVJMLCBpbnB1dC50ZXh0LnRvU3RyaW5nKCkudHJpbSgpKS5hcHBseSgpCiAgICAgICAgICAgICAgICBsb2FkSG9tZSgpCiAgICAgICAgICAgIH0KICAgICAgICAgICAgLnNldE5lZ2F0aXZlQnV0dG9uKCJCYXRhbCIsIG51bGwpCiAgICAgICAgICAgIC5zaG93KCkKICAgIH0KCiAgICBvdmVycmlkZSBmdW4gb25DcmVhdGVPcHRpb25zTWVudShtZW51OiBNZW51KTogQm9vbGVhbiB7CiAgICAgICAgbWVudS5hZGQoMCwgTUVOVV9IT01FLCAwLCAiQmVyYW5kYSIpCiAgICAgICAgbWVudS5hZGQoMCwgTUVOVV9SRUxPQUQsIDAsICJNdWF0IFVsYW5nIikKICAgICAgICBtZW51LmFkZCgwLCBNRU5VX1VSTCwgMCwgIkFsYW1hdCBTZXJ2ZXIiKQogICAgICAgIHJldHVybiB0cnVlCiAgICB9CgogICAgb3ZlcnJpZGUgZnVuIG9uT3B0aW9uc0l0ZW1TZWxlY3RlZChpdGVtOiBNZW51SXRlbSk6IEJvb2xlYW4gewogICAgICAgIHdoZW4gKGl0ZW0uaXRlbUlkKSB7CiAgICAgICAgICAgIE1FTlVfSE9NRSAtPiBsb2FkSG9tZSgpCiAgICAgICAgICAgIE1FTlVfUkVMT0FEIC0+IHdlYlZpZXcucmVsb2FkKCkKICAgICAgICAgICAgTUVOVV9VUkwgLT4gc2hvd1VybERpYWxvZygpCiAgICAgICAgICAgIGVsc2UgLT4gcmV0dXJuIHN1cGVyLm9uT3B0aW9uc0l0ZW1TZWxlY3RlZChpdGVtKQogICAgICAgIH0KICAgICAgICByZXR1cm4gdHJ1ZQogICAgfQoKICAgIEBEZXByZWNhdGVkKCJEZXByZWNhdGVkIGluIEphdmEiKQogICAgb3ZlcnJpZGUgZnVuIG9uQmFja1ByZXNzZWQoKSB7CiAgICAgICAgaWYgKHdlYlZpZXcuY2FuR29CYWNrKCkpIHdlYlZpZXcuZ29CYWNrKCkgZWxzZSBzdXBlci5vbkJhY2tQcmVzc2VkKCkKICAgIH0KCiAgICBvdmVycmlkZSBmdW4gb25TYXZlSW5zdGFuY2VTdGF0ZShvdXRTdGF0ZTogQnVuZGxlKSB7CiAgICAgICAgc3VwZXIub25TYXZlSW5zdGFuY2VTdGF0ZShvdXRTdGF0ZSkKICAgICAgICB3ZWJWaWV3LnNhdmVTdGF0ZShvdXRTdGF0ZSkKICAgIH0KCiAgICBjb21wYW5pb24gb2JqZWN0IHsKICAgICAgICBwcml2YXRlIGNvbnN0IHZhbCBQUkVGUyA9ICJkdHJhZGUiCiAgICAgICAgcHJpdmF0ZSBjb25zdCB2YWwgS0VZX1VSTCA9ICJzZXJ2ZXJfdXJsIgoKICAgICAgICAvKiogQmF3YWFuIHVudHVrIGVtdWxhdG9yIEFuZHJvaWQgKDEwLjAuMi4yID0gbG9jYWxob3N0IGtvbXB1dGVyIGhvc3QpLiAqLwogICAgICAgIHByaXZhdGUgY29uc3QgdmFsIERFRkFVTFRfVVJMID0gImh0dHA6Ly8xMC4wLjIuMjo4MDAwIgogICAgICAgIHByaXZhdGUgY29uc3QgdmFsIE1FTlVfSE9NRSA9IDEKICAgICAgICBwcml2YXRlIGNvbnN0IHZhbCBNRU5VX1JFTE9BRCA9IDIKICAgICAgICBwcml2YXRlIGNvbnN0IHZhbCBNRU5VX1VSTCA9IDMKICAgIH0KfQo=
+package com.devcoderama.dtrade
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.EditText
+import android.widget.ProgressBar
+import android.widget.TextView
+
+/**
+ * D TRADE — aplikasi Android pendamping binance-ai-future.
+ *
+ * Aplikasi ini adalah WebView aman di atas Web UI binance-ai-future:
+ * seluruh logika trading tetap berjalan di backend Python (komputer/VPS
+ * pengguna), aplikasi hanya menampilkannya di ponsel. Alamat server dapat
+ * diganti dari menu "Alamat Server" dan tersimpan di perangkat.
+ */
+class MainActivity : Activity() {
+
+    private lateinit var webView: WebView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var errorView: TextView
+    private lateinit var prefs: SharedPreferences
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        title = "D TRADE"
+
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        webView = findViewById(R.id.webview)
+        progressBar = findViewById(R.id.progress)
+        errorView = findViewById(R.id.error_view)
+
+        with(webView.settings) {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            builtInZoomControls = false
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                progressBar.progress = newProgress
+                progressBar.visibility = if (newProgress in 1..99) View.VISIBLE else View.GONE
+            }
+        }
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                errorView.visibility = View.GONE
+                webView.visibility = View.VISIBLE
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                if (request?.isForMainFrame == true) showError()
+            }
+        }
+        errorView.setOnClickListener { showUrlDialog() }
+
+        if (savedInstanceState == null) {
+            loadHome()
+        } else {
+            webView.restoreState(savedInstanceState)
+        }
+    }
+
+    private fun serverUrl(): String {
+        var url = prefs.getString(KEY_URL, DEFAULT_URL) ?: DEFAULT_URL
+        if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
+        return url.trimEnd('/') + "/"
+    }
+
+    private fun loadHome() {
+        webView.loadUrl(serverUrl())
+    }
+
+    private fun showError() {
+        webView.visibility = View.GONE
+        errorView.visibility = View.VISIBLE
+        errorView.text =
+            "Tidak dapat terhubung ke server binance-ai-future di:\n${serverUrl()}\n\n" +
+                "Pastikan backend berjalan di komputer/VPS Anda:\n" +
+                "python run.py web\n\n" +
+                "Ketuk di sini untuk mengatur alamat server."
+    }
+
+    private fun showUrlDialog() {
+        val input = EditText(this)
+        input.setText(prefs.getString(KEY_URL, DEFAULT_URL))
+        input.hint = "cth: http://192.168.1.10:8000"
+        AlertDialog.Builder(this)
+            .setTitle("Alamat Server")
+            .setMessage("Alamat Web UI binance-ai-future di komputer/VPS Anda (satu jaringan Wi-Fi untuk IP lokal).")
+            .setView(input)
+            .setPositiveButton("Simpan") { _, _ ->
+                prefs.edit().putString(KEY_URL, input.text.toString().trim()).apply()
+                loadHome()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menu.add(0, MENU_HOME, 0, "Beranda")
+        menu.add(0, MENU_RELOAD, 0, "Muat Ulang")
+        menu.add(0, MENU_URL, 0, "Alamat Server")
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            MENU_HOME -> loadHome()
+            MENU_RELOAD -> webView.reload()
+            MENU_URL -> showUrlDialog()
+            else -> return super.onOptionsItemSelected(item)
+        }
+        return true
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView.saveState(outState)
+    }
+
+    companion object {
+        private const val PREFS = "dtrade"
+        private const val KEY_URL = "server_url"
+
+        /** Bawaan untuk emulator Android (10.0.2.2 = localhost komputer host). */
+        private const val DEFAULT_URL = "http://10.0.2.2:8000"
+        private const val MENU_HOME = 1
+        private const val MENU_RELOAD = 2
+        private const val MENU_URL = 3
+    }
+}
