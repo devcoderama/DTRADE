@@ -172,30 +172,54 @@ async function scan() {
   btn.disabled = true;
   btn.textContent = "Memindai…";
   const tbody = document.querySelector("#scan-table tbody");
-  tbody.innerHTML = '<tr><td colspan="8" class="muted">Memindai semua simbol, mohon tunggu…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="muted">Memindai semua simbol, mohon tunggu…</td></tr>';
   try {
     const useAi = $("scan-ai").checked;
     const data = await api("/api/scan?top=15&ai=" + useAi);
     const rows = data.results || [];
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="muted">Tidak ada sinyal saat ini.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">Tidak ada sinyal saat ini.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map((s) => `<tr>
-      <td>${s.symbol}</td>
+      <td><button class="sym-link" onclick="openDetail('${s.symbol}')">${s.symbol}<span class="sym-arrow">›</span></button></td>
       <td class="${sideClass(s.side)}">${s.side}</td>
       <td>${fmtPrice(s.price)}</td>
       <td>${s.confidence}%</td>
       <td>${s.technical_score}</td>
       <td>${fmtPrice(s.stop_loss)}</td>
       <td>${fmtPrice(s.take_profit)}</td>
-      <td><button class="small" onclick="analyze('${s.symbol}')">Detail</button></td>
     </tr>`).join("");
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="neg">Gagal memindai: ' + e.message + "</td></tr>";
+    tbody.innerHTML = '<tr><td colspan="7" class="neg">Gagal memindai: ' + e.message + "</td></tr>";
   } finally {
     btn.disabled = false;
     btn.textContent = "Pindai Sekarang";
+  }
+}
+
+/* --------- buka detail simbol (dari pemindai / tombol analisis) ---------
+   Satu pintu masuk untuk memuat detail: menampilkan animasi loading di
+   panel analisis dan mengabaikan ketukan berikutnya selama pemuatan
+   berjalan, sehingga detail simbol tidak pernah terinput dua kali. */
+let detailInFlight = null;
+
+async function openDetail(symbol) {
+  symbol = (symbol || "").trim().toUpperCase();
+  if (!symbol || detailInFlight) return;
+  detailInFlight = symbol;
+  $("symbol-input").value = symbol;
+  $("scan-table").classList.add("is-loading");
+  const overlay = $("detail-loading");
+  $("detail-loading-symbol").textContent = symbol;
+  overlay.hidden = false;
+  $("panel-analysis").scrollIntoView({ behavior: "smooth", block: "start" });
+  try {
+    await analyze(symbol);
+  } finally {
+    overlay.hidden = true;
+    $("scan-table").classList.remove("is-loading");
+    detailInFlight = null;
   }
 }
 
@@ -382,8 +406,7 @@ $("btn-backtest").addEventListener("click", runBacktest);
   const params = new URLSearchParams(window.location.search);
   const symbol = (params.get("symbol") || "").toUpperCase();
   if (symbol) {
-    $("symbol-input").value = symbol;
-    analyze(symbol).then(() => {
+    openDetail(symbol).then(() => {
       if (params.get("backtest") === "1") runBacktest();
     });
   }
@@ -391,8 +414,7 @@ $("btn-backtest").addEventListener("click", runBacktest);
 
 /* ---------------- ikat event ---------------- */
 $("btn-analyze").addEventListener("click", () => {
-  const symbol = $("symbol-input").value.trim().toUpperCase();
-  if (symbol) analyze(symbol);
+  openDetail($("symbol-input").value);
 });
 $("symbol-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") $("btn-analyze").click();

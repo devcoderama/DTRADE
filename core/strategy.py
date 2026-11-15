@@ -192,9 +192,20 @@ class SignalEngine:
             else:
                 side = "NEUTRAL"
                 confidence = int(min(abs(score), ai_result.confidence) * 0.5)
-                reasons.append(
-                    f"Teknikal ({tech_side}) dan AI ({ai_result.signal}) tidak sepakat → NEUTRAL"
-                )
+                if ai_result.signal == tech_side and tech_side != "NEUTRAL":
+                    reasons.append(
+                        f"AI searah ({ai_result.signal}) tetapi confidence {ai_result.confidence} "
+                        f"di bawah minimum konfirmasi {MIN_AI_CONFIDENCE} → NEUTRAL"
+                    )
+                elif tech_side == "NEUTRAL" and ai_result.signal != "NEUTRAL":
+                    reasons.append(
+                        f"Teknikal NEUTRAL; AI ({ai_result.signal}, confidence {ai_result.confidence}) "
+                        "belum cukup yakin untuk mengambil alih (perlu ≥ 75) → NEUTRAL"
+                    )
+                else:
+                    reasons.append(
+                        f"Teknikal ({tech_side}) dan AI ({ai_result.signal}) tidak sepakat → NEUTRAL"
+                    )
         else:
             side = tech_side
             confidence = abs(score)

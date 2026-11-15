@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="brand">
-    <span class="logo">◆</span>
+    <span class="logo-tile"><span class="logo">◆</span></span>
     <div>
       <h1>binance-ai-future</h1>
       <p class="sub">Binance USDⓈ-M Futures × BangunWeb AI</p>
@@ -44,7 +44,11 @@
   </section>
 
   <!-- Analisis simbol -->
-  <section class="panel">
+  <section class="panel" id="panel-analysis">
+    <div id="detail-loading" class="loading-overlay" hidden>
+      <div class="spinner"></div>
+      <p>Memuat detail <b id="detail-loading-symbol"></b>…</p>
+    </div>
     <h2>Analisis Simbol</h2>
     <div class="row">
       <input id="symbol-input" list="symbol-list" placeholder="cth: BTCUSDT" autocomplete="off">
@@ -89,12 +93,13 @@
         <button id="btn-scan" class="primary">Pindai Sekarang</button>
       </div>
     </div>
+    <p class="muted small-note" style="margin:2px 0 8px">Ketuk nama simbol pada hasil pindai untuk membuka detail analisisnya.</p>
     <div class="table-wrap">
       <table id="scan-table">
         <thead>
-          <tr><th>Simbol</th><th>Sisi</th><th>Harga</th><th>Keyakinan</th><th>Skor</th><th>Stop Loss</th><th>Take Profit</th><th></th></tr>
+          <tr><th>Simbol</th><th>Sisi</th><th>Harga</th><th>Keyakinan</th><th>Skor</th><th>Stop Loss</th><th>Take Profit</th></tr>
         </thead>
-        <tbody><tr><td colspan="8" class="muted">Belum ada hasil pindai.</td></tr></tbody>
+        <tbody><tr><td colspan="7" class="muted">Belum ada hasil pindai.</td></tr></tbody>
       </table>
     </div>
   </section>
