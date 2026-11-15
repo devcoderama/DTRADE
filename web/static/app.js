@@ -29,6 +29,42 @@ function sideClass(side) {
   return side === "LONG" ? "side-long" : side === "SHORT" ? "side-short" : "side-neutral";
 }
 
+/* ---------------- gauge setengah lingkaran (SVG) ---------------- */
+const ARC_LEN = 163.4; // panjang busur setengah lingkaran r=52 pada viewBox 120x68
+
+function gaugeCard(id, title, frac, color, value, label) {
+  const f = Math.max(0, Math.min(1, frac || 0));
+  $(id).innerHTML =
+    '<div class="g-title">' + title + "</div>" +
+    '<div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 120 68">' +
+    '<path d="M 8 62 A 52 52 0 0 1 112 62" fill="none" stroke="#2b3139" stroke-width="9" stroke-linecap="round"/>' +
+    '<path d="M 8 62 A 52 52 0 0 1 112 62" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" ' +
+    'stroke-dasharray="' + ARC_LEN + '" stroke-dashoffset="' + (ARC_LEN * (1 - f)).toFixed(1) + '"/></svg></div>' +
+    '<div class="g-value">' + value + '</div><div class="g-label">' + label + "</div>";
+}
+
+function renderSentiment(s) {
+  let pct, sideLabel;
+  if (s.side !== "NEUTRAL") { pct = s.confidence; sideLabel = s.side; }
+  else if (s.ai) { pct = s.ai.confidence; sideLabel = s.ai.signal; }
+  else {
+    pct = Math.abs(s.technical_score);
+    sideLabel = s.technical_score > 0 ? "LONG" : s.technical_score < 0 ? "SHORT" : "NEUTRAL";
+  }
+  pct = Math.max(0, Math.min(100, pct || 0));
+  $("sent-arc").style.strokeDashoffset = (ARC_LEN * (1 - pct / 100)).toFixed(1);
+  $("sent-pct").textContent = pct + "%";
+  const sideEl = $("sent-side");
+  sideEl.textContent = sideLabel;
+  sideEl.className = sideLabel === "LONG" ? "pos" : sideLabel === "SHORT" ? "neg" : "muted";
+  $("sent-position").innerHTML = sideLabel === "LONG"
+    ? '<span class="pos">●</span> Net Long'
+    : sideLabel === "SHORT" ? '<span class="neg">●</span> Net Short' : '<span class="muted">●</span> Netral';
+  $("sent-insight").textContent = s.ai
+    ? s.ai.reasoning
+    : "Analisis teknikal murni (AI tidak aktif). " + (s.reasons[0] || "");
+}
+
 /* ---------------- muat awal ---------------- */
 async function loadConfig() {
   try {
@@ -40,6 +76,10 @@ async function loadConfig() {
     const ai = $("badge-ai");
     ai.textContent = cfg.ai_configured ? "AI: " + cfg.ai_model : "AI: belum dikonfigurasi";
     if (cfg.ai_configured) ai.classList.add("ok");
+    if (cfg.default_interval) {
+      $("chart-interval").value = cfg.default_interval;
+      syncTfTabs();
+    }
     const bc = $("badge-broadcast");
     if (cfg.broadcast_enabled && cfg.telegram_configured) {
       bc.textContent = "📣 Siaran Otomatis " + cfg.broadcast_interval_minutes + " mnt";
@@ -178,32 +218,76 @@ async function closePosition(symbol) {
 /* ---------------- analisis ---------------- */
 async function analyze(symbol) {
   const box = $("analysis");
+  box.className = "analysis-empty";
   box.innerHTML = '<span class="muted">Menganalisis ' + symbol + " …</span>";
   try {
     const s = await api("/api/analyze/" + encodeURIComponent(symbol));
     const snap = s.snapshot;
-    const aiHtml = s.ai
-      ? `<div class="kv"><span>AI (${s.ai.model_used})</span><strong class="${sideClass(s.ai.signal)}">${s.ai.signal} · ${s.ai.confidence}%</strong></div>`
-      : `<div class="kv"><span>AI</span><strong>—</strong></div>`;
-    box.innerHTML = `
-      <div class="analysis-grid">
-        <div class="kv"><span>Harga</span><strong>${fmtPrice(s.price)}</strong></div>
-        <div class="kv"><span>Tren</span><strong>${snap.trend}</strong></div>
-        <div class="kv"><span>RSI 14</span><strong>${snap.rsi14 ? snap.rsi14.toFixed(1) : "—"}</strong></div>
-        <div class="kv"><span>Skor Teknikal</span><strong>${s.technical_score}</strong></div>
-        ${aiHtml}
-        <div class="kv"><span>SL / TP</span><strong>${fmtPrice(s.stop_loss)} / ${fmtPrice(s.take_profit)}</strong></div>
-      </div>
-      <div class="signal-banner ${s.side.toLowerCase()}">
-        Sinyal gabungan: <b>${s.side}</b> — keyakinan ${s.confidence}%
-        ${s.ai ? "<br><small>" + s.ai.reasoning + "</small>" : ""}
-      </div>
-      <ul class="reasons">${s.reasons.map((r) => "<li>" + r + "</li>").join("")}</ul>
-      <div class="row" style="margin-top:12px">
-        <button class="primary" onclick="tradeSymbol('${s.symbol}', null)">Eksekusi Sinyal Ini</button>
-        <button onclick="tradeSymbol('${s.symbol}', 'LONG')">Paksa LONG</button>
-        <button onclick="tradeSymbol('${s.symbol}', 'SHORT')">Paksa SHORT</button>
-      </div>`;
+
+    /* --- ubin metrik (kolom kiri) --- */
+    const chg = snap.change_24h_pct || 0;
+    const chgHtml = '<span class="delta ' + (chg >= 0 ? "pos" : "neg") + '">' +
+      (chg >= 0 ? "▲ +" : "▼ ") + chg.toFixed(2) + "%</span>";
+    const trendArrow = snap.trend === "UPTREND" ? "↗" : snap.trend === "DOWNTREND" ? "↘" : "→";
+    const trendCls = snap.trend === "UPTREND" ? "pos" : snap.trend === "DOWNTREND" ? "neg" : "";
+    const score = s.technical_score;
+    const ringFrac = Math.min(1, Math.abs(score) / 100);
+    const ringColor = score > 0 ? "#0ecb81" : score < 0 ? "#f6465d" : "#8a94a6";
+    const ring = '<svg class="score-ring" width="40" height="40" viewBox="0 0 40 40">' +
+      '<circle class="ring-bg" cx="20" cy="20" r="16" fill="none" stroke-width="4.5"/>' +
+      '<circle cx="20" cy="20" r="16" fill="none" stroke="' + ringColor + '" stroke-width="4.5" stroke-linecap="round" ' +
+      'stroke-dasharray="100.5" stroke-dashoffset="' + (100.5 * (1 - ringFrac)).toFixed(1) + '"/></svg>';
+    const aiTile = s.ai
+      ? '<div class="t-value ' + (s.ai.signal === "LONG" ? "pos" : s.ai.signal === "SHORT" ? "neg" : "") + '">' +
+        s.ai.signal + " · " + s.ai.confidence + '%</div><div class="t-sub muted">' + s.ai.model_used + "</div>"
+      : '<div class="t-value">—</div><div class="t-sub muted">AI tidak aktif</div>';
+    box.className = "";
+    box.innerHTML =
+      '<div class="tiles">' +
+      '<div class="tile"><span class="t-label">Harga</span><div class="t-value">' + fmtPrice(s.price) + chgHtml + "</div></div>" +
+      '<div class="tile"><span class="t-label">Tren</span><div class="t-value ' + trendCls + '">' + snap.trend +
+      ' <span style="float:right">' + trendArrow + "</span></div></div>" +
+      '<div class="tile"><span class="t-label">RSI 14</span><div class="t-value">' +
+      (snap.rsi14 != null ? snap.rsi14.toFixed(1) : "—") + "</div></div>" +
+      '<div class="tile"><span class="t-label">Skor Teknikal</span><div class="tile-flex"><div class="t-value">' +
+      score + ' <span class="muted" style="font-size:12px">/ 100</span></div>' + ring + "</div></div>" +
+      '<div class="tile"><span class="t-label">AI Signal</span>' + aiTile + "</div>" +
+      '<div class="tile"><span class="t-label">SL / TP</span><div class="t-value">' + fmtPrice(s.stop_loss) +
+      '</div><div class="t-sub muted">TP: ' + fmtPrice(s.take_profit) + "</div></div>" +
+      "</div>";
+
+    /* --- panel sinyal gabungan --- */
+    $("signal-panel").innerHTML =
+      '<div class="signal-head">✅ Sinyal Gabungan: <span class="pill ' + s.side.toLowerCase() + '">' + s.side + "</span>" +
+      (s.side !== "NEUTRAL" ? '<span class="muted" style="font-size:13px">keyakinan ' + s.confidence + "%</span>" : "") + "</div>" +
+      (s.ai ? '<p class="signal-why">' + s.ai.reasoning + "</p>" : "") +
+      '<ul class="reasons">' + s.reasons.map((r) => "<li>" + r + "</li>").join("") + "</ul>";
+
+    /* --- gauge indikator --- */
+    const histPct = snap.macd_histogram != null && snap.price
+      ? (snap.macd_histogram / snap.price) * 100 : null;
+    gaugeCard("gauge-macd", "MACD", histPct == null ? 0 : Math.min(1, Math.abs(histPct)),
+      histPct != null && histPct < 0 ? "#f6465d" : "#0ecb81",
+      histPct == null ? "—" : histPct.toFixed(2) + "%",
+      histPct == null ? "—" : histPct >= 0 ? "Positive" : "Negative");
+    const rsi = snap.rsi14;
+    gaugeCard("gauge-rsi", "RSI", rsi == null ? 0 : rsi / 100, "#a371f7",
+      rsi == null ? "—" : rsi.toFixed(1),
+      rsi == null ? "—" : rsi < 30 ? "Oversold" : rsi < 40 ? "Lemah" : rsi <= 60 ? "Neutral" : rsi <= 70 ? "Kuat" : "Jenuh Beli");
+    const bbp = snap.bb_pct_b;
+    gaugeCard("gauge-bb", "BBands", bbp == null ? 0 : bbp, "#4dabf7",
+      bbp == null ? "—" : bbp.toFixed(2),
+      bbp == null ? "—" : bbp >= 0.75 ? "Upper Band" : bbp <= 0.25 ? "Lower Band" : "Middle Band");
+
+    /* --- kartu eksekusi --- */
+    $("execute-card").innerHTML =
+      '<button class="primary exec-main" onclick="tradeSymbol(\'' + s.symbol + '\', null)">⚡ Eksekusi Sinyal ›</button>' +
+      '<div class="exec-sub"><button onclick="tradeSymbol(\'' + s.symbol + '\', \'LONG\')">Paksa LONG</button>' +
+      '<button onclick="tradeSymbol(\'' + s.symbol + '\', \'SHORT\')">Paksa SHORT</button></div>' +
+      '<div class="exec-note">ⓘ Pastikan analisis sebelum trading.</div>';
+    $("signal-row").hidden = false;
+
+    renderSentiment(s);
     chartSymbol = s.symbol;
     $("chart-block").hidden = false;
     $("backtest-block").hidden = false;
@@ -510,6 +594,53 @@ $("symbol-input").addEventListener("keydown", (e) => {
 });
 $("btn-scan").addEventListener("click", scan);
 $("btn-refresh").addEventListener("click", loadAccount);
+
+/* ---------------- tab interval grafik ---------------- */
+function syncTfTabs() {
+  const cur = $("chart-interval").value;
+  document.querySelectorAll(".tf-tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.interval === cur));
+}
+document.querySelectorAll(".tf-tab").forEach((b) => b.addEventListener("click", () => {
+  const sel = $("chart-interval");
+  if (sel.value === b.dataset.interval) return;
+  sel.value = b.dataset.interval;
+  syncTfTabs();
+  sel.dispatchEvent(new Event("change"));
+}));
+
+/* ---------------- navigasi: sidebar, menu bawah, pencarian, hero ---------------- */
+function closeSidebar() {
+  $("sidebar").classList.remove("open");
+  $("scrim").hidden = true;
+}
+function goTo(target) {
+  const el = document.getElementById(target);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.querySelectorAll("[data-target]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.target === target));
+  closeSidebar();
+}
+document.querySelectorAll("[data-target]").forEach((b) =>
+  b.addEventListener("click", () => goTo(b.dataset.target)));
+$("btn-menu").addEventListener("click", () => {
+  const open = $("sidebar").classList.toggle("open");
+  $("scrim").hidden = !open;
+});
+$("scrim").addEventListener("click", closeSidebar);
+
+function startAnalysis() {
+  goTo("panel-analysis");
+  const v = $("symbol-input").value.trim();
+  if (v) openDetail(v); else $("symbol-input").focus();
+}
+$("btn-start").addEventListener("click", startAnalysis);
+$("promo-start").addEventListener("click", startAnalysis);
+$("top-search").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  const v = e.target.value.trim().toUpperCase();
+  if (v) openDetail(v);
+});
 
 loadConfig();
 loadAiPanel();

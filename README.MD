@@ -68,6 +68,10 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 
 ![Web UI — Analisis, grafik candlestick, dan backtest](screenshots/web-analysis.png)
 
+**Web UI — Tampilan Mobile (responsif, navigasi bawah)**
+
+![Web UI — Mobile](screenshots/web-mobile.png)
+
 **Terminal CLI — `analyze BTCUSDT`**
 
 ![CLI — analyze BTCUSDT](screenshots/cli-analyze.png)
