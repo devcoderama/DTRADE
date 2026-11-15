@@ -1,0 +1,1 @@
+"""Antarmuka terminal (CLI)."""

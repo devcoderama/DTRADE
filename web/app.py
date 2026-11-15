@@ -1,0 +1,226 @@
+"""Server Web UI binance-ai-future (FastAPI).
+
+Endpoint REST tipis di atas core yang sama dengan CLI:
+
+    GET  /api/health            status server + konfigurasi aman
+    GET  /api/config            ringkasan konfigurasi (tanpa secret)
+    GET  /api/account           saldo akun futures
+    GET  /api/positions         posisi terbuka
+    GET  /api/symbols           semua simbol perpetual aktif
+    GET  /api/snapshot/{symbol} snapshot indikator satu simbol
+    GET  /api/analyze/{symbol}  analisis teknikal + AI
+    GET  /api/scan?top=N        pindai semua simbol (teknikal; AI opsional)
+    POST /api/trade             {symbol, side?} → risk check → eksekusi
+    POST /api/close/{symbol}    tutup posisi
+    GET  /api/ai/account        sisa token AI BangunWeb
+
+Jalankan:  python run.py web   →  http://localhost:8000
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from config.settings import load_settings
+from core.ai_client import BangunWebAIClient
+from core.binance_client import BinanceAPIError, BinanceFuturesClient
+from core.executor import OrderExecutor
+from core.risk import RiskManager
+from core.strategy import SignalEngine
+from core.symbols import SymbolManager
+from utils.logger import get_logger
+
+log = get_logger(__name__)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+settings = load_settings()
+binance = BinanceFuturesClient(settings)
+ai_client = BangunWebAIClient(settings)
+symbol_manager = SymbolManager(binance, settings)
+engine = SignalEngine(settings, binance, ai_client)
+risk_manager = RiskManager(settings, binance, symbol_manager)
+executor = OrderExecutor(settings, binance, symbol_manager)
+
+app = FastAPI(title="binance-ai-future", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _guard(fn):
+    try:
+        return fn()
+    except BinanceAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _signal_payload(signal) -> dict:
+    return {
+        "symbol": signal.symbol,
+        "side": signal.side,
+        "confidence": signal.confidence,
+        "price": signal.price,
+        "stop_loss": signal.stop_loss,
+        "take_profit": signal.take_profit,
+        "technical_score": signal.technical_score,
+        "snapshot": signal.snapshot,
+        "ai": (
+            {
+                "signal": signal.ai.signal,
+                "confidence": signal.ai.confidence,
+                "reasoning": signal.ai.reasoning,
+                "risks": signal.ai.risks,
+                "model_used": signal.ai.model_used,
+            }
+            if signal.ai
+            else None
+        ),
+        "reasons": signal.reasons,
+    }
+
+
+# ----------------------------------------------------------------------
+@app.get("/api/health")
+def health() -> dict:
+    return {"ok": True, "service": "binance-ai-future", "config": settings.public_summary()}
+
+
+@app.get("/api/config")
+def config() -> dict:
+    return settings.public_summary()
+
+
+@app.get("/api/account")
+def account() -> dict:
+    def _load():
+        data = binance.account()
+        usdt = binance.asset_balance(settings.quote_asset)
+        return {
+            "wallet_balance": float(data.get("totalWalletBalance", 0)),
+            "unrealized_pnl": float(data.get("totalUnrealizedProfit", 0)),
+            "available": float(usdt.get("availableBalance", 0)),
+            "positions": binance.positions(),
+        }
+
+    return _guard(_load)
+
+
+@app.get("/api/positions")
+def positions() -> list:
+    return _guard(lambda: binance.positions())
+
+
+@app.get("/api/symbols")
+def symbols() -> dict:
+    return _guard(lambda: {"symbols": symbol_manager.all_symbols()})
+
+
+@app.get("/api/snapshot/{symbol}")
+def snapshot(symbol: str, interval: Optional[str] = None) -> dict:
+    return _guard(lambda: engine.snapshot_for(symbol.upper(), interval))
+
+
+@app.get("/api/analyze/{symbol}")
+def analyze(symbol: str, interval: Optional[str] = None, ai: bool = True) -> dict:
+    return _guard(lambda: _signal_payload(engine.analyze(symbol.upper(), interval, use_ai=ai)))
+
+
+@app.get("/api/scan")
+def scan(top: int = Query(10, ge=1, le=50), interval: Optional[str] = None, ai: bool = False) -> dict:
+    def _run():
+        signals = engine.scan(symbol_manager.all_symbols(), interval=interval, use_ai=ai)
+        return {"results": [_signal_payload(s) for s in signals[:top]]}
+
+    return _guard(_run)
+
+
+class TradeRequest(BaseModel):
+    symbol: str
+    side: Optional[str] = None  # LONG | SHORT; kosong = ikuti sinyal mesin
+
+
+@app.post("/api/trade")
+def trade(req: TradeRequest) -> dict:
+    def _run():
+        signal = engine.analyze(req.symbol.upper(), use_ai=True)
+        if req.side:
+            from core.strategy import _atr_levels
+
+            signal.side = req.side.upper()
+            sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), signal.side)
+            signal.stop_loss, signal.take_profit = sl, tp
+        if signal.side == "NEUTRAL":
+            return {"executed": False, "note": "Sinyal NEUTRAL — tidak dieksekusi.", "signal": _signal_payload(signal)}
+        decision = risk_manager.evaluate(signal)
+        if not decision.allowed:
+            return {
+                "executed": False,
+                "note": "Ditolak RiskManager.",
+                "reasons": decision.reasons,
+                "signal": _signal_payload(signal),
+            }
+        result = executor.execute(decision, signal.price)
+        return {
+            "executed": True,
+            "dry_run": result.dry_run,
+            "notes": result.notes,
+            "decision": {
+                "quantity": decision.quantity,
+                "leverage": decision.leverage,
+                "notional": decision.notional,
+                "stop_loss": decision.stop_loss,
+                "take_profit": decision.take_profit,
+            },
+        }
+
+    return _guard(_run)
+
+
+@app.post("/api/close/{symbol}")
+def close(symbol: str) -> dict:
+    return _guard(lambda: executor.close_position(symbol.upper()))
+
+
+@app.get("/api/ai/account")
+def ai_account() -> dict:
+    return _guard(lambda: ai_client.account())
+
+
+# ----------------------------------------------------------------------
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def run() -> None:
+    import uvicorn
+
+    log.info(
+        "Web UI berjalan di http://%s:%d (mode %s)",
+        settings.web_host,
+        settings.web_port,
+        "LIVE" if settings.is_live else "DRY-RUN",
+    )
+    uvicorn.run(app, host=settings.web_host, port=settings.web_port)
+
+
+if __name__ == "__main__":
+    run()

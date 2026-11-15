@@ -1,0 +1,273 @@
+"""Antarmuka terminal binance-ai-future.
+
+Contoh:
+    python run.py cli balance
+    python run.py cli symbols
+    python run.py cli scan --top 10 [--ai]
+    python run.py cli analyze BTCUSDT
+    python run.py cli positions
+    python run.py cli trade BTCUSDT --side LONG
+    python run.py cli close BTCUSDT
+    python run.py cli ai-account
+
+Semua perintah trading melewati SignalEngine → RiskManager → OrderExecutor,
+persis seperti Web UI. Dalam mode live, `trade` meminta konfirmasi manual.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+from config.settings import Settings, load_settings
+from core.ai_client import BangunWebAIClient
+from core.binance_client import BinanceAPIError, BinanceFuturesClient
+from core.executor import OrderExecutor
+from core.risk import RiskManager
+from core.strategy import SignalEngine
+from core.symbols import SymbolManager
+from utils.formatting import fmt_pct, fmt_price, fmt_qty, fmt_usd
+from utils.logger import get_logger
+
+log = get_logger(__name__)
+
+try:
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    HAS_RICH = True
+except Exception:  # pragma: no cover
+    HAS_RICH = False
+    console = None  # type: ignore
+
+
+def _print(text: str = "") -> None:
+    if HAS_RICH:
+        console.print(text)
+    else:
+        print(text)
+
+
+class App:
+    """Merakit semua komponen core sekali pakai untuk seluruh perintah."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.binance = BinanceFuturesClient(settings)
+        self.ai = BangunWebAIClient(settings)
+        self.symbols = SymbolManager(self.binance, settings)
+        self.engine = SignalEngine(settings, self.binance, self.ai)
+        self.risk = RiskManager(settings, self.binance, self.symbols)
+        self.executor = OrderExecutor(settings, self.binance, self.symbols)
+
+
+# ----------------------------------------------------------------------
+# Perintah-perintah
+# ----------------------------------------------------------------------
+def cmd_balance(app: App, _args) -> int:
+    account = app.binance.account()
+    usdt = app.binance.asset_balance(app.settings.quote_asset)
+    _print(f"[bold]Akun Futures[/bold] ({'TESTNET' if app.settings.binance_testnet else 'MAINNET'})")
+    _print(f"  Saldo dompet     : {fmt_usd(float(account.get('totalWalletBalance', 0)))}")
+    _print(f"  PnL belum realise: {fmt_usd(float(account.get('totalUnrealizedProfit', 0)))}")
+    _print(f"  Tersedia (USDT)  : {fmt_usd(float(usdt.get('availableBalance', 0)))}")
+    _print(f"  Mode trading     : {'LIVE' if app.settings.is_live else 'DRY-RUN (simulasi)'}")
+    return 0
+
+
+def cmd_symbols(app: App, _args) -> int:
+    symbols = app.symbols.all_symbols()
+    _print(f"{len(symbols)} simbol perpetual {app.settings.quote_asset} aktif:")
+    _print(", ".join(symbols))
+    return 0
+
+
+def cmd_scan(app: App, args) -> int:
+    symbols = app.symbols.all_symbols()
+    _print(f"Memindai {len(symbols)} simbol (interval {args.interval or app.settings.default_interval})...")
+    signals = app.engine.scan(symbols, interval=args.interval, use_ai=args.ai)
+    rows = [s for s in signals if s.side != "NEUTRAL"][: args.top]
+    if not rows:
+        _print("Tidak ada sinyal yang cukup kuat saat ini.")
+        return 0
+    if HAS_RICH:
+        table = Table(title=f"Top {len(rows)} sinyal")
+        for col in ("Simbol", "Sisi", "Harga", "Conf", "Skor", "SL", "TP"):
+            table.add_column(col)
+        for s in rows:
+            table.add_row(
+                s.symbol,
+                s.side,
+                fmt_price(s.price),
+                str(s.confidence),
+                str(s.technical_score),
+                fmt_price(s.stop_loss or 0),
+                fmt_price(s.take_profit or 0),
+            )
+        console.print(table)
+    else:
+        for s in rows:
+            _print(
+                f"{s.symbol:<14} {s.side:<5} {fmt_price(s.price):>14} "
+                f"conf={s.confidence} skor={s.technical_score} "
+                f"SL={fmt_price(s.stop_loss or 0)} TP={fmt_price(s.take_profit or 0)}"
+            )
+    return 0
+
+
+def cmd_analyze(app: App, args) -> int:
+    signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai)
+    snap = signal.snapshot
+    _print(f"[bold]{signal.symbol}[/bold] @ {fmt_price(signal.price)}  ({fmt_pct(snap['change_24h_pct'])} 24 jam)")
+    _print(f"  Tren {snap['trend']} | RSI {snap['rsi14']:.1f} | ATR {fmt_price(snap['atr14'] or 0)} "
+           f"| Funding {snap['funding_rate'] * 100:.4f}%")
+    _print(f"  Skor teknikal: {signal.technical_score} (-100..100)")
+    if signal.ai:
+        _print(f"  AI ({signal.ai.model_used}): {signal.ai.signal}, confidence {signal.ai.confidence}")
+        _print(f"  Alasan AI: {signal.ai.reasoning}")
+        for risk in signal.ai.risks:
+            _print(f"    ⚠ {risk}")
+    _print(f"  → SINYAL: [bold]{signal.side}[/bold] (confidence {signal.confidence})")
+    if signal.stop_loss:
+        _print(f"    SL {fmt_price(signal.stop_loss)} | TP {fmt_price(signal.take_profit or 0)}")
+    for reason in signal.reasons:
+        _print(f"    • {reason}")
+    return 0
+
+
+def cmd_positions(app: App, _args) -> int:
+    positions = app.binance.positions()
+    if not positions:
+        _print("Tidak ada posisi terbuka.")
+        return 0
+    for p in positions:
+        amt = float(p["positionAmt"])
+        _print(
+            f"{p['symbol']:<14} {'LONG' if amt > 0 else 'SHORT':<5} qty={fmt_qty(abs(amt))} "
+            f"entry={fmt_price(float(p['entryPrice']))} mark={fmt_price(float(p['markPrice']))} "
+            f"uPnL={fmt_usd(float(p['unRealizedProfit']))} lev={p['leverage']}x"
+        )
+    return 0
+
+
+def cmd_trade(app: App, args) -> int:
+    signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai)
+    if args.side:  # override sisi dari user; level SL/TP tetap dari mesin sinyal/ATR
+        from core.strategy import _atr_levels
+
+        signal.side = args.side.upper()
+        sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), signal.side)
+        signal.stop_loss, signal.take_profit = sl, tp
+        signal.reasons.append(f"Sisi di-override manual oleh user: {signal.side}; SL/TP dari ATR.")
+
+    if signal.side == "NEUTRAL":
+        _print("Sinyal NEUTRAL — tidak ada eksekusi. Jalankan `analyze` untuk detail.")
+        return 0
+
+    decision = app.risk.evaluate(signal)
+    for reason in decision.reasons:
+        _print(f"  [risk] {reason}")
+    if not decision.allowed:
+        _print("Eksekusi DITOLAK oleh RiskManager.")
+        return 1
+
+    if app.settings.is_live:
+        answer = input(
+            f"\nMODE LIVE — kirim order {decision.side} {decision.quantity} {decision.symbol} "
+            f"(notional {decision.notional:.2f} USDT)? Ketik simbol untuk konfirmasi: "
+        )
+        if answer.strip().upper() != decision.symbol:
+            _print("Dibatalkan.")
+            return 1
+
+    result = app.executor.execute(decision, signal.price)
+    for note in result.notes:
+        _print(f"  {note}")
+    return 0
+
+
+def cmd_close(app: App, args) -> int:
+    result = app.executor.close_position(args.symbol)
+    _print(str(result))
+    return 0
+
+
+def cmd_ai_account(app: App, _args) -> int:
+    info = app.ai.account()
+    _print("[bold]AI Router BangunWeb[/bold]")
+    _print(f"  Email          : {info.get('email')}")
+    _print(f"  Nama kunci     : {info.get('key_name')}")
+    _print(f"  Token tersisa  : {info.get('tokens_remaining')}")
+    _print(f"  Terpakai (kunci): {info.get('key_tokens_used')}")
+    last7 = info.get("last_7_days") or {}
+    _print(f"  7 hari terakhir: {last7.get('requests')} request, {last7.get('billed_tokens')} token")
+    return 0
+
+
+# ----------------------------------------------------------------------
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="binance-ai-future", description="Trading futures Binance berbantuan AI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("balance", help="Saldo & ringkasan akun futures")
+    sub.add_parser("symbols", help="Daftar semua simbol perpetual aktif")
+
+    p_scan = sub.add_parser("scan", help="Pindai semua simbol & peringkatkan sinyal")
+    p_scan.add_argument("--top", type=int, default=10)
+    p_scan.add_argument("--interval", default=None)
+    p_scan.add_argument("--ai", action="store_true", help="Nilai 5 kandidat teratas dengan AI")
+
+    p_an = sub.add_parser("analyze", help="Analisis teknikal + AI satu simbol")
+    p_an.add_argument("symbol")
+    p_an.add_argument("--interval", default=None)
+    p_an.add_argument("--no-ai", action="store_true")
+
+    sub.add_parser("positions", help="Posisi terbuka saat ini")
+
+    p_tr = sub.add_parser("trade", help="Eksekusi sinyal (dry-run kecuali mode live)")
+    p_tr.add_argument("symbol")
+    p_tr.add_argument("--side", choices=["LONG", "SHORT"], default=None)
+    p_tr.add_argument("--interval", default=None)
+    p_tr.add_argument("--no-ai", action="store_true")
+
+    p_cl = sub.add_parser("close", help="Tutup posisi satu simbol")
+    p_cl.add_argument("symbol")
+
+    sub.add_parser("ai-account", help="Sisa token & pemakaian AI BangunWeb")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    settings = load_settings()
+    app = App(settings)
+
+    handlers = {
+        "balance": cmd_balance,
+        "symbols": cmd_symbols,
+        "scan": cmd_scan,
+        "analyze": cmd_analyze,
+        "positions": cmd_positions,
+        "trade": cmd_trade,
+        "close": cmd_close,
+        "ai-account": cmd_ai_account,
+    }
+    try:
+        if settings.has_binance_keys and args.command not in {"ai-account"}:
+            try:
+                app.binance.sync_time()
+            except BinanceAPIError:
+                pass  # sinkronisasi waktu bersifat best-effort
+        return handlers[args.command](app, args)
+    except BinanceAPIError as exc:
+        _print(f"[red]Error Binance:[/red] {exc}")
+        return 2
+    except Exception as exc:  # permukaan error yang rapi untuk user terminal
+        _print(f"[red]Error:[/red] {exc}")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

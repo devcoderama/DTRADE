@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>binance-ai-future — Dashboard Trading AI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">◆</span>
+    <div>
+      <h1>binance-ai-future</h1>
+      <p class="sub">Binance USDⓈ-M Futures × BangunWeb AI</p>
+    </div>
+  </div>
+  <div class="badges">
+    <span id="badge-network" class="badge">…</span>
+    <span id="badge-mode" class="badge">…</span>
+    <span id="badge-ai" class="badge">…</span>
+  </div>
+</header>
+
+<main>
+  <!-- Ringkasan akun -->
+  <section class="cards">
+    <div class="card">
+      <span class="label">Saldo Dompet</span>
+      <strong id="acc-wallet">—</strong>
+    </div>
+    <div class="card">
+      <span class="label">Tersedia</span>
+      <strong id="acc-available">—</strong>
+    </div>
+    <div class="card">
+      <span class="label">PnL Belum Realisasi</span>
+      <strong id="acc-upnl">—</strong>
+    </div>
+    <div class="card">
+      <span class="label">Token AI Tersisa</span>
+      <strong id="acc-ai">—</strong>
+    </div>
+  </section>
+
+  <!-- Analisis simbol -->
+  <section class="panel">
+    <h2>Analisis Simbol</h2>
+    <div class="row">
+      <input id="symbol-input" list="symbol-list" placeholder="cth: BTCUSDT" autocomplete="off">
+      <datalist id="symbol-list"></datalist>
+      <button id="btn-analyze" class="primary">Analisis + AI</button>
+    </div>
+    <div id="analysis" class="analysis-empty">Pilih simbol lalu klik Analisis untuk melihat snapshot teknikal dan penilaian AI.</div>
+  </section>
+
+  <!-- Pemindai -->
+  <section class="panel">
+    <div class="row space-between">
+      <h2>Pemindai Semua Simbol</h2>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="scan-ai"> Nilai AI untuk 5 teratas</label>
+        <button id="btn-scan" class="primary">Pindai Sekarang</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="scan-table">
+        <thead>
+          <tr><th>Simbol</th><th>Sisi</th><th>Harga</th><th>Keyakinan</th><th>Skor</th><th>Stop Loss</th><th>Take Profit</th><th></th></tr>
+        </thead>
+        <tbody><tr><td colspan="8" class="muted">Belum ada hasil pindai.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Posisi -->
+  <section class="panel">
+    <div class="row space-between">
+      <h2>Posisi Terbuka</h2>
+      <button id="btn-refresh" class="ghost">↻ Muat Ulang</button>
+    </div>
+    <div class="table-wrap">
+      <table id="pos-table">
+        <thead>
+          <tr><th>Simbol</th><th>Sisi</th><th>Qty</th><th>Entry</th><th>Mark</th><th>uPnL</th><th>Lev</th><th></th></tr>
+        </thead>
+        <tbody><tr><td colspan="8" class="muted">Tidak ada posisi terbuka.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="disclaimer">
+    ⚠️ Trading futures berisiko tinggi. Mode <b>dry-run</b> hanya mensimulasikan order.
+    AI memberikan penilaian, bukan jaminan. Selalu periksa sebelum eksekusi live.
+  </p>
+</main>
+
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
