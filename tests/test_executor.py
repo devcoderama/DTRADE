@@ -49,13 +49,6 @@ class FakeBinance:
             if self.entry_unknown:
                 raise ConnectionError("timeout — hasil tidak diketahui")
             return dict(self._entry_order)
-        if order_type in {"STOP_MARKET", "TAKE_PROFIT_MARKET"}:
-            if order_type == "STOP_MARKET" and self.fail_sl:
-                raise BinanceAPIError(400, -2021, "Order would immediately trigger")
-            order = {"orderId": len(self.orders) + 10, "type": order_type, "status": "NEW"}
-            self._open.append(order)
-            self.orders.append(order)
-            return order
         if order_type == "MARKET" and reduce_only:
             self.position_amt = 0.0
             self.orders.append({"type": "EMERGENCY_CLOSE"})
@@ -64,6 +57,28 @@ class FakeBinance:
 
     def cancel_all_orders(self, symbol):
         self._open = []
+
+    # --- Algo Order API (jalur SL/TP sejak migrasi Binance) ---
+    def place_algo_order(self, symbol, side, order_type, trigger_price,
+                         quantity=None, close_position=False, client_algo_id=None):
+        if order_type == "STOP_MARKET" and self.fail_sl:
+            raise BinanceAPIError(400, -4120, "simulasi penolakan algo order")
+        order = {
+            "algoId": len(self.orders) + 10, "type": order_type,
+            "clientAlgoId": client_algo_id, "algoStatus": "NEW",
+            "triggerPrice": str(trigger_price),
+        }
+        self._open.append(order)
+        self.orders.append(order)
+        return order
+
+    def open_algo_orders(self, symbol=None):
+        return list(self._open)
+
+    def cancel_all_algo_orders(self, symbol):
+        count = len(self._open)
+        self._open = []
+        return count
         return {}
 
 

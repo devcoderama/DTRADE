@@ -88,10 +88,12 @@ class OrderExecutor:
         settings: Settings,
         binance: BinanceFuturesClient,
         symbols: SymbolManager,
+        db=None,
     ):
         self._settings = settings
         self._binance = binance
         self._symbols = symbols
+        self._db = db  # cermin opsional ke Supabase/PostgreSQL (core.database)
         self._lock = threading.Lock()
         self._state_path = Path(settings.risk_state_path).with_name("execution_state.jsonl")
 
@@ -116,6 +118,8 @@ class OrderExecutor:
                 fh.write(json.dumps(record) + "\n")
         except OSError as exc:
             log.error("Gagal mencatat status eksekusi: %s", exc)
+        if self._db is not None:
+            self._db.insert_execution_event(record)  # kegagalan DB diabaikan di dalamnya
         log.info("EXEC %s %s → %s %s", result.symbol, result.client_order_id or "-", state, note)
 
     def pending_recovery(self) -> list[dict]:
@@ -172,20 +176,28 @@ class OrderExecutor:
         exit_side: str,
         order_type: str,
         price: float,
+        client_algo_id: Optional[str] = None,
     ) -> Optional[dict]:
-        """Pasang satu order proteksi dengan retry + verifikasi open orders."""
+        """Pasang satu order proteksi (SL/TP) dengan retry + verifikasi.
+
+        Order kondisional dikirim lewat Algo Order API Binance
+        (/fapi/v1/algoOrder) — endpoint order klasik menolaknya dengan
+        error -4120. Verifikasi membaca daftar algo order terbuka dan
+        mencocokkan clientAlgoId (idempoten) atau tipenya.
+        """
         attempts = max(1, self._settings.protection_retries)
         filters = self._symbols.filters(symbol)
         stop_price = filters.round_price(price)
         last_error: Optional[Exception] = None
         for attempt in range(attempts):
             try:
-                placed = self._binance.place_order(
+                placed = self._binance.place_algo_order(
                     symbol=symbol,
                     side=exit_side,
                     order_type=order_type,
-                    stop_price=stop_price,
+                    trigger_price=stop_price,
                     close_position=True,
+                    client_algo_id=client_algo_id,
                 )
             except BinanceAPIError as exc:
                 last_error = exc
@@ -194,13 +206,20 @@ class OrderExecutor:
                     order_type, symbol, attempt + 1, attempts, exc,
                 )
                 placed = None
-            # Verifikasi: order proteksi sejenis harus terlihat di open orders.
+            # Verifikasi: order proteksi harus terlihat di open algo orders.
             try:
-                open_orders = self._binance.open_orders(symbol)
+                open_orders = self._binance.open_algo_orders(symbol)
             except BinanceAPIError as exc:
-                log.warning("Verifikasi open orders %s gagal: %s", symbol, exc)
+                log.warning("Verifikasi algo orders %s gagal: %s", symbol, exc)
                 open_orders = []
-            found = next((o for o in open_orders if o.get("type") == order_type), None)
+            found = next(
+                (
+                    o for o in open_orders
+                    if (client_algo_id and o.get("clientAlgoId") == client_algo_id)
+                    or (o.get("type") or o.get("orderType")) == order_type
+                ),
+                None,
+            )
             if found is not None:
                 return found
             if placed is not None and not open_orders:
@@ -216,6 +235,11 @@ class OrderExecutor:
     def _emergency_close(self, symbol: str) -> bool:
         """Tutup posisi SEKARANG pada harga pasar (reduce-only). True bila posisi hilang."""
         try:
+            # Bersihkan dulu proteksi yang mungkin sempat terpasang sebagian.
+            try:
+                self._binance.cancel_all_algo_orders(symbol)
+            except Exception as exc:  # pembatalan algo tidak boleh menghalangi penutupan
+                log.warning("Batalkan algo orders %s saat emergency close gagal: %s", symbol, exc)
             positions = self._binance.positions(symbol)
             if not positions:
                 return True
@@ -323,7 +347,8 @@ class OrderExecutor:
             sl_order = None
             if decision.stop_loss:
                 sl_order = self._place_protection(
-                    decision.symbol, exit_side, "STOP_MARKET", decision.stop_loss
+                    decision.symbol, exit_side, "STOP_MARKET", decision.stop_loss,
+                    client_algo_id=f"{result.client_order_id}-sl"[:36],
                 )
                 result.stop_loss_order = sl_order
             if sl_order is None:
@@ -341,7 +366,8 @@ class OrderExecutor:
 
             if decision.take_profit:
                 tp_order = self._place_protection(
-                    decision.symbol, exit_side, "TAKE_PROFIT_MARKET", decision.take_profit
+                    decision.symbol, exit_side, "TAKE_PROFIT_MARKET", decision.take_profit,
+                    client_algo_id=f"{result.client_order_id}-tp"[:36],
                 )
                 result.take_profit_order = tp_order
                 if tp_order is None:
@@ -380,6 +406,10 @@ class OrderExecutor:
             marker = ExecutionResult(symbol=symbol, side="LONG" if amt > 0 else "SHORT", dry_run=False)
             self._transition(marker, CLOSING)
             self._binance.cancel_all_orders(symbol)
+            try:
+                self._binance.cancel_all_algo_orders(symbol)
+            except Exception as exc:  # SL/TP algo harus ikut dibatalkan; kegagalan dicatat saja
+                log.warning("Batalkan algo orders %s saat tutup posisi gagal: %s", symbol, exc)
             order = self._binance.place_order(
                 symbol=symbol,
                 side=side,

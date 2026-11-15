@@ -50,6 +50,7 @@ from core.ai_providers import create_ai_provider, describe_providers
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.broadcaster import run_broadcast
+from core.database import build_database
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.market_stream import MarketStream
@@ -67,7 +68,8 @@ settings = load_settings()
 binance = BinanceFuturesClient(settings)
 ai_client = build_ai_provider(settings)
 notifier = build_notifier(settings)
-journal = TradeJournal(settings.trade_journal_path)
+database = build_database(settings)
+journal = TradeJournal(settings.trade_journal_path, db=database)
 backtester = Backtester(binance)
 symbol_manager = SymbolManager(binance, settings)
 engine = SignalEngine(settings, binance, ai_client)
@@ -88,7 +90,7 @@ def _refresh_ai_from_store() -> None:
         provider, model = load_choice(settings)
         log.info("Pilihan AI dimuat ulang: %s:%s", provider, model)
 risk_manager = RiskManager(settings, binance, symbol_manager)
-executor = OrderExecutor(settings, binance, symbol_manager)
+executor = OrderExecutor(settings, binance, symbol_manager, db=database)
 market_stream = MarketStream(settings)
 
 app = FastAPI(title="binance-ai-future", version="1.0.0")
@@ -365,6 +367,7 @@ def config() -> dict:
     summary["ai_provider"] = provider
     summary["ai_model"] = model
     summary["ai_configured"] = bool(ai_client is not None and ai_client.is_configured())
+    summary["database"] = database.health() if database is not None else {"configured": False, "ok": None}
     return summary
 
 

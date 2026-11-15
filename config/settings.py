@@ -134,6 +134,7 @@ class Settings:
     rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
     mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
     market_ws_enabled: bool = True    # WebSocket data pasar real-time untuk grafik Web UI
+    database_url: str = ""            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
 
     # --- Web UI ---
     web_host: str = "0.0.0.0"
@@ -178,6 +179,7 @@ class Settings:
             "daily_loss_limit_pct": self.daily_loss_limit_pct,
             "weekly_loss_limit_pct": self.weekly_loss_limit_pct,
             "min_risk_reward": self.min_risk_reward,
+            "database_configured": bool(self.database_url),
             "default_interval": self.default_interval,
             "quote_asset": self.quote_asset,
         }
@@ -241,6 +243,7 @@ def load_settings() -> Settings:
         rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
         mtf_enabled=_get_bool("MTF_ENABLED", True),
         market_ws_enabled=_get_bool("MARKET_WS_ENABLED", True),
+        database_url=os.getenv("DATABASE_URL", "").strip(),
         default_interval=os.environ.get("DEFAULT_INTERVAL", "15m").strip(),
         quote_asset=os.environ.get("QUOTE_ASSET", "USDT").strip().upper(),
         web_host=os.environ.get("WEB_HOST", "0.0.0.0").strip(),

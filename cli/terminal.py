@@ -36,6 +36,7 @@ from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.broadcaster import run_broadcast
 from core.executor import OrderExecutor
+from core.database import build_database
 from core.journal import TradeJournal
 from core.notifier import build_notifier
 from core.risk import RiskManager
@@ -98,11 +99,12 @@ class App:
         self.binance = BinanceFuturesClient(settings)
         self.ai = build_ai_provider(settings)
         self.notifier = build_notifier(settings)
-        self.journal = TradeJournal(settings.trade_journal_path)
+        self.database = build_database(settings)
+        self.journal = TradeJournal(settings.trade_journal_path, db=self.database)
         self.symbols = SymbolManager(self.binance, settings)
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
-        self.executor = OrderExecutor(settings, self.binance, self.symbols)
+        self.executor = OrderExecutor(settings, self.binance, self.symbols, db=self.database)
 
 
 # ----------------------------------------------------------------------

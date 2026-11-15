@@ -46,6 +46,7 @@ binance-ai-future/
 │   ├── backtest.py          ← mesin backtest deterministik atas klines historis
 │   ├── journal.py           ← jurnal perdagangan JSONL (jejak audit eksekusi)
 │   ├── market_stream.py     ← WebSocket data pasar real-time (kline + mark price, reconnect & deteksi basi)
+│   ├── database.py          ← cermin opsional jurnal & peristiwa eksekusi ke Supabase/PostgreSQL (DATABASE_URL)
 │   ├── notifier.py          ← notifikasi Telegram (teks + foto) untuk eksekusi & sinyal
 │   ├── chart_image.py       ← render grafik candlestick PNG (matplotlib) untuk siaran Telegram
 │   └── broadcaster.py       ← putaran siaran: pindai → saring → AI → kirim sinyal + grafik ke Telegram
@@ -108,6 +109,7 @@ binance-ai-future/
 │   ├── test_backtest.py     ← expectancy, Sharpe, Sortino, rugi beruntun maksimum
 │   ├── test_market_stream.py ← parsing pesan WS, cache candle, backoff reconnect, deteksi basi
 │   ├── test_ai_retry.py     ← klasifikasi error AI & retry post_with_retry
+│   ├── test_database.py     ← skema & insert Supabase terparameter + kegagalan DB tidak fatal
 │   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit, endpoint WS
 │
 ├── data/                    ← DATA RUNTIME (dibuat otomatis, di-gitignore)
@@ -148,6 +150,7 @@ build Android (`android/app/build/`, `android/.gradle/`).
 | `cli/dashboard.py` | Dashboard terminal interaktif (Textual): header + jam live, Market Overview, grafik, tabel sinyal (backtest / hasil pindai), metrik kunci; penyegaran ringan berkala tanpa memanggil AI. Hanya memantau | Mengeksekusi order |
 | `cli/term_chart.py` | Merender klines mentah menjadi grafik candlestick ANSI (plotext 5.x): candle + EMA20/EMA50 + panel volume; ukuran dibatasi ukuran terminal. Dipakai perintah `chart` dan dashboard Textual | Mengambil data sendiri |
 | `core/market_stream.py` | Satu koneksi WebSocket Binance (combined stream) untuk kline + mark price simbol yang dipantau: reconnect exponential backoff, heartbeat, deteksi data basi, cache candle terakhir, dan daftar pendengar. Riwayat tetap dari REST — modul ini hanya mendorong pembaruan | Menempatkan order; mengambil keputusan |
+| `core/database.py` | Cermin opsional ke Supabase/PostgreSQL (`DATABASE_URL`): membuat tabel `trade_journal` & `execution_events`, menulis dengan query terparameter. JSONL lokal tetap sumber utama; kegagalan DB hanya dicatat sebagai warning dan tidak pernah mengganggu trading. Order kondisional (SL/TP) dikirim `core/binance_client.py` lewat Algo Order API (`place_algo_order`) karena endpoint order klasik menolaknya (error -4120, terverifikasi di testnet) | Menjadi sumber kebenaran; melempar error ke jalur trading |
 | `web/app.py` | Antarmuka web: endpoint REST tipis di atas core yang sama persis dengan CLI (`/api/analyze`, `/api/scan`, `/api/klines`, `/api/backtest`, `/api/trade`, `/api/broadcast`, `/api/ai/model`, `/api/config`, `/api/auth/login`, ...), endpoint WebSocket `/api/ws/klines/{symbol}` (autentikasi token manual) yang meneruskan candle real-time dari `market_stream.py` ke grafik, middleware keamanan (autentikasi token admin/viewer, CORS non-wildcard dari `.env`, rate limit per IP, batas ukuran request), validasi startup + pemeriksaan pemulihan eksekusi, melayani berkas statis, dan menjalankan thread siaran otomatis berkala bila Telegram terkonfigurasi | Logika bisnis sendiri |
 | `web/static/index.html` | Struktur halaman: sidebar, hero, kartu statistik, workspace analisis (panel analisis + grafik + sentimen), baris sinyal, panel AI, pemindai, posisi | — |
 | `web/static/app.js` | Logika frontend: fetch API, render analisis/sentimen/gauge, grafik Lightweight Charts (EMA20/50, volume, crosshair OHLCV), backtest + kurva ekuitas, dan pengelola tata letak resizable (seret panel, sembunyikan, maximize, Reset Layout, tersimpan di localStorage) | Menyimpan kunci API |

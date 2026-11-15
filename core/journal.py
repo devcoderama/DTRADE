@@ -23,8 +23,9 @@ log = get_logger(__name__)
 
 
 class TradeJournal:
-    def __init__(self, path: str):
+    def __init__(self, path: str, db=None):
         self._path = Path(path)
+        self._db = db  # cermin opsional ke Supabase/PostgreSQL (core.database)
 
     @property
     def path(self) -> Path:
@@ -39,6 +40,9 @@ class TradeJournal:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         except OSError as exc:
             log.warning("Gagal menulis jurnal perdagangan: %s", exc)
+            row = {"time": int(time.time() * 1000), **entry}
+        if self._db is not None:
+            self._db.insert_journal(row)  # kegagalan DB diabaikan di dalam Database
 
     def record_execution(self, decision: Any, result: Any, reference_price: float) -> None:
         self.record(

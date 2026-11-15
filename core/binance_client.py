@@ -274,3 +274,69 @@ class BinanceFuturesClient:
 
     def cancel_all_orders(self, symbol: str) -> dict:
         return self._request("DELETE", "/fapi/v1/allOpenOrders", {"symbol": symbol}, signed=True)
+
+    # ------------------------------------------------------------------
+    # Algo Order API — order kondisional (SL/TP) WAJIB lewat sini.
+    # Sejak migrasi Binance, /fapi/v1/order menolak STOP_MARKET dkk.
+    # dengan error -4120 ("use the Algo Order API endpoints instead").
+    # Terverifikasi langsung di testnet pada 2026-11-16.
+    # ------------------------------------------------------------------
+    def place_algo_order(
+        self,
+        symbol: str,
+        side: str,
+        order_type: str,  # STOP_MARKET | TAKE_PROFIT_MARKET | STOP | TAKE_PROFIT
+        trigger_price: float,
+        quantity: Optional[float] = None,
+        close_position: bool = False,
+        client_algo_id: Optional[str] = None,
+    ) -> dict:
+        params: dict[str, Any] = {
+            "algoType": "CONDITIONAL",
+            "symbol": symbol,
+            "side": side,
+            "type": order_type,
+            "triggerPrice": trigger_price,
+        }
+        if client_algo_id:
+            params["clientAlgoId"] = client_algo_id
+        if close_position:
+            params["closePosition"] = "true"
+        elif quantity is not None:
+            params["quantity"] = quantity
+            params["reduceOnly"] = "true"
+        log.info("ALGO ORDER → %s", params)
+        result = self._request("POST", "/fapi/v1/algoOrder", params, signed=True)
+        log.info("ALGO ORDER ✓ algoId=%s status=%s", result.get("algoId"), result.get("algoStatus"))
+        return result
+
+    def open_algo_orders(self, symbol: Optional[str] = None) -> list[dict]:
+        params = {"symbol": symbol} if symbol else {}
+        result = self._request("GET", "/fapi/v1/openAlgoOrders", params, signed=True)
+        if isinstance(result, list):
+            return result
+        return result.get("orders", []) if isinstance(result, dict) else []
+
+    def cancel_algo_order(
+        self,
+        symbol: str,
+        algo_id: Optional[int] = None,
+        client_algo_id: Optional[str] = None,
+    ) -> dict:
+        params: dict[str, Any] = {"symbol": symbol}
+        if algo_id is not None:
+            params["algoId"] = algo_id
+        if client_algo_id:
+            params["clientAlgoId"] = client_algo_id
+        return self._request("DELETE", "/fapi/v1/algoOrder", params, signed=True)
+
+    def cancel_all_algo_orders(self, symbol: str) -> int:
+        """Batalkan satu per satu — tidak ada endpoint massal yang andal."""
+        count = 0
+        for order in self.open_algo_orders(symbol):
+            try:
+                self.cancel_algo_order(symbol, algo_id=order.get("algoId"))
+                count += 1
+            except BinanceAPIError as exc:
+                log.warning("Gagal membatalkan algo order %s: %s", order.get("algoId"), exc)
+        return count
