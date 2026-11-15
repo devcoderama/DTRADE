@@ -104,6 +104,105 @@ def atr(
     return value
 
 
+def adx(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int = 14,
+) -> Optional[float]:
+    """Average Directional Index (Wilder) — kekuatan tren, 0..100.
+
+    Mengembalikan None bila data kurang dari 2× period.
+    """
+    n = len(closes)
+    if n < 2 * period + 1:
+        return None
+    trs: list[float] = []
+    plus_dm: list[float] = []
+    minus_dm: list[float] = []
+    for i in range(1, n):
+        up = highs[i] - highs[i - 1]
+        down = lows[i - 1] - lows[i]
+        plus_dm.append(up if (up > down and up > 0) else 0.0)
+        minus_dm.append(down if (down > up and down > 0) else 0.0)
+        trs.append(max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        ))
+
+    def _wilder_smooth(values: list[float]) -> list[float]:
+        out = [sum(values[:period])]
+        for v in values[period:]:
+            out.append(out[-1] - out[-1] / period + v)
+        return out
+
+    s_tr = _wilder_smooth(trs)
+    s_plus = _wilder_smooth(plus_dm)
+    s_minus = _wilder_smooth(minus_dm)
+    dxs: list[float] = []
+    for tr_v, p_v, m_v in zip(s_tr, s_plus, s_minus):
+        if tr_v == 0:
+            dxs.append(0.0)
+            continue
+        plus_di = 100.0 * p_v / tr_v
+        minus_di = 100.0 * m_v / tr_v
+        denom = plus_di + minus_di
+        dxs.append(100.0 * abs(plus_di - minus_di) / denom if denom else 0.0)
+    if len(dxs) < period:
+        return None
+    adx_v = sum(dxs[:period]) / period
+    for dx in dxs[period:]:
+        adx_v = (adx_v * (period - 1) + dx) / period
+    return round(adx_v, 2)
+
+
+def vwap(klines: list[list]) -> Optional[float]:
+    """Volume Weighted Average Price atas jendela klines yang diberikan."""
+    total_pv = 0.0
+    total_v = 0.0
+    for k in klines:
+        high, low, close, vol = float(k[2]), float(k[3]), float(k[4]), float(k[5])
+        total_pv += ((high + low + close) / 3.0) * vol
+        total_v += vol
+    if total_v <= 0:
+        return None
+    return total_pv / total_v
+
+
+def classify_regime(snapshot: dict) -> str:
+    """Klasifikasi rezim pasar dari snapshot — murni & deterministik.
+
+    Nilai: bullish_trending | bearish_trending | sideways |
+    high_volatility | low_volatility | breakout | uncertain.
+    Strategi memakai ini sebagai konteks (bukan pemicu order).
+    """
+    trend = snapshot.get("trend")
+    adx_v = snapshot.get("adx14")
+    atr_pct = snapshot.get("atr_pct")
+    pct_b = snapshot.get("bb_pct_b")
+    last_vol = snapshot.get("last_volume")
+    avg_vol = snapshot.get("avg_volume")
+
+    if (
+        pct_b is not None and (pct_b > 1.0 or pct_b < 0.0)
+        and last_vol and avg_vol and avg_vol > 0 and last_vol > 1.5 * avg_vol
+    ):
+        return "breakout"
+    if atr_pct is not None and atr_pct >= 3.0:
+        return "high_volatility"
+    if adx_v is not None and adx_v >= 25:
+        if trend == "UPTREND":
+            return "bullish_trending"
+        if trend == "DOWNTREND":
+            return "bearish_trending"
+    if atr_pct is not None and atr_pct <= 0.5 and (adx_v is None or adx_v < 20):
+        return "low_volatility"
+    if adx_v is not None and adx_v < 20:
+        return "sideways"
+    return "uncertain"
+
+
 def pct_change(values: list[float], lookback: int) -> Optional[float]:
     if len(values) <= lookback or values[-lookback - 1] == 0:
         return None
@@ -133,6 +232,8 @@ def build_snapshot(
     macd_v = macd(closes)
     bb = bollinger_bands(closes)
     atr_v = atr(highs, lows, closes)
+    adx_v = adx(highs, lows, closes)
+    vwap_v = vwap(klines)
 
     trend = "SIDEWAYS"
     if ema20 is not None and ema50 is not None:
@@ -141,13 +242,16 @@ def build_snapshot(
         elif price < ema20 < ema50:
             trend = "DOWNTREND"
 
-    return {
+    snapshot = {
         "symbol": symbol,
         "price": price,
         "change_24h_pct": float(ticker24h.get("priceChangePercent", 0) or 0),
         "volume_24h_quote": float(ticker24h.get("quoteVolume", 0) or 0),
         "ema20": ema20,
         "ema50": ema50,
+        "ema200": ema(closes, 200),
+        "adx14": adx_v,
+        "vwap": vwap_v,
         "trend": trend,
         "rsi14": rsi(closes),
         "macd": macd_v["macd"],
@@ -167,3 +271,5 @@ def build_snapshot(
         "open_interest": open_interest,
         "open_interest_usd": (open_interest * price) if open_interest else None,
     }
+    snapshot["regime"] = classify_regime(snapshot)
+    return snapshot

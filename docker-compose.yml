@@ -1,0 +1,13 @@
+services:
+  binance-ai-future:
+    build: .
+    container_name: binance-ai-future
+    restart: unless-stopped
+    # File .env berisi SEMUA secret — file ini tidak ikut image/repo.
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs

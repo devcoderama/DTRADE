@@ -22,6 +22,10 @@ binance-ai-future/
 ├── requirements.txt         ← dependensi Python (cross-platform)
 ├── .env.example             ← contoh konfigurasi (salin menjadi .env)
 ├── .gitignore
+├── Dockerfile               ← image produksi (python:3.12-slim, healthcheck /api/health)
+├── docker-compose.yml       ← satu layanan; .env sebagai env_file, data/ & logs/ sebagai volume
+├── .dockerignore
+├── .github/workflows/ci.yml ← CI: pasang dependensi + jalankan pytest di setiap push
 ├── run.py                   ← pintu masuk utama: `web` | `cli`
 │
 ├── config/                  ← KONFIGURASI
@@ -35,10 +39,10 @@ binance-ai-future/
 │   ├── ai_providers.py      ← lapisan multi-provider AI + factory (OpenAI, Anthropic, DeepSeek, Grok, Nous, custom)
 │   ├── ai_choice.py         ← pilihan provider+model AI runtime (tersimpan di data/ai_settings.json, tanpa edit .env)
 │   ├── symbols.py           ← penemuan & filter semua simbol futures
-│   ├── indicators.py        ← indikator teknikal murni (EMA, RSI, MACD, ATR, Bollinger)
-│   ├── strategy.py          ← mesin sinyal: skor teknikal + konfirmasi AI (+ cache analisis 180 dtk)
-│   ├── risk.py              ← manajemen risiko & position sizing
-│   ├── executor.py          ← eksekusi order (dry-run / live), SL & TP
+│   ├── indicators.py        ← indikator teknikal murni (EMA 20/50/200, RSI, MACD, ATR, Bollinger, ADX, VWAP) + klasifikasi rezim pasar
+│   ├── strategy.py          ← mesin sinyal: skor teknikal + konfirmasi AI (+ cache analisis 180 dtk, konteks multi-timeframe & rezim)
+│   ├── risk.py              ← manajemen risiko: validasi SL/TP & R/R, sizing, eksposur, kunci rugi harian/mingguan persisten
+│   ├── executor.py          ← eksekusi order berstatus (state machine), idempotency, verifikasi fill & proteksi, emergency close
 │   ├── backtest.py          ← mesin backtest deterministik atas klines historis
 │   ├── journal.py           ← jurnal perdagangan JSONL (jejak audit eksekusi)
 │   ├── notifier.py          ← notifikasi Telegram (teks + foto) untuk eksekusi & sinyal
@@ -53,7 +57,7 @@ binance-ai-future/
 │
 ├── web/                     ← ANTARMUKA WEB
 │   ├── __init__.py
-│   ├── app.py               ← server FastAPI + REST API + thread siaran otomatis + static files
+│   ├── app.py               ← server FastAPI + REST API + middleware keamanan (token/CORS/rate limit) + thread siaran otomatis + static files
 │   └── static/
 │       ├── index.html       ← dashboard satu halaman (responsif, mobile-ready)
 │       ├── app.js           ← logika frontend (fetch API, render, grafik, tata letak resizable)
@@ -95,8 +99,18 @@ binance-ai-future/
 │   ├── cli-chart.png        ← CLI: grafik candlestick terminal (plotext)
 │   └── cli-dashboard.png    ← CLI: dashboard interaktif Textual
 │
+├── tests/                   ← UJI OTOMATIS pytest (semua memakai mock — tanpa jaringan/order live)
+│   ├── conftest.py
+│   ├── test_indicators.py   ← EMA/RSI/ADX/VWAP + klasifikasi rezim
+│   ├── test_risk.py         ← validasi SL/TP, R/R, kunci harian persisten, rugi beruntun
+│   ├── test_executor.py     ← state machine: jalur sukses, SL gagal → emergency close, rekonsiliasi entri
+│   ├── test_backtest.py     ← expectancy, Sharpe, Sortino, rugi beruntun maksimum
+│   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit
+│
 ├── data/                    ← DATA RUNTIME (dibuat otomatis, di-gitignore)
-│   └── ai_settings.json     ← pilihan provider+model AI yang dipilih lewat Web UI / CLI
+│   ├── ai_settings.json     ← pilihan provider+model AI yang dipilih lewat Web UI / CLI
+│   ├── risk_state.json      ← baseline ekuitas awal hari/minggu + status kunci harian RiskManager
+│   └── execution_state.jsonl ← jejak transisi status eksekusi (satu baris per perubahan status)
 │
 └── logs/                    ← LOG & JURNAL RUNTIME (dibuat otomatis, di-gitignore)
     └── trades.jsonl         ← jurnal eksekusi (satu baris JSON per eksekusi)
@@ -120,8 +134,8 @@ build Android (`android/app/build/`, `android/.gradle/`).
 | `core/symbols.py` | Memuat `exchangeInfo`, menyaring perpetual USDT yang `TRADING`, menyediakan filter presisi (stepSize, tickSize, minNotional) + pembulatan qty/harga, dan peringkat volume | Memanggil order |
 | `core/indicators.py` | Fungsi matematika murni dari deret harga → snapshot indikator (tren EMA, RSI, MACD, Bollinger %B, ATR, funding, perubahan harga). Tanpa I/O, tanpa jaringan — mudah diuji | Mengambil data sendiri |
 | `core/strategy.py` | Menggabungkan snapshot indikator menjadi skor teknikal, meminta penilaian AI, menghasilkan `TradeSignal` (side, confidence, SL, TP, alasan). Memiliki cache analisis (bawaan 180 detik, `ANALYSIS_CACHE_TTL_SEC`) agar Web UI, CLI, eksekusi, dan siaran memakai hasil yang sama dalam satu jendela waktu | Menempatkan order |
-| `core/risk.py` | Menghitung ukuran posisi dari % risiko, memeriksa batas (maks posisi, leverage, rugi harian), memberi/menolak izin eksekusi | Menempatkan order |
-| `core/executor.py` | Satu-satunya modul yang menempatkan/membatalkan order. Menghormati mode `dry_run` vs `live`; memasang SL/TP | Mengambil keputusan sinyal |
+| `core/risk.py` | Otoritas risiko tertinggi: memvalidasi ulang arah SL/TP & rasio R/R & jarak stop minimum, menghitung ukuran posisi dari % risiko, memeriksa batas posisi/leverage/eksposur, dan menegakkan kunci rugi harian (berbasis perubahan ekuitas, persisten di `data/risk_state.json`), batas mingguan, serta perlindungan rugi beruntun | Menempatkan order |
+| `core/executor.py` | Satu-satunya modul yang menempatkan/membatalkan order, sebagai mesin status persisten (CREATED→…→PROTECTED/CLOSED/FAILED/RECOVERY_REQUIRED di `data/execution_state.jsonl`). Entri memakai idempotency key + verifikasi fill; SL/TP dipasang dengan retry & verifikasi; SL gagal total → emergency close. Semua eksekusi dilindungi satu lock proses | Mengambil keputusan sinyal |
 | `core/backtest.py` | Simulasi aturan strategi atas klines historis: entri candle berikutnya, SL/TP ATR, fee taker, ukuran berbasis risiko; menghasilkan statistik + kurva ekuitas | Memanggil AI (tidak deterministik & berbayar) |
 | `core/journal.py` | Menambah satu baris JSON per eksekusi ke jurnal dan membaca entri terakhir | Mengubah/menghapus catatan lama |
 | `core/notifier.py` | Mengirim pesan & foto ke Telegram (user id atau channel id) lewat Bot API: hasil eksekusi, sinyal kuat, pesan uji. Kegagalan kirim tidak pernah menggagalkan trading | Mengambil keputusan trading |
@@ -130,7 +144,7 @@ build Android (`android/app/build/`, `android/.gradle/`).
 | `cli/terminal.py` | Antarmuka terminal: menerjemahkan perintah user → panggilan core. Perintah: `balance`, `symbols`, `scan`, `analyze`, `positions`, `trade`, `close`, `backtest`, `watch`, `journal`, `broadcast`, `notify-test`, `ai-account`, `ai-model`, `dashboard`, `chart`. Juga banner branding Rich | Logika bisnis sendiri |
 | `cli/dashboard.py` | Dashboard terminal interaktif (Textual): header + jam live, Market Overview, grafik, tabel sinyal (backtest / hasil pindai), metrik kunci; penyegaran ringan berkala tanpa memanggil AI. Hanya memantau | Mengeksekusi order |
 | `cli/term_chart.py` | Merender klines mentah menjadi grafik candlestick ANSI (plotext 5.x): candle + EMA20/EMA50 + panel volume; ukuran dibatasi ukuran terminal. Dipakai perintah `chart` dan dashboard Textual | Mengambil data sendiri |
-| `web/app.py` | Antarmuka web: endpoint REST tipis di atas core yang sama persis dengan CLI (`/api/analyze`, `/api/scan`, `/api/klines`, `/api/backtest`, `/api/trade`, `/api/broadcast`, `/api/ai/model`, `/api/config`, ...), melayani berkas statis, dan menjalankan thread siaran otomatis berkala bila Telegram terkonfigurasi | Logika bisnis sendiri |
+| `web/app.py` | Antarmuka web: endpoint REST tipis di atas core yang sama persis dengan CLI (`/api/analyze`, `/api/scan`, `/api/klines`, `/api/backtest`, `/api/trade`, `/api/broadcast`, `/api/ai/model`, `/api/config`, `/api/auth/login`, ...), middleware keamanan (autentikasi token admin/viewer, CORS non-wildcard dari `.env`, rate limit per IP, batas ukuran request), validasi startup + pemeriksaan pemulihan eksekusi, melayani berkas statis, dan menjalankan thread siaran otomatis berkala bila Telegram terkonfigurasi | Logika bisnis sendiri |
 | `web/static/index.html` | Struktur halaman: sidebar, hero, kartu statistik, workspace analisis (panel analisis + grafik + sentimen), baris sinyal, panel AI, pemindai, posisi | — |
 | `web/static/app.js` | Logika frontend: fetch API, render analisis/sentimen/gauge, grafik Lightweight Charts (EMA20/50, volume, crosshair OHLCV), backtest + kurva ekuitas, dan pengelola tata letak resizable (seret panel, sembunyikan, maximize, Reset Layout, tersimpan di localStorage) | Menyimpan kunci API |
 | `web/static/style.css` | Tema gelap ala Binance (emas #F0B90B), ikon Font Awesome, tata letak responsif desktop/tablet/mobile + navigasi bawah, dan gaya workspace resizable (gagang seret, rel panel) | — |
@@ -230,6 +244,17 @@ Jalur siaran berjalan terpisah: manual lewat tombol Web UI / perintah
 - **Android = cangkang tipis.** D TRADE (Kotlin, satu Activity) hanya memuat
   Web UI lewat WebView; pembaruan tampilan Web UI langsung terasa di aplikasi
   tanpa merilis APK baru. Rilis ditandatangani keystore lokal di luar repo.
+  WebView dikeraskan (tanpa akses berkas/content provider, tanpa jembatan
+  JavaScript, allowBackup mati) dan tidak menyimpan kredensial apa pun.
+- **Keamanan berlapis di server web.** Bila `WEB_API_TOKEN` diisi, semua
+  endpoint (selain `/api/health` dan login) wajib bertoken; CORS tidak
+  pernah wildcard; ada rate limit dan batas ukuran request. Secret tidak
+  pernah keluar dari backend — `/api/config` hanya menampilkan ringkasan
+  aman, dan error 500 tidak membocorkan detail internal.
+- **Eksekusi tidak pernah "percaya begitu saja".** Keberhasilan order
+  dibuktikan dari status Binance (fill + open orders), bukan dari
+  terkirimnya request; hasil yang tidak diketahui direkonsiliasi lewat
+  idempotency key, bukan dikirim ulang.
 
 ---
 

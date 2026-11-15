@@ -48,6 +48,14 @@ class MainActivity : Activity() {
             loadWithOverviewMode = true
             useWideViewPort = true
             builtInZoomControls = false
+            // Pengerasan: WebView hanya boleh memuat URL server backend —
+            // tidak ada akses berkas lokal / content provider, dan tidak
+            // ada jembatan JavaScript ke kode native (addJavascriptInterface
+            // memang tidak pernah dipakai). Tidak ada kredensial apa pun
+            // yang disimpan aplikasi ini; autentikasi API (bila aktif)
+            // hidup di cookie sesi WebView milik server.
+            allowFileAccess = false
+            allowContentAccess = false
         }
 
         webView.webChromeClient = object : WebChromeClient() {

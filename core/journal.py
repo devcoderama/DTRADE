@@ -53,6 +53,9 @@ class TradeJournal:
                 "notional": round(decision.notional, 2),
                 "risk_amount": round(decision.risk_amount, 2),
                 "dry_run": bool(getattr(result, "dry_run", True)),
+                "execution_state": getattr(result, "state", None),
+                "client_order_id": getattr(result, "client_order_id", None),
+                "filled_qty": getattr(result, "filled_qty", None),
                 "notes": [str(n) for n in getattr(result, "notes", [])],
             }
         )

@@ -19,9 +19,27 @@ function toast(msg) {
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 4200);
 }
-async function api(path, options) {
-  const resp = await fetch(path, options);
+async function api(path, options, _retried) {
+  const opts = Object.assign({}, options || {});
+  const token = localStorage.getItem("baf-api-token");
+  if (token) {
+    opts.headers = Object.assign({}, opts.headers || {}, { "X-API-Token": token });
+  }
+  const resp = await fetch(path, opts);
   const data = await resp.json().catch(() => ({}));
+  if (resp.status === 401 && !_retried) {
+    // Server mewajibkan token (WEB_API_TOKEN): minta sekali, simpan, ulangi.
+    const entered = window.prompt("Server ini dilindungi token API. Masukkan WEB_API_TOKEN:");
+    if (entered) {
+      localStorage.setItem("baf-api-token", entered.trim());
+      await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: entered.trim() }),
+      }).catch(() => {});
+      return api(path, options, true);
+    }
+  }
   if (!resp.ok) throw new Error(data.detail || ("HTTP " + resp.status));
   return data;
 }

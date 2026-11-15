@@ -45,6 +45,8 @@ class TradeSignal:
     snapshot: dict
     ai: Optional[AIAnalysis] = None
     reasons: list[str] = field(default_factory=list)
+    regime: Optional[str] = None  # rezim pasar timeframe utama (classify_regime)
+    mtf: dict = field(default_factory=dict)  # tren per timeframe {interval: {trend, regime}}
 
 
 def technical_score(snapshot: dict) -> tuple[int, list[str]]:
@@ -277,7 +279,7 @@ class SignalEngine:
                 stop_loss, take_profit = _atr_levels(price, snapshot.get("atr14"), side)
                 reasons.append("Level SL/TP dari ATR (1.5× / 2.5×)")
 
-        return TradeSignal(
+        signal = TradeSignal(
             symbol=symbol,
             side=side,
             confidence=confidence if side != "NEUTRAL" else 0,
@@ -288,7 +290,40 @@ class SignalEngine:
             snapshot=snapshot,
             ai=ai_result,
             reasons=reasons,
+            regime=snapshot.get("regime"),
         )
+
+        # --- Konteks multi-timeframe (hierarki: 1D makro, 4H struktur,
+        # 1H konfirmasi, timeframe utama = setup entri). Murni informasi &
+        # peringatan keselarasan — TIDAK mengubah skor/keputusan yang ada.
+        if self._settings.mtf_enabled:
+            signal.mtf = self._multi_timeframe(symbol, interval or self._settings.default_interval)
+            if signal.mtf and side != "NEUTRAL":
+                want = "UPTREND" if side == "LONG" else "DOWNTREND"
+                aligned = [tf for tf, info in signal.mtf.items() if info.get("trend") == want]
+                opposed = [
+                    tf for tf, info in signal.mtf.items()
+                    if info.get("trend") in {"UPTREND", "DOWNTREND"} and info.get("trend") != want
+                ]
+                if aligned:
+                    reasons.append(f"MTF selaras: {', '.join(aligned)} searah {side}")
+                if opposed:
+                    reasons.append(f"MTF berlawanan: {', '.join(opposed)} melawan {side} — hati-hati")
+        return signal
+
+    def _multi_timeframe(self, symbol: str, primary_interval: str) -> dict:
+        """Tren + rezim timeframe yang lebih tinggi dari timeframe utama."""
+        out: dict = {}
+        for tf in ("1h", "4h", "1d"):
+            if tf == primary_interval:
+                continue
+            try:
+                snap = self.snapshot_for(symbol, tf)
+            except Exception as exc:  # konteks tambahan; kegagalan satu TF tidak fatal
+                log.debug("Snapshot MTF %s %s gagal: %s", symbol, tf, exc)
+                continue
+            out[tf] = {"trend": snap.get("trend"), "regime": snap.get("regime")}
+        return out
 
     def snapshot_light(
         self, symbol: str, interval: Optional[str], ticker: dict, funding: dict

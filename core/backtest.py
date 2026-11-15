@@ -106,6 +106,73 @@ class BacktestResult:
                 worst = min(worst, (eq / peak - 1.0) * 100.0)
         return worst
 
+    @property
+    def expectancy(self) -> float:
+        """Rata-rata PnL per trade (USDT) — nilai harapan satu transaksi."""
+        return (self.total_pnl / len(self.trades)) if self.trades else 0.0
+
+    @property
+    def avg_win(self) -> float:
+        wins = [t.pnl for t in self.trades if t.pnl > 0]
+        return (sum(wins) / len(wins)) if wins else 0.0
+
+    @property
+    def avg_loss(self) -> float:
+        losses = [t.pnl for t in self.trades if t.pnl < 0]
+        return (sum(losses) / len(losses)) if losses else 0.0
+
+    @property
+    def max_consecutive_losses(self) -> int:
+        worst = current = 0
+        for t in self.trades:
+            if t.pnl < 0:
+                current += 1
+                worst = max(worst, current)
+            elif t.pnl > 0:
+                current = 0
+        return worst
+
+    def _equity_returns(self) -> list[float]:
+        out: list[float] = []
+        curve = self.equity_curve
+        for prev, cur in zip(curve, curve[1:]):
+            if prev["equity"]:
+                out.append(cur["equity"] / prev["equity"] - 1.0)
+        return out
+
+    @property
+    def sharpe_ratio(self) -> Optional[float]:
+        """Sharpe dari return antar-titik kurva ekuitas (per langkah, bukan tahunan)."""
+        import math
+
+        rets = self._equity_returns()
+        if len(rets) < 2:
+            return None
+        mean = sum(rets) / len(rets)
+        var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+        std = math.sqrt(var)
+        if std == 0:
+            return None
+        return mean / std * math.sqrt(len(rets))
+
+    @property
+    def sortino_ratio(self) -> Optional[float]:
+        """Sortino: seperti Sharpe tetapi hanya memakai deviasi sisi turun."""
+        import math
+
+        rets = self._equity_returns()
+        if len(rets) < 2:
+            return None
+        mean = sum(rets) / len(rets)
+        downside = [r for r in rets if r < 0]
+        if not downside:
+            return None
+        dvar = sum(r * r for r in downside) / len(rets)
+        dstd = math.sqrt(dvar)
+        if dstd == 0:
+            return None
+        return mean / dstd * math.sqrt(len(rets))
+
     def to_dict(self, max_trades: int = 50) -> dict:
         return {
             "symbol": self.symbol,
@@ -121,6 +188,12 @@ class BacktestResult:
             "win_rate": round(self.win_rate, 1),
             "profit_factor": (round(self.profit_factor, 2) if self.profit_factor is not None else None),
             "max_drawdown_pct": round(self.max_drawdown_pct, 2),
+            "expectancy": round(self.expectancy, 2),
+            "avg_win": round(self.avg_win, 2),
+            "avg_loss": round(self.avg_loss, 2),
+            "max_consecutive_losses": self.max_consecutive_losses,
+            "sharpe_ratio": (round(self.sharpe_ratio, 2) if self.sharpe_ratio is not None else None),
+            "sortino_ratio": (round(self.sortino_ratio, 2) if self.sortino_ratio is not None else None),
             "equity_curve": self.equity_curve,
             "trades": [
                 {

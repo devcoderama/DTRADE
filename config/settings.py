@@ -112,8 +112,27 @@ class Settings:
     max_leverage: int = 5
     max_open_positions: int = 3
     daily_loss_limit_pct: float = 3.0
+    weekly_loss_limit_pct: float = 6.0
+    max_symbol_exposure_pct: float = 150.0  # notional satu simbol ≤ % ekuitas ini
+    max_total_exposure_pct: float = 300.0   # total notional semua posisi ≤ % ekuitas ini
+    min_risk_reward: float = 1.5            # rasio TP:SL minimum agar sinyal diterima
+    max_consecutive_losses: int = 3         # 0 = nonaktif; berhenti setelah N rugi beruntun
+    risk_state_path: str = "data/risk_state.json"  # baseline ekuitas harian/mingguan + kunci harian (persisten)
+    protection_retries: int = 3             # percobaan pasang SL/TP sebelum emergency close
     default_interval: str = "15m"
     quote_asset: str = "USDT"
+
+    # --- Keamanan Web UI / API ---
+    # Kosong = autentikasi NONAKTIF (hanya aman untuk akses lokal sendiri).
+    # Isi WEB_API_TOKEN untuk mewajibkan token pada semua endpoint /api/*:
+    # token utama = akses penuh (operator), WEB_VIEWER_TOKEN = hanya baca.
+    web_api_token: str = ""
+    web_viewer_token: str = ""
+    # Daftar origin CORS yang diizinkan, pisah koma. Kosong = tanpa CORS
+    # (hanya same-origin). JANGAN gunakan "*" bersamaan dengan token.
+    cors_origins: str = ""
+    rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
+    mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
 
     # --- Web UI ---
     web_host: str = "0.0.0.0"
@@ -151,10 +170,13 @@ class Settings:
             "broadcast_interval_minutes": self.broadcast_interval_minutes,
             "broadcast_min_score": self.broadcast_min_score,
             "trading_mode": "live" if self.is_live else "dry_run",
+            "web_auth_enabled": bool(self.web_api_token),
             "risk_per_trade_pct": self.risk_per_trade_pct,
             "max_leverage": self.max_leverage,
             "max_open_positions": self.max_open_positions,
             "daily_loss_limit_pct": self.daily_loss_limit_pct,
+            "weekly_loss_limit_pct": self.weekly_loss_limit_pct,
+            "min_risk_reward": self.min_risk_reward,
             "default_interval": self.default_interval,
             "quote_asset": self.quote_asset,
         }
@@ -205,6 +227,18 @@ def load_settings() -> Settings:
         max_leverage=_get_int("MAX_LEVERAGE", 5),
         max_open_positions=_get_int("MAX_OPEN_POSITIONS", 3),
         daily_loss_limit_pct=_get_float("DAILY_LOSS_LIMIT_PCT", 3.0),
+        weekly_loss_limit_pct=_get_float("WEEKLY_LOSS_LIMIT_PCT", 6.0),
+        max_symbol_exposure_pct=_get_float("MAX_SYMBOL_EXPOSURE_PCT", 150.0),
+        max_total_exposure_pct=_get_float("MAX_TOTAL_EXPOSURE_PCT", 300.0),
+        min_risk_reward=_get_float("MIN_RISK_REWARD", 1.5),
+        max_consecutive_losses=_get_int("MAX_CONSECUTIVE_LOSSES", 3),
+        risk_state_path=os.environ.get("RISK_STATE_PATH", "data/risk_state.json").strip(),
+        protection_retries=_get_int("PROTECTION_RETRIES", 3),
+        web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
+        web_viewer_token=os.environ.get("WEB_VIEWER_TOKEN", "").strip(),
+        cors_origins=os.environ.get("CORS_ORIGINS", "").strip(),
+        rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
+        mtf_enabled=_get_bool("MTF_ENABLED", True),
         default_interval=os.environ.get("DEFAULT_INTERVAL", "15m").strip(),
         quote_asset=os.environ.get("QUOTE_ASSET", "USDT").strip().upper(),
         web_host=os.environ.get("WEB_HOST", "0.0.0.0").strip(),

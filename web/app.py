@@ -25,14 +25,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from config.settings import load_settings
 from core.ai_choice import (
@@ -88,12 +90,97 @@ risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager)
 
 app = FastAPI(title="binance-ai-future", version="1.0.0")
+
+# ---------------------------------------------------------------------------
+# Keamanan API (P0):
+# - CORS: TIDAK memakai wildcard. Hanya origin yang tercantum di
+#   CORS_ORIGINS (.env) yang diizinkan; kosong = tanpa CORS (same-origin).
+# - Autentikasi token (bila WEB_API_TOKEN diisi): semua endpoint /api/*
+#   selain /api/health wajib membawa token lewat header X-API-Token
+#   atau cookie sesi `baf_token` (SameSite=Strict, HttpOnly — proteksi
+#   CSRF untuk jalur cookie). Token utama = akses penuh; WEB_VIEWER_TOKEN
+#   = hanya baca (GET). Bila token kosong, autentikasi nonaktif dan server
+#   memberi peringatan keras saat start — hanya aman untuk lokal sendiri.
+# - Rate limit per IP untuk /api/* dan batas ukuran request 1 MB.
+# ---------------------------------------------------------------------------
+MAX_REQUEST_BYTES = 1_048_576
+
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, api_token: str, viewer_token: str, rate_per_minute: int):
+        super().__init__(app)
+        self._api_token = api_token
+        self._viewer_token = viewer_token
+        self._rate = rate_per_minute
+        self._hits: dict[str, deque] = {}
+        self._hits_lock = threading.Lock()
+
+    def _role(self, request: Request) -> Optional[str]:
+        token = request.headers.get("x-api-token") or request.cookies.get("baf_token") or ""
+        if self._api_token and token == self._api_token:
+            return "admin"
+        if self._viewer_token and token == self._viewer_token:
+            return "viewer"
+        return None
+
+    def _rate_limited(self, client_ip: str) -> bool:
+        if self._rate <= 0:
+            return False
+        now = time.time()
+        with self._hits_lock:
+            bucket = self._hits.setdefault(client_ip, deque())
+            while bucket and bucket[0] < now - 60:
+                bucket.popleft()
+            if len(bucket) >= self._rate:
+                return True
+            bucket.append(now)
+            return False
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if not path.startswith("/api/"):
+            return await call_next(request)
+        length = request.headers.get("content-length")
+        if length is not None:
+            try:
+                if int(length) > MAX_REQUEST_BYTES:
+                    return JSONResponse(status_code=413, content={"detail": "Ukuran request melebihi batas 1 MB."})
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Content-Length tidak valid."})
+        if path == "/api/health":
+            return await call_next(request)
+        client_ip = request.client.host if request.client else "unknown"
+        if self._rate_limited(client_ip):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Terlalu banyak request — coba lagi sebentar lagi."},
+                headers={"Retry-After": "30"},
+            )
+        if path == "/api/auth/login":
+            return await call_next(request)  # token diperiksa di dalam endpoint itu sendiri
+        if self._api_token:
+            role = self._role(request)
+            if role is None:
+                return JSONResponse(status_code=401, content={"detail": "Token API diperlukan (header X-API-Token)."})
+            if role == "viewer" and request.method not in {"GET", "HEAD", "OPTIONS"}:
+                return JSONResponse(status_code=403, content={"detail": "Token viewer hanya boleh membaca (GET)."})
+        return await call_next(request)
+
+
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    SecurityMiddleware,
+    api_token=settings.web_api_token,
+    viewer_token=settings.web_viewer_token,
+    rate_per_minute=settings.rate_limit_per_minute,
 )
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-API-Token"],
+    )
 
 # ---------------------------------------------------------------------------
 # Siaran sinyal otomatis ke Telegram — thread latar belakang selama server
@@ -130,6 +217,28 @@ def _auto_broadcast_loop() -> None:
 
 
 @app.on_event("startup")
+def _validate_startup() -> None:
+    """Validasi keamanan & pemulihan saat server mulai."""
+    if settings.is_live:
+        log.warning("⚠ MODE LIVE AKTIF — order akan dikirim dengan dana sungguhan.")
+    if settings.is_live and not settings.has_binance_keys:
+        log.error("MODE LIVE tetapi kunci Binance kosong — eksekusi pasti gagal.")
+    if not settings.web_api_token:
+        log.warning(
+            "⚠ Autentikasi API NONAKTIF (WEB_API_TOKEN kosong): siapa pun yang dapat "
+            "mengakses server ini dapat melihat akun & mengeksekusi trade. Isi "
+            "WEB_API_TOKEN di .env bila server dapat dijangkau perangkat lain."
+        )
+    pending = executor.pending_recovery()
+    for rec in pending:
+        log.warning(
+            "Pemulihan: eksekusi %s (%s) berakhir di status %s — periksa posisi & "
+            "perlindungannya di Binance.",
+            rec.get("symbol"), rec.get("client_order_id"), rec.get("state"),
+        )
+
+
+@app.on_event("startup")
 def _start_auto_broadcast() -> None:
     if not settings.broadcast_enabled:
         log.info("Siaran otomatis nonaktif (BROADCAST_ENABLED=false).")
@@ -159,8 +268,10 @@ def _guard(fn):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception:
+        # Jangan bocorkan detail internal ke klien; catat lengkap di log server.
+        log.exception("Kesalahan internal saat memproses request")
+        raise HTTPException(status_code=500, detail="Kesalahan internal server — lihat log server.") from None
 
 
 def _signal_payload(signal) -> dict:
@@ -172,6 +283,8 @@ def _signal_payload(signal) -> dict:
         "stop_loss": signal.stop_loss,
         "take_profit": signal.take_profit,
         "technical_score": signal.technical_score,
+        "regime": getattr(signal, "regime", None),
+        "mtf": getattr(signal, "mtf", {}),
         "snapshot": signal.snapshot,
         "ai": (
             {
@@ -275,6 +388,47 @@ def scan(top: int = Query(10, ge=1, le=50), interval: Optional[str] = None, ai: 
 class TradeRequest(BaseModel):
     symbol: str
     side: Optional[str] = None  # LONG | SHORT; kosong = ikuti sinyal mesin
+
+    @field_validator("symbol")
+    @classmethod
+    def _symbol_ok(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not v or len(v) > 20 or not v.isalnum():
+            raise ValueError("Simbol tidak valid")
+        return v
+
+    @field_validator("side")
+    @classmethod
+    def _side_ok(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip().upper()
+        if v not in {"LONG", "SHORT"}:
+            raise ValueError("side harus LONG atau SHORT")
+        return v
+
+
+class AuthRequest(BaseModel):
+    token: str
+
+
+@app.post("/api/auth/login")
+def auth_login(req: AuthRequest) -> JSONResponse:
+    """Tukar token API menjadi cookie sesi (untuk Web UI di peramban)."""
+    if not settings.web_api_token:
+        return JSONResponse({"ok": True, "role": "admin", "auth_enabled": False})
+    if req.token == settings.web_api_token:
+        role = "admin"
+    elif settings.web_viewer_token and req.token == settings.web_viewer_token:
+        role = "viewer"
+    else:
+        raise HTTPException(status_code=401, detail="Token salah.")
+    resp = JSONResponse({"ok": True, "role": role, "auth_enabled": True})
+    resp.set_cookie(
+        "baf_token", req.token, httponly=True, samesite="strict",
+        path="/api", max_age=7 * 24 * 3600,
+    )
+    return resp
 
 
 @app.post("/api/trade")

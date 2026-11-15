@@ -224,8 +224,11 @@ class BinanceFuturesClient:
         time_in_force: str = "GTC",
         reduce_only: bool = False,
         close_position: bool = False,
+        new_client_order_id: Optional[str] = None,
     ) -> dict:
         params: dict[str, Any] = {"symbol": symbol, "side": side, "type": order_type}
+        if new_client_order_id:
+            params["newClientOrderId"] = new_client_order_id
         if close_position:
             params["closePosition"] = "true"
         else:
@@ -243,6 +246,26 @@ class BinanceFuturesClient:
         result = self._request("POST", "/fapi/v1/order", params, signed=True)
         log.info("ORDER ✓ orderId=%s status=%s", result.get("orderId"), result.get("status"))
         return result
+
+    def query_order(
+        self,
+        symbol: str,
+        order_id: Optional[int] = None,
+        client_order_id: Optional[str] = None,
+    ) -> dict:
+        """Periksa status satu order (rekonsiliasi & idempotency).
+
+        Dipakai executor untuk memastikan hasil order yang statusnya
+        tidak diketahui (mis. timeout) TANPA mengirim order duplikat.
+        """
+        params: dict[str, Any] = {"symbol": symbol}
+        if order_id is not None:
+            params["orderId"] = order_id
+        if client_order_id:
+            params["origClientOrderId"] = client_order_id
+        if "orderId" not in params and "origClientOrderId" not in params:
+            raise ValueError("query_order membutuhkan order_id atau client_order_id")
+        return self._request("GET", "/fapi/v1/order", params, signed=True)
 
     def cancel_order(self, symbol: str, order_id: int) -> dict:
         return self._request(

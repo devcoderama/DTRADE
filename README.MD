@@ -196,6 +196,30 @@ menampilkan status konfigurasi semua provider sebagai gantinya.
 4. Secret key hanya tampil sekali — simpan langsung ke `.env` Anda, jangan
    dibagikan ke siapa pun, jangan di-commit ke Git (`.env` sudah di-ignore).
 
+## Keamanan Server Web
+
+Server web dilindungi berlapis (berlaku untuk semua endpoint `/api/*`):
+
+- **Autentikasi token** — isi `WEB_API_TOKEN` di `.env` untuk mewajibkan
+  token pada semua endpoint selain `/api/health`. Web UI akan meminta token
+  sekali lalu mengingatnya; token dikirim sebagai header `X-API-Token` atau
+  cookie sesi `HttpOnly` + `SameSite=Strict`. `WEB_VIEWER_TOKEN` memberi
+  akses baca-saja. **Tanpa token, siapa pun yang dapat mengakses alamat
+  server dapat mengeksekusi trade dari akun Anda** — server mencetak
+  peringatan ini setiap kali start.
+- **CORS tanpa wildcard** — hanya origin di `CORS_ORIGINS` yang diizinkan
+  (bawaan: hanya same-origin).
+- **Rate limit** per IP (`RATE_LIMIT_PER_MINUTE`, bawaan 240/menit) dan
+  batas ukuran request 1 MB.
+- **Eksekusi terverifikasi** — order entri memakai idempotency key dan
+  status isinya diverifikasi; SL/TP dipasang dengan retry + verifikasi,
+  dan bila Stop Loss gagal total, posisi **ditutup darurat** secara
+  otomatis. Setiap perubahan status eksekusi dicatat persisten di
+  `data/execution_state.jsonl` dan diperiksa lagi saat server start.
+- **Kunci risiko persisten** — batas rugi harian memakai perubahan ekuitas
+  (realized + unrealized + fee) terhadap baseline awal hari yang tersimpan
+  di `data/risk_state.json`, sehingga tidak hilang karena restart.
+
 ## Penggunaan
 
 ### Web UI
@@ -301,6 +325,12 @@ Proyek ini juga punya aplikasi Android resmi bernama **D TRADE**: WebView aman d
 - Peta & aturan modul: [STRUKTUR.MD](STRUKTUR.MD)
 - Berkontribusi: [CONTRIBUTORS.MD](CONTRIBUTORS.MD)
 - Lisensi: [MIT](LICENSE)
+- Uji otomatis (mock Binance & AI — tanpa jaringan, tanpa order live):
+  `python -m pytest tests/ -q` — mencakup indikator, RiskManager,
+  mesin status executor (termasuk skenario SL gagal → emergency close),
+  metrik backtest, dan keamanan Web API.
+- Docker: `docker compose up --build` (konfigurasi tetap dari `.env` Anda;
+  folder `data/` dan `logs/` ter-mount sebagai volume).
 
 ## Penafian
 

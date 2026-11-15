@@ -1,20 +1,39 @@
 """Manajemen risiko — gerbang wajib sebelum eksekusi apa pun.
 
-Aturan yang ditegakkan di sini (tidak bisa dilewati executor):
+RiskManager adalah otoritas tertinggi sebelum order dikirim. Aturan yang
+ditegakkan di sini (tidak bisa dilewati executor):
 
-1. Ukuran posisi dihitung dari % risiko saldo dan jarak stop loss,
-   bukan dari "feeling" atau margin penuh.
-2. Leverage tidak pernah melebihi MAX_LEVERAGE.
-3. Jumlah posisi terbuka tidak melebihi MAX_OPEN_POSITIONS.
-4. Bila rugi terealisasi hari ini >= DAILY_LOSS_LIMIT_PCT dari saldo awal
-   hari, semua sinyal baru ditolak.
-5. Kuantitas & harga selalu dibulatkan mengikuti filter resmi simbol,
+1. Sinyal wajib punya SL & TP yang ARAHNYA BENAR (LONG: SL < entri < TP;
+   SHORT: TP < entri < SL), harga positif, dan rasio risk/reward minimal.
+2. Jarak stop minimum: minimal 3× tickSize dan 0,25× ATR (bila tersedia).
+3. Ukuran posisi dihitung dari % risiko ekuitas dan jarak stop loss.
+4. Leverage tidak pernah melebihi MAX_LEVERAGE.
+5. Jumlah posisi terbuka tidak melebihi MAX_OPEN_POSITIONS; satu simbol
+   tidak boleh dibuka dua kali.
+6. Eksposur: notional satu simbol dan total semua posisi dibatasi
+   terhadap ekuitas (MAX_SYMBOL_EXPOSURE_PCT / MAX_TOTAL_EXPOSURE_PCT).
+7. Pengendali rugi berbasis EKUITAS: PnL hari ini = ekuitas sekarang
+   (saldo + unrealized) dikurangi ekuitas awal hari yang TERSIMPAN di
+   data/risk_state.json — mencakup realized, unrealized, dan fee.
+   Melampaui DAILY_LOSS_LIMIT_PCT → kunci harian PERSISTEN (tidak hilang
+   karena restart) sampai berganti hari. Sama untuk batas mingguan.
+8. Perlindungan rugi beruntun: setelah MAX_CONSECUTIVE_LOSSES realisasi
+   rugi berturut-turut (dari riwayat income Binance), sinyal ditolak.
+9. Kuantitas & harga selalu dibulatkan mengikuti filter resmi simbol,
    dan notional harus memenuhi minNotional Binance.
+
+Catatan: baseline ekuitas awal hari/minggu dicatat pada evaluasi pertama
+di periode itu. Deposit/withdrawal di tengah periode ikut terhitung
+sebagai perubahan ekuitas — itu perilaku yang disengaja (konservatif
+untuk penarikan, longgar untuk deposit).
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
 from typing import Optional
 
 from config.settings import Settings
@@ -35,6 +54,7 @@ class RiskDecision:
     leverage: int = 0
     notional: float = 0.0
     risk_amount: float = 0.0
+    risk_reward: float = 0.0
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     reasons: list[str] = field(default_factory=list)
@@ -50,6 +70,63 @@ class RiskManager:
         self._settings = settings
         self._binance = binance
         self._symbols = symbols
+        self._state_path = Path(settings.risk_state_path)
+
+    # ------------------------------------------------------------------
+    # Keadaan risiko persisten (baseline ekuitas + kunci harian)
+    # ------------------------------------------------------------------
+    def _load_state(self) -> dict:
+        try:
+            if self._state_path.exists():
+                data = json.loads(self._state_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return data
+        except (OSError, ValueError) as exc:
+            log.warning("risk_state tidak terbaca (%s) — mulai dari keadaan baru.", exc)
+        return {}
+
+    def _save_state(self, state: dict) -> None:
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
+            tmp.replace(self._state_path)
+        except OSError as exc:
+            log.error("Gagal menyimpan risk_state: %s", exc)
+
+    def _sync_baselines(self, state: dict, equity: float) -> dict:
+        """Catat baseline awal hari/minggu pada evaluasi pertama periodenya."""
+        today = date.today().isoformat()
+        iso = date.today().isocalendar()
+        week = f"{iso[0]}-W{iso[1]:02d}"
+        changed = False
+        if state.get("day") != today:
+            state.update({"day": today, "day_start_equity": equity, "daily_locked": False})
+            changed = True
+        if state.get("week") != week:
+            state.update({"week": week, "week_start_equity": equity})
+            changed = True
+        if changed:
+            self._save_state(state)
+        return state
+
+    def _consecutive_losses(self) -> int:
+        """Hitung realisasi rugi berturut-turut dari riwayat income Binance."""
+        try:
+            rows = self._binance.income_history(limit=100)
+        except Exception as exc:  # pemeriksaan tambahan — kegagalan API dicatat, bukan disembunyikan
+            log.warning("Riwayat income tidak terbaca untuk cek rugi beruntun: %s", exc)
+            return 0
+        realized = [r for r in rows if r.get("incomeType") == "REALIZED_PNL"]
+        realized.sort(key=lambda r: int(r.get("time", 0)), reverse=True)
+        streak = 0
+        for row in realized:
+            value = float(row.get("income", 0))
+            if value < 0:
+                streak += 1
+            elif value > 0:
+                break
+        return streak
 
     # ------------------------------------------------------------------
     def evaluate(self, signal: TradeSignal) -> RiskDecision:
@@ -64,6 +141,46 @@ class RiskManager:
             return base
         if not self._symbols.is_tradable(signal.symbol):
             base.reasons.append(f"{signal.symbol} bukan perpetual {s.quote_asset} yang aktif.")
+            return base
+
+        entry = signal.price
+        sl, tp = float(signal.stop_loss), float(signal.take_profit)
+
+        # --- Validasi arah & kewajaran SL/TP (tidak percaya masukan AI) ---
+        if entry <= 0 or sl <= 0 or tp <= 0:
+            base.reasons.append("Harga entri/SL/TP harus positif — sinyal tidak valid.")
+            return base
+        if signal.side == "LONG" and not (sl < entry < tp):
+            base.reasons.append(
+                f"SL/TP tidak valid untuk LONG: wajib SL ({sl}) < entri ({entry}) < TP ({tp})."
+            )
+            return base
+        if signal.side == "SHORT" and not (tp < entry < sl):
+            base.reasons.append(
+                f"SL/TP tidak valid untuk SHORT: wajib TP ({tp}) < entri ({entry}) < SL ({sl})."
+            )
+            return base
+
+        stop_distance = abs(entry - sl)
+        reward_distance = abs(tp - entry)
+        rr = reward_distance / stop_distance if stop_distance > 0 else 0.0
+        base.risk_reward = rr
+        if rr < s.min_risk_reward:
+            base.reasons.append(
+                f"Risk/reward {rr:.2f} di bawah minimum {s.min_risk_reward} — sinyal ditolak."
+            )
+            return base
+
+        filters = self._symbols.filters(signal.symbol)
+        min_stop = 3 * filters.price_tick
+        atr_value = signal.snapshot.get("atr14") if signal.snapshot else None
+        if atr_value:
+            min_stop = max(min_stop, 0.25 * float(atr_value))
+        if stop_distance < min_stop:
+            base.reasons.append(
+                f"Jarak stop {stop_distance:.6f} terlalu dekat (minimum {min_stop:.6f} "
+                "= maks 3×tick / 0,25×ATR) — rawan tersapu noise."
+            )
             return base
 
         # --- Keadaan akun ---
@@ -85,27 +202,54 @@ class RiskManager:
             base.reasons.append(f"Posisi {signal.symbol} sudah terbuka — penambahan posisi ditolak.")
             return base
 
-        # --- Batas rugi harian ---
-        realized_today = self._binance.realized_pnl_today()
-        daily_limit_amount = equity * s.daily_loss_limit_pct / 100.0
-        if realized_today <= -daily_limit_amount:
+        # --- Pengendali rugi harian/mingguan berbasis ekuitas (persisten) ---
+        state = self._sync_baselines(self._load_state(), equity)
+        if state.get("manual_lock"):
+            base.reasons.append("Kunci manual risiko AKTIF (manual_lock di risk_state.json) — semua sinyal ditolak.")
+            return base
+        day_start = float(state.get("day_start_equity", equity))
+        daily_pnl = equity - day_start
+        if state.get("daily_locked"):
             base.reasons.append(
-                f"Batas rugi harian tercapai (realized {realized_today:.2f} USDT, "
-                f"batas -{daily_limit_amount:.2f} USDT). Berhenti hari ini."
+                f"Kunci harian AKTIF: rugi hari ini {daily_pnl:.2f} USDT sudah melewati "
+                f"batas -{s.daily_loss_limit_pct}% dari ekuitas awal hari ({day_start:.2f}). "
+                "Berlaku sampai berganti hari."
+            )
+            return base
+        if day_start > 0 and daily_pnl <= -day_start * s.daily_loss_limit_pct / 100.0:
+            state["daily_locked"] = True
+            self._save_state(state)
+            log.error(
+                "KUNCI HARIAN AKTIF: PnL harian %.2f USDT (batas -%.1f%% dari %.2f).",
+                daily_pnl, s.daily_loss_limit_pct, day_start,
+            )
+            base.reasons.append(
+                f"Batas rugi harian tercapai (PnL {daily_pnl:.2f} USDT vs batas "
+                f"-{day_start * s.daily_loss_limit_pct / 100.0:.2f} USDT) — kunci harian diaktifkan."
+            )
+            return base
+        week_start = float(state.get("week_start_equity", equity))
+        weekly_pnl = equity - week_start
+        if week_start > 0 and weekly_pnl <= -week_start * s.weekly_loss_limit_pct / 100.0:
+            base.reasons.append(
+                f"Batas rugi mingguan tercapai (PnL {weekly_pnl:.2f} USDT vs batas "
+                f"-{week_start * s.weekly_loss_limit_pct / 100.0:.2f} USDT)."
             )
             return base
 
-        # --- Position sizing dari jarak stop loss ---
-        entry = signal.price
-        stop_distance = abs(entry - signal.stop_loss)
-        if stop_distance <= 0:
-            base.reasons.append("Jarak stop loss nol — tidak valid.")
-            return base
+        # --- Perlindungan rugi beruntun ---
+        if s.max_consecutive_losses > 0:
+            streak = self._consecutive_losses()
+            if streak >= s.max_consecutive_losses:
+                base.reasons.append(
+                    f"Sudah {streak} kali rugi beruntun (batas {s.max_consecutive_losses}) — "
+                    "berhenti dulu, evaluasi strategi."
+                )
+                return base
 
+        # --- Position sizing dari jarak stop loss ---
         risk_amount = equity * s.risk_per_trade_pct / 100.0
         raw_qty = risk_amount / stop_distance
-
-        filters = self._symbols.filters(signal.symbol)
         qty = filters.round_quantity(raw_qty)
 
         # Leverage: pilih yang cukup untuk notional, dibatasi MAX_LEVERAGE,
@@ -130,16 +274,33 @@ class RiskManager:
             )
             return base
 
+        # --- Batas eksposur ---
+        if notional > equity * s.max_symbol_exposure_pct / 100.0:
+            base.reasons.append(
+                f"Notional {notional:.2f} USDT melebihi batas eksposur per simbol "
+                f"({s.max_symbol_exposure_pct}% dari ekuitas = {equity * s.max_symbol_exposure_pct / 100.0:.2f} USDT)."
+            )
+            return base
+        existing_notional = sum(abs(float(p.get("notional", 0))) for p in open_positions)
+        if existing_notional + notional > equity * s.max_total_exposure_pct / 100.0:
+            base.reasons.append(
+                f"Total eksposur akan menjadi {existing_notional + notional:.2f} USDT — melebihi "
+                f"batas {s.max_total_exposure_pct}% dari ekuitas "
+                f"({equity * s.max_total_exposure_pct / 100.0:.2f} USDT)."
+            )
+            return base
+
         base.allowed = True
         base.quantity = qty
         base.leverage = leverage
         base.notional = notional
         base.risk_amount = risk_amount
-        base.stop_loss = filters.round_price(signal.stop_loss)
-        base.take_profit = filters.round_price(signal.take_profit)
+        base.stop_loss = filters.round_price(sl)
+        base.take_profit = filters.round_price(tp)
         base.reasons.append(
             f"OK — risiko {risk_amount:.2f} USDT ({s.risk_per_trade_pct}% dari ekuitas "
-            f"{equity:.2f}), qty {qty}, leverage {leverage}x, notional {notional:.2f} USDT."
+            f"{equity:.2f}), qty {qty}, leverage {leverage}x, notional {notional:.2f} USDT, "
+            f"R/R {rr:.2f}, PnL harian {daily_pnl:+.2f} USDT."
         )
-        log.info("RISK ✓ %s %s qty=%s lev=%sx", signal.symbol, signal.side, qty, leverage)
+        log.info("RISK ✓ %s %s qty=%s lev=%sx RR=%.2f", signal.symbol, signal.side, qty, leverage, rr)
         return base
