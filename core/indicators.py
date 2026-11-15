@@ -182,12 +182,24 @@ def vwap(klines: list[list]) -> Optional[float]:
     return total_pv / total_v
 
 
-def classify_regime(snapshot: dict) -> str:
+_INTERVAL_MINUTES = {
+    "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120,
+    "4h": 240, "6h": 360, "8h": 480, "12h": 720, "1d": 1440, "3d": 4320,
+    "1w": 10080,
+}
+
+
+def classify_regime(snapshot: dict, interval: Optional[str] = None) -> str:
     """Klasifikasi rezim pasar dari snapshot — murni & deterministik.
 
     Nilai: bullish_trending | bearish_trending | sideways |
     high_volatility | low_volatility | breakout | uncertain.
     Strategi memakai ini sebagai konteks (bukan pemicu order).
+
+    Fase 6-B7(e): ambang atr_pct DISKALAKAN per timeframe
+    (∝ √(menit/15), dibatasi 0,5–4×). ATR% secara alami membesar di
+    timeframe besar; ambang tetap membuat snapshot 1h/4h hampir selalu
+    "high_volatility" dan 15m terlalu sering "low_volatility".
     """
     trend = snapshot.get("trend")
     adx_v = snapshot.get("adx14")
@@ -196,19 +208,24 @@ def classify_regime(snapshot: dict) -> str:
     last_vol = snapshot.get("last_volume")
     avg_vol = snapshot.get("avg_volume")
 
+    minutes = _INTERVAL_MINUTES.get(interval or "15m", 15)
+    scale = min(4.0, max(0.5, (minutes / 15) ** 0.5))
+    high_thr = 3.0 * scale
+    low_thr = 0.5 * scale
+
     if (
         pct_b is not None and (pct_b > 1.0 or pct_b < 0.0)
         and last_vol and avg_vol and avg_vol > 0 and last_vol > 1.5 * avg_vol
     ):
         return "breakout"
-    if atr_pct is not None and atr_pct >= 3.0:
+    if atr_pct is not None and atr_pct >= high_thr:
         return "high_volatility"
     if adx_v is not None and adx_v >= 25:
         if trend == "UPTREND":
             return "bullish_trending"
         if trend == "DOWNTREND":
             return "bearish_trending"
-    if atr_pct is not None and atr_pct <= 0.5 and (adx_v is None or adx_v < 20):
+    if atr_pct is not None and atr_pct <= low_thr and (adx_v is None or adx_v < 20):
         return "low_volatility"
     if adx_v is not None and adx_v < 20:
         return "sideways"
@@ -307,5 +324,5 @@ def build_snapshot(
         "open_interest": open_interest,
         "open_interest_usd": (open_interest * price) if open_interest else None,
     }
-    snapshot["regime"] = classify_regime(snapshot)
+    snapshot["regime"] = classify_regime(snapshot, interval=interval)
     return snapshot

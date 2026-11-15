@@ -19,6 +19,7 @@ log — tidak ada panggilan tulis ke bursa.
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any, Optional
 
 from config.settings import Settings
@@ -53,12 +54,13 @@ def open_registry(journal) -> dict[str, dict]:
 
 
 class Reconciler:
-    def __init__(self, settings: Settings, binance, executor, journal, position_manager=None):
+    def __init__(self, settings: Settings, binance, executor, journal, position_manager=None, risk=None):
         self._settings = settings
         self._binance = binance
         self._executor = executor
         self._journal = journal
         self._position_manager = position_manager
+        self._risk = risk  # Fase 6-B4: baseline harian dicatat di sini
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
@@ -84,6 +86,13 @@ class Reconciler:
 
     def _run_once(self) -> dict[str, Any]:
         summary = {"sl_placed": [], "emergency_closed": [], "orphans_cancelled": [], "closes_recorded": []}
+        # Fase 6-B4: baseline awal hari/minggu UTC dicatat oleh loop ini
+        # tepat pada pergantian periode — bukan menunggu evaluasi sinyal.
+        if self._risk is not None:
+            try:
+                self._risk.sync_daily_baselines()
+            except Exception as exc:
+                log.warning("Rekonsiliasi: sinkronisasi baseline gagal: %s", exc)
         dry = not self._settings.is_live
         try:
             positions = self._binance.positions()
@@ -141,7 +150,8 @@ class Reconciler:
                     self._binance.place_algo_order(
                         symbol=symbol, side=exit_side, order_type="STOP_MARKET",
                         trigger_price=float(sl), close_position=True,
-                        client_algo_id=f"recon-{symbol.lower()}-sl"[:36],
+                        # Fase 6-B1: id unik per pemasangan (anti-duplikat).
+                        client_algo_id=f"recon-{symbol.lower()}-sl-{int(time.time() * 1000):x}"[:36],
                         working_type=getattr(self._settings, "protection_working_type", "MARK_PRICE"),
                     )
                     log.warning("Rekonsiliasi: SL dipasang ulang untuk %s di %s", symbol, sl)

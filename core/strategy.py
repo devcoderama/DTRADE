@@ -479,8 +479,14 @@ class SignalEngine:
 
         # --- Level SL/TP: utamakan usulan AI yang valid, jika tidak pakai ATR ---
         stop_loss = take_profit = None
+        atr_missing = False
         if side != "NEUTRAL":
             atr_v = snapshot.get("atr14")
+            # Fase 6-B7(a): tanpa ATR, level AI tidak punya pembanding
+            # validasi dan level ATR tidak bisa dihitung — sinyal arah
+            # TANPA level yang tervalidasi tidak boleh lolos.
+            if not atr_v:
+                atr_missing = True
             ai_levels_ok = (
                 ai_result is not None
                 and ai_result.stop_loss
@@ -488,6 +494,8 @@ class SignalEngine:
                 and ((side == "LONG" and ai_result.stop_loss < price < ai_result.take_profit)
                      or (side == "SHORT" and ai_result.stop_loss > price > ai_result.take_profit))
             )
+            if atr_missing:
+                ai_levels_ok = False  # B7(a): tanpa ATR, level AI tidak lolos
             if ai_levels_ok and atr_v and ai_result is not None and ai_result.stop_loss and ai_result.take_profit:
                 # Validasi jarak vs ATR: SL dalam 0,5–3× ATR, TP ≤ 5× ATR.
                 sl_dist = abs(price - float(ai_result.stop_loss))
@@ -504,6 +512,15 @@ class SignalEngine:
             else:
                 stop_loss, take_profit = _atr_levels(price, snapshot.get("atr14"), side)
                 reasons.append("Level SL/TP dari ATR (1.5× / 2.5×)")
+
+        if atr_missing and side != "NEUTRAL":
+            reasons.append(
+                "ATR tidak tersedia — level SL/TP tidak dapat divalidasi "
+                "(AI maupun ATR) → NEUTRAL demi keamanan"
+            )
+            side = "NEUTRAL"
+            confidence = 0
+            stop_loss = take_profit = None
 
         signal = TradeSignal(
             symbol=symbol,
@@ -570,15 +587,18 @@ class SignalEngine:
             regime = snapshot.get("regime")
             if regime in {"high_volatility", "low_volatility"}:
                 blocks.append(f"Gerbang rezim: {regime} — entri arah ditolak")
+            # Fase 6-B7(d): gerbang lama tidak pernah aktif — rezim
+            # "trending" mensyaratkan ADX ≥ 25 di classify_regime,
+            # sehingga syarat adx < ADX_MIN mustahil terjadi di sana.
+            # Kini: entri pengikut-tren ditolak bila rezim sideways ATAU
+            # adx14 < ADX_MIN (apa pun rezimnya).
+            if regime == "sideways":
+                blocks.append("Gerbang rezim: sideways — entri pengikut-tren ditolak")
             adx = snapshot.get("adx14")
-            if (
-                regime in {"bullish_trending", "bearish_trending"}
-                and adx is not None
-                and adx < float(getattr(s, "adx_min", 20.0))
-            ):
+            if adx is not None and adx < float(getattr(s, "adx_min", 20.0)):
                 blocks.append(
                     f"Gerbang ADX: adx14 {adx:.1f} < ADX_MIN {float(getattr(s, 'adx_min', 20.0)):.0f} "
-                    "pada rezim trending — tren terlalu lemah"
+                    "— tren terlalu lemah untuk diikuti"
                 )
         return blocks
 
@@ -606,13 +626,22 @@ class SignalEngine:
         return ctx
 
     def _multi_timeframe(self, symbol: str, primary_interval: str) -> dict:
-        """Tren + rezim timeframe yang lebih tinggi dari timeframe utama."""
+        """Tren + rezim timeframe yang lebih tinggi dari timeframe utama.
+
+        Fase 6-B7(c): MTF hanya mengambil KLINES (1 panggilan per TF) —
+        snapshot penuh sebelumnya juga menarik ticker/funding/OI per TF
+        (±12 request ekstra per analisis). Tren/rezim/ADX semuanya
+        dihitung dari klines oleh build_snapshot, jadi tidak ada
+        informasi gerbang yang hilang.
+        """
         out: dict = {}
         for tf in ("1h", "4h", "1d"):
             if tf == primary_interval:
                 continue
             try:
-                snap = self.snapshot_for(symbol, tf)
+                klines = self._binance.klines(symbol, interval=tf, limit=300)
+                klines, _dropped = self._closed_only(klines)
+                snap = build_snapshot(symbol, klines, {}, {}, open_interest=None, interval=tf)
             except Exception as exc:  # konteks tambahan; kegagalan satu TF tidak fatal
                 log.debug("Snapshot MTF %s %s gagal: %s", symbol, tf, exc)
                 continue
@@ -625,7 +654,9 @@ class SignalEngine:
         """Snapshot hemat untuk pemindaian: hanya klines yang diambil per simbol;
         ticker & funding memakai hasil panggilan massal, open interest dilewati."""
         interval = interval or self._settings.default_interval
-        klines = self._binance.klines(symbol, interval=interval, limit=200)
+        # Fase 6-B7(b): limit sama dengan jalur analisis penuh (300) agar
+        # indikator jalur pindai tidak berbeda diam-diam dari jalur analisis.
+        klines = self._binance.klines(symbol, interval=interval, limit=300)
         klines, dropped = self._closed_only(klines)
         snapshot = build_snapshot(symbol, klines, ticker, funding, open_interest=None, interval=interval)
         if dropped:

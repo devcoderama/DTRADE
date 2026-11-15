@@ -89,7 +89,7 @@ def test_gate_adx_and_regime():
     eng = SignalEngine(Settings(), None)
     assert eng._gate_blocks(_snap(adx14=12.0), "LONG", None)  # trending + ADX lemah
     assert eng._gate_blocks(_snap(regime="high_volatility", adx14=None), "LONG", None)
-    assert eng._gate_blocks(_snap(regime="sideways", adx14=5.0), "LONG", None) == []  # ADX hanya utk trending
+    assert eng._gate_blocks(_snap(regime="sideways", adx14=5.0), "LONG", None)  # Fase 6-B7(d): sideways kini memblokir entri pengikut-tren
     assert eng._gate_blocks(_snap(), "LONG", None) == []
 
 
@@ -290,7 +290,7 @@ def test_pm_breakeven_moves_sl_after_1r(tmp_path):
     pm = _pm(tmp_path, fake, move_sl_to_be=True)
     summary = pm.manage()
     assert summary["breakeven"] == ["BTCUSDT"]
-    assert fake.placed and fake.placed[0]["trigger_price"] == 100.0  # SL baru = entri
+    assert fake.placed and fake.placed[0]["trigger_price"] == 100.1  # Fase 6-B1: SL baru = entri + buffer fee 0,1%
     assert fake.cancelled == [7]  # SL lama dibatalkan SETELAH yang baru terverifikasi
 
 

@@ -364,3 +364,57 @@ push langsung ke main). Baseline sebelum perubahan: **108 test hijau**.
   & balance digantikan v3 sejak Des 2024, v2 positionRisk deprecated
   Jan 2025), fallback ke v2 bila v3 gagal. Perilaku testnetnya
   diverifikasi pada tahap E2E.
+
+### Fase B — selesai (uji 125 → 150)
+
+- **B1 Id algo unik + buffer BE.** `PositionManager._replace_sl` dan
+  pemasangan ulang SL oleh Reconciler kini memakai sufiks cap waktu
+  milidetik pada clientAlgoId — pemasangan ke-2 tidak lagi ditolak
+  bursa sebagai duplikat. Break-even memakai target entri ±
+  `BREAKEVEN_BUFFER_PCT` (baru, bawaan 0,1% ≈ 2× fee taker) agar
+  "break-even" tidak lagi keluar rugi sebesar fee.
+- **B2 Streak per trade.** `_consecutive_losses` mengelompokkan baris
+  REALIZED_PNL per trade (tradeId/tranId; cadangan simbol + ember
+  1 detik) dan menjumlahkan fill sebelum menghitung streak — satu
+  trade 3-fill = satu rugi.
+- **B3 Fail-closed live.** `_consecutive_losses` mengembalikan None
+  bila income tak terbaca; `evaluate` MENOLAK sinyal saat live (mode
+  dry-run hanya peringatan). `_open_risk` yang None saat live juga
+  menolak (sebelumnya pemeriksaan terlewati diam-diam).
+- **B4 Baseline oleh reconciler + kunci berkas.** `Reconciler`
+  menerima `risk` (web + CLI mengopernya) dan memanggil
+  `RiskManager.sync_daily_baselines()` tiap putaran — pergantian hari
+  UTC tercatat tepat waktu. Penulisan `risk_state.json` dan append
+  jurnal kini di bawah kunci berkas/thread agar proses web & CLI
+  tidak saling menimpa.
+- **B5 Validasi Settings.** ConfigError baru: RECONCILER_INTERVAL_SEC
+  < 5, PARTIAL_TP_FRACTION di luar (0,1), MAX_HOLD_HOURS < 0,
+  BREAKEVEN_TRIGGER_R/TRAILING_TRIGGER_R/TRAILING_ATR_MULT <= 0,
+  MAX_SYMBOL/TOTAL_EXPOSURE_PCT <= 0, RATE_LIMIT_PER_MINUTE < 0,
+  WEB_API_TOKEN terisi tapi < 24 karakter. Nilai non-kritis yang salah
+  format kini MEMICU PERINGATAN log (tidak lagi diam-diam bawaan).
+- **B6 Jurnal terpisah + cache.** `record_ai_decision` menulis ke
+  `ai_decisions.jsonl` di samping jurnal (bukan lagi trades.jsonl);
+  append di bawah threading.Lock; `all_entries()` di-cache per
+  (mtime, ukuran) dan invalidasi saat record.
+- **B7 Strategi.** (a) ATR None → sinyal arah diturunkan NEUTRAL
+  (level AI tidak lagi lolos tanpa validasi rentang ATR). (b)
+  `snapshot_light` limit 200 → 300 (selaras jalur analisis). (c) MTF
+  hanya mengambil klines (1 panggilan/TF) — tren/rezim/ADX dihitung
+  build_snapshot dari klines. (d) Gerbang ADX diperbaiki: entri
+  pengikut-tren ditolak bila rezim `sideways` ATAU adx14 < ADX_MIN
+  pada rezim apa pun (gerbang lama mustahil aktif karena "trending"
+  mensyaratkan ADX ≥ 25). (e) `classify_regime` menerima `interval`:
+  ambang atr_pct diskalakan √(menit/15) dibatasi 0,5–4×.
+- **B8 Refcount stream.** `MarketStream` menghitung pemakai per
+  (simbol, interval); unsubscribe hanya mencabut langganan saat
+  pemakai terakhir pergi — menutup satu tab UI tidak lagi
+  menghentikan tab lain pada simbol yang sama.
+
+**Uji lama yang diubah (aturan 7 — dengan alasan):**
+`test_security.py` (token uji diperpanjang ≥24 char mengikuti B5,
+termasuk token pada URL WS), `test_phase1.py::test_enforce_web_safety`
+(token fixture diperpanjang), `test_phase6_a.py::test_a4_*` (token
+fixture diperpanjang), `test_phase3.py::test_gate_adx_and_regime`
+(ekspektasi sideways dibalik sesuai B7d), `test_phase3.py::
+test_pm_breakeven_*` (target BE 100,0 → 100,1 sesuai buffer B1).

@@ -34,6 +34,16 @@ class ConfigError(ValueError):
     """Konfigurasi tidak valid — aplikasi harus menolak start, bukan menebak."""
 
 
+def _warn_bad_value(name: str, raw: str, default) -> None:
+    """Peringatan keras untuk env salah format (Fase 6-B5)."""
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Env %s=%r tidak valid — memakai nilai bawaan %s. Perbaiki .env Anda.",
+        name, raw, default,
+    )
+
+
 def _get_float(name: str, default: float, *, critical: bool = False) -> float:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
@@ -43,6 +53,7 @@ def _get_float(name: str, default: float, *, critical: bool = False) -> float:
     except ValueError:
         if critical:
             raise ConfigError(f"{name}: nilai {raw!r} bukan angka yang valid.")
+        _warn_bad_value(name, raw, default)  # Fase 6-B5: tidak diam-diam
         return default
 
 
@@ -55,6 +66,7 @@ def _get_int(name: str, default: int, *, critical: bool = False) -> int:
     except ValueError:
         if critical:
             raise ConfigError(f"{name}: nilai {raw!r} bukan bilangan bulat yang valid.")
+        _warn_bad_value(name, raw, default)  # Fase 6-B5: tidak diam-diam
         return default
 
 
@@ -141,6 +153,7 @@ class Settings:
     # Manajemen keluar (bawaan SEMUA mati):
     move_sl_to_be: bool = False           # geser SL ke break-even setelah profit 1R
     breakeven_trigger_r: float = 1.0
+    breakeven_buffer_pct: float = 0.1  # Fase 6-B1: buffer fee di atas harga entri untuk target BE
     trailing_stop_enabled: bool = False   # trailing stop ATR setelah trailing_trigger_r
     trailing_trigger_r: float = 1.5
     trailing_atr_mult: float = 1.0
@@ -249,6 +262,27 @@ class Settings:
             errors.append(f"SCORING_VERSION harus 1 atau 2, kini {self.scoring_version}")
         if self.protection_working_type not in {"MARK_PRICE", "CONTRACT_PRICE"}:
             errors.append(f"PROTECTION_WORKING_TYPE tidak dikenal: {self.protection_working_type!r}")
+        # Fase 6-B5: validasi parameter yang sebelumnya lolos diam-diam.
+        if self.reconciler_interval_sec < 5:
+            errors.append(f"RECONCILER_INTERVAL_SEC harus >= 5, kini {self.reconciler_interval_sec}")
+        if not (0 < self.partial_tp_fraction < 1):
+            errors.append(f"PARTIAL_TP_FRACTION harus dalam (0, 1), kini {self.partial_tp_fraction}")
+        if self.max_hold_hours < 0:
+            errors.append(f"MAX_HOLD_HOURS harus >= 0, kini {self.max_hold_hours}")
+        if self.breakeven_trigger_r <= 0:
+            errors.append(f"BREAKEVEN_TRIGGER_R harus > 0, kini {self.breakeven_trigger_r}")
+        if self.trailing_trigger_r <= 0:
+            errors.append(f"TRAILING_TRIGGER_R harus > 0, kini {self.trailing_trigger_r}")
+        if self.trailing_atr_mult <= 0:
+            errors.append(f"TRAILING_ATR_MULT harus > 0, kini {self.trailing_atr_mult}")
+        if self.max_symbol_exposure_pct <= 0:
+            errors.append(f"MAX_SYMBOL_EXPOSURE_PCT harus > 0, kini {self.max_symbol_exposure_pct}")
+        if self.max_total_exposure_pct <= 0:
+            errors.append(f"MAX_TOTAL_EXPOSURE_PCT harus > 0, kini {self.max_total_exposure_pct}")
+        if self.rate_limit_per_minute < 0:
+            errors.append(f"RATE_LIMIT_PER_MINUTE harus >= 0, kini {self.rate_limit_per_minute}")
+        if self.web_api_token and len(self.web_api_token) < 24:
+            errors.append("WEB_API_TOKEN terlalu pendek — minimal 24 karakter bila diisi")
         if errors:
             raise ConfigError("Konfigurasi tidak valid — " + "; ".join(errors))
 
@@ -344,6 +378,7 @@ def load_settings() -> Settings:
         regime_gate_enabled=_get_bool("REGIME_GATE_ENABLED", True),
         move_sl_to_be=_get_bool("MOVE_SL_TO_BE", False),
         breakeven_trigger_r=_get_float("BREAKEVEN_TRIGGER_R", 1.0),
+        breakeven_buffer_pct=_get_float("BREAKEVEN_BUFFER_PCT", 0.1),
         trailing_stop_enabled=_get_bool("TRAILING_STOP_ENABLED", False),
         trailing_trigger_r=_get_float("TRAILING_TRIGGER_R", 1.5),
         trailing_atr_mult=_get_float("TRAILING_ATR_MULT", 1.0),

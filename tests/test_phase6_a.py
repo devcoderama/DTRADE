@@ -64,10 +64,10 @@ def test_a2_algo_trigger_price_plain():
 # ----------------------------------------------------------------------
 def test_a4_repr_settings_hides_secrets():
     s = Settings(binance_api_secret="RAHASIA123", binance_api_key="KUNCI456",
-                 web_api_token="TOKEN789", database_url="postgres://u:PSSWD@h/db",
+                 web_api_token="TOKEN789-token-uji-panjang", database_url="postgres://u:PSSWD@h/db",
                  telegram_bot_token="BOTTOKEN0")
     text = repr(s)
-    for secret in ("RAHASIA123", "KUNCI456", "TOKEN789", "PSSWD", "BOTTOKEN0"):
+    for secret in ("RAHASIA123", "KUNCI456", "TOKEN789-token-uji-panjang", "PSSWD", "BOTTOKEN0"):
         assert secret not in text
 
 

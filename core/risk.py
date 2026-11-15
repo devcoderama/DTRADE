@@ -86,13 +86,34 @@ class RiskManager:
         return {}
 
     def _save_state(self, state: dict) -> None:
+        # Fase 6-B4: kunci berkas lintas proses — CLI `trade` dan web
+        # server tidak boleh saling menimpa baseline/kunci harian.
+        from utils.filelock import file_lock
+
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self._state_path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
-            tmp.replace(self._state_path)
+            with file_lock(self._state_path, timeout=5.0) as acquired:
+                if not acquired:
+                    log.warning("risk_state: kunci berkas tidak didapat — menulis tanpa kunci.")
+                tmp = self._state_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(state, indent=1), encoding="utf-8")
+                tmp.replace(self._state_path)
         except OSError as exc:
             log.error("Gagal menyimpan risk_state: %s", exc)
+
+    def sync_daily_baselines(self) -> dict:
+        """Catat baseline awal hari/minggu dari ekuitas akun saat ini.
+
+        Fase 6-B4: dipanggil Reconciler tiap putaran agar pergantian
+        hari UTC tercatat TEPAT saat berganti — bukan menunggu evaluasi
+        sinyal pertama keesokan harinya (yang akan memakai ekuitas
+        tengah hari sebagai "awal hari" dan melemahkan kunci harian).
+        """
+        account = self._binance.account()
+        equity = float(account.get("totalWalletBalance", 0)) + float(
+            account.get("totalUnrealizedProfit", 0)
+        )
+        return self._sync_baselines(self._load_state(), equity)
 
     def _sync_baselines(self, state: dict, equity: float) -> dict:
         """Catat baseline awal hari/minggu pada evaluasi pertama periodenya.
@@ -116,15 +137,16 @@ class RiskManager:
             self._save_state(state)
         return state
 
-    def _consecutive_losses(self) -> int:
-        """Hitung realisasi rugi berturut-turut dalam jendela waktu.
+    def _consecutive_losses(self) -> Optional[int]:
+        """Hitung TRADE rugi berturut-turut dalam jendela waktu.
 
-        Hanya realisasi REALIZED_PNL dalam `CONSECUTIVE_LOSS_WINDOW_HOURS`
-        jam terakhir (bawaan 24) yang dihitung — kerugian lama tidak
-        mengunci akun selamanya; setelah jendela berlalu streak menyusut
-        dengan sendirinya (perilaku cooldown alami). Pengambilan memakai
-        startTime + paginasi agar tidak bergantung pada 100 baris
-        terakhir yang tercampur jenis income lain (funding fee, komisi).
+        Fase 6-B2: baris income dikelompokkan per TRADE (tradeId/tranId;
+        cadangan: simbol + ember 1 detik) lalu dijumlahkan — satu trade
+        rugi dengan 3 fill adalah SATU rugi, bukan tiga. Hanya
+        REALIZED_PNL dalam `CONSECUTIVE_LOSS_WINDOW_HOURS` jam terakhir.
+
+        Fase 6-B3: kegagalan membaca income mengembalikan None (bukan 0)
+        agar pemanggil bisa fail-closed saat live.
         """
         import time as _time
 
@@ -146,20 +168,28 @@ class RiskManager:
                 if last_time <= cursor:
                     break
                 cursor = last_time + 1
-        except Exception as exc:  # pemeriksaan tambahan — kegagalan API dicatat, bukan disembunyikan
+        except Exception as exc:
             log.warning("Riwayat income tidak terbaca untuk cek rugi beruntun: %s", exc)
-            return 0
+            return None
         realized = [
             r for r in rows
             if r.get("incomeType") == "REALIZED_PNL" and int(r.get("time", 0)) >= start_ms
         ]
-        realized.sort(key=lambda r: int(r.get("time", 0)), reverse=True)
+        # Kelompokkan per trade: jumlahkan fill-fill satu trade.
+        trades: dict[tuple, dict] = {}
+        for r in realized:
+            t = int(r.get("time", 0))
+            key_id = r.get("tradeId") or r.get("tranId")
+            key = (r.get("symbol", ""), str(key_id)) if key_id else (r.get("symbol", ""), f"t{t // 1000}")
+            bucket = trades.setdefault(key, {"total": 0.0, "last": 0})
+            bucket["total"] += float(r.get("income", 0))
+            bucket["last"] = max(bucket["last"], t)
+        ordered = sorted(trades.values(), key=lambda b: b["last"], reverse=True)
         streak = 0
-        for row in realized:
-            value = float(row.get("income", 0))
-            if value < 0:
+        for trade in ordered:
+            if trade["total"] < 0:
                 streak += 1
-            elif value > 0:
+            elif trade["total"] > 0:
                 break
         return streak
 
@@ -214,6 +244,12 @@ class RiskManager:
         cap_amount = equity * cap_pct / 100.0
         open_risk = self._open_risk(open_positions)
         planned_risk = equity * s.risk_per_trade_pct / 100.0
+        if open_risk is None and s.is_live:
+            # Fase 6-B3: risiko terbuka tidak terbaca saat live → tolak.
+            return (
+                "Total risiko terbuka tidak dapat dibaca (API algo/posisi gagal) — "
+                "sinyal ditolak demi keamanan (fail-closed saat live)."
+            )
         if open_risk is not None and open_risk + planned_risk > cap_amount:
             return (
                 f"Total risiko terbuka {open_risk:.2f} + rencana {planned_risk:.2f} USDT "
@@ -408,6 +444,18 @@ class RiskManager:
         # --- Perlindungan rugi beruntun ---
         if s.max_consecutive_losses > 0:
             streak = self._consecutive_losses()
+            if streak is None:
+                # Fase 6-B3: fail-closed saat LIVE — cek yang tidak bisa
+                # dilakukan tidak boleh dianggap lulus. Dry-run longgar
+                # dengan peringatan (tidak ada dana dipertaruhkan).
+                if s.is_live:
+                    base.reasons.append(
+                        "Riwayat income tidak terbaca — sinyal ditolak demi keamanan "
+                        "(fail-closed: pemeriksaan rugi beruntun wajib saat live)."
+                    )
+                    return base
+                log.warning("Cek rugi beruntun dilewati (income tak terbaca, mode dry-run).")
+                streak = 0
             if streak >= s.max_consecutive_losses:
                 base.reasons.append(
                     f"Sudah {streak} kali rugi beruntun (batas {s.max_consecutive_losses}) — "

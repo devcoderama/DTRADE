@@ -88,6 +88,16 @@ class PositionManager:
         except Exception:
             return None
 
+    def _breakeven_price(self, entry_price: float, side: str) -> float:
+        """Harga break-even + buffer fee (Fase 6-B1).
+
+        SL tepat di harga entri tetap keluar RUGI sebesar fee taker
+        (2× ±0,05%). Buffer `BREAKEVEN_BUFFER_PCT` (bawaan 0,1%)
+        menggeser target sedikit ke wilayah untung.
+        """
+        buffer = float(getattr(self._settings, "breakeven_buffer_pct", 0.1)) / 100.0
+        return entry_price * (1 + buffer) if side == "LONG" else entry_price * (1 - buffer)
+
     def _replace_sl(self, symbol: str, exit_side: str, new_sl: float, tag: str) -> bool:
         """Pasang SL baru terverifikasi, BARU batalkan SL lama. Aman gagal."""
         filters = self._symbols.filters(symbol)
@@ -96,7 +106,9 @@ class PositionManager:
             self._binance.place_algo_order(
                 symbol=symbol, side=exit_side, order_type="STOP_MARKET",
                 trigger_price=new_sl, close_position=True,
-                client_algo_id=f"pm-{tag}-{symbol.lower()}"[:36],
+                # Fase 6-B1: id WAJIB unik per pemasangan — id yang dipakai
+                # ulang ditolak bursa sebagai duplikat pada pergeseran ke-2.
+                client_algo_id=f"pm-{tag}-{symbol.lower()}-{int(time.time() * 1000):x}"[:36],
                 working_type=getattr(self._settings, "protection_working_type", "MARK_PRICE"),
             )
         except Exception as exc:
@@ -225,19 +237,20 @@ class PositionManager:
                             acted = True
                             summary["trailing"].append(symbol)
 
-            # --- break-even ---
+            # --- break-even (dengan buffer fee, Fase 6-B1) ---
             if (
                 s.move_sl_to_be and not acted and not flags.get("be_done")
                 and profit_r >= float(s.breakeven_trigger_r)
             ):
+                be_price = self._breakeven_price(entry_price, side)
                 if dry:
-                    log.info("[DRY-RUN] PositionManager: SL %s akan digeser ke break-even %.6f.", symbol, entry_price)
-                elif self._replace_sl(symbol, exit_side, entry_price, "be"):
+                    log.info("[DRY-RUN] PositionManager: SL %s akan digeser ke break-even %.6f.", symbol, be_price)
+                elif self._replace_sl(symbol, exit_side, be_price, "be"):
                     flags["be_done"] = True
-                    flags["best_sl"] = entry_price
+                    flags["best_sl"] = be_price
                     changed = True
                     summary["breakeven"].append(symbol)
-                    log.info("PositionManager: SL %s digeser ke break-even.", symbol)
+                    log.info("PositionManager: SL %s digeser ke break-even (+buffer fee).", symbol)
 
         if changed:
             self._save_state(state)

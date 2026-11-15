@@ -13,6 +13,7 @@ take_profit, notional, risk_amount, dry_run, notes.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -26,21 +27,39 @@ class TradeJournal:
     def __init__(self, path: str, db=None):
         self._path = Path(path)
         self._db = db  # cermin opsional ke Supabase/PostgreSQL (core.database)
+        # Fase 6-B6: kunci append (thread web + reconciler menulis
+        # bersamaan) + cache baca untuk open_registry.
+        self._lock = threading.Lock()
+        self._cache_key: tuple | None = None
+        self._cache_entries: list[dict[str, Any]] = []
+        # Keputusan AI dipisah ke berkas sendiri agar jurnal trade tetap
+        # ramping dan registry tidak memindai baris non-eksekusi.
+        self._ai_path = self._path.with_name("ai_decisions.jsonl")
 
     @property
     def path(self) -> Path:
         return self._path
 
+    @property
+    def ai_path(self) -> Path:
+        return self._ai_path
+
+    def _append(self, path: Path, entry: dict[str, Any]) -> dict[str, Any]:
+        row = {"time": int(time.time() * 1000), **entry}
+        with self._lock:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                if path == self._path:
+                    self._cache_key = None  # tulis baru → cache baca basi
+            except OSError as exc:
+                log.warning("Gagal menulis jurnal %s: %s", path.name, exc)
+        return row
+
     def record(self, entry: dict[str, Any]) -> None:
         """Tambahkan satu entri; kegagalan tulis tidak pernah fatal."""
-        try:
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            row = {"time": int(time.time() * 1000), **entry}
-            with self._path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError as exc:
-            log.warning("Gagal menulis jurnal perdagangan: %s", exc)
-            row = {"time": int(time.time() * 1000), **entry}
+        row = self._append(self._path, entry)
         if self._db is not None:
             self._db.insert_journal(row)  # kegagalan DB diabaikan di dalam Database
 
@@ -128,11 +147,16 @@ class TradeJournal:
         )
 
     def record_ai_decision(self, signal: Any, provider: str | None = None) -> None:
-        """Catat keputusan AI per sinyal (untuk menilai nilai tambah AI)."""
+        """Catat keputusan AI per sinyal (untuk menilai nilai tambah AI).
+
+        Fase 6-B6: ditulis ke `ai_decisions.jsonl` TERPISAH dari jurnal
+        trade — registry reconciler tidak lagi memindai baris keputusan.
+        """
         ai = getattr(signal, "ai", None)
         if ai is None:
             return
-        self.record(
+        self._append(
+            self._ai_path,
             {
                 "type": "ai_decision",
                 "symbol": signal.symbol,
@@ -143,11 +167,23 @@ class TradeJournal:
                 "final_side": signal.side,
                 "final_confidence": signal.confidence,
                 "technical_score": signal.technical_score,
-            }
+            },
         )
 
     def all_entries(self) -> list[dict[str, Any]]:
-        """Seluruh isi jurnal (urutan kronologis)."""
+        """Seluruh isi jurnal (urutan kronologis).
+
+        Fase 6-B6: hasil di-cache berdasarkan (mtime, ukuran) berkas —
+        open_registry yang dipanggil tiap putaran reconciler tidak lagi
+        membaca+mem-parse seluruh berkas bila tidak ada perubahan.
+        """
+        try:
+            stat = self._path.stat()
+            key = (stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            return []
+        if self._cache_key == key:
+            return list(self._cache_entries)
         try:
             lines = self._path.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -161,7 +197,9 @@ class TradeJournal:
                 out.append(json.loads(line))
             except ValueError:
                 continue
-        return out
+        self._cache_key = key
+        self._cache_entries = out
+        return list(out)
 
     def performance(self) -> dict[str, Any]:
         """Metrik performa dari event penutupan di jurnal.

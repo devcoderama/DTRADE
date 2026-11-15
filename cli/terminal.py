@@ -432,7 +432,7 @@ def cmd_reconcile(app: App, args) -> int:
     from core.reconciler import Reconciler
 
     pm = PositionManager(app.settings, app.binance, app.executor, app.journal, app.symbols)
-    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal, position_manager=pm)
+    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal, position_manager=pm, risk=app.risk)
     summary = reconciler.run_once()
     _print(f"[bold]Rekonsiliasi selesai[/bold]: {summary}")
     return 0

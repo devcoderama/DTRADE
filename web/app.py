@@ -99,7 +99,7 @@ executor.set_intent_hook(journal.record_intent)  # write-ahead jurnal (Fase 6-A1
 market_stream = MarketStream(settings)
 trading_service = TradingService(settings, risk_manager, executor, binance)
 position_manager = PositionManager(settings, binance, executor, journal, symbol_manager)
-reconciler = Reconciler(settings, binance, executor, journal, position_manager=position_manager)
+reconciler = Reconciler(settings, binance, executor, journal, position_manager=position_manager, risk=risk_manager)
 
 
 
