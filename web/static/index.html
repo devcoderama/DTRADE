@@ -44,6 +44,21 @@
     </div>
   </section>
 
+  <!-- Provider & model AI (bisa diganti tanpa edit .env / restart) -->
+  <section class="panel">
+    <div class="row space-between">
+      <h2 style="margin:0">🤖 Provider &amp; Model AI</h2>
+      <span class="muted small" id="ai-current">…</span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <select id="ai-provider" title="Provider AI"></select>
+      <input type="text" id="ai-model" list="ai-model-options" placeholder="Model — pilih saran atau ketik sendiri" style="flex:1; min-width:200px">
+      <datalist id="ai-model-options"></datalist>
+      <button id="btn-ai-apply" class="primary">Terapkan</button>
+    </div>
+    <p class="muted small-note">Berlaku <b>langsung tanpa restart</b> dan tersimpan otomatis (di berkas <code>data/ai_settings.json</code>, bukan .env) — bila model yang dipakai mencapai limit, tinggal ganti di sini. Kunci API tetap tersimpan aman di .env backend.</p>
+  </section>
+
   <!-- Analisis simbol -->
   <section class="panel" id="panel-analysis">
     <div id="detail-loading" class="loading-overlay" hidden>

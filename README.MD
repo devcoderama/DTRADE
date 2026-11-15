@@ -208,6 +208,8 @@ python run.py cli positions               # posisi terbuka saat ini
 python run.py cli trade BTCUSDT --side LONG   # eksekusi (dry-run kecuali live)
 python run.py cli close BTCUSDT           # tutup posisi satu simbol
 python run.py cli ai-account              # status provider AI (+ sisa token BangunWeb bila aktif)
+python run.py cli ai-model                # provider+model AI aktif saat ini
+python run.py cli ai-model --provider bangunweb --model bw-pro   # ganti model (tanpa edit .env)
 python run.py cli notify-test             # kirim pesan uji ke Telegram
 python run.py cli backtest BTCUSDT --limit 1000   # uji strategi pada data historis
 python run.py cli watch --top 10 --every 15       # pantau pasar, sinyal kuat → Telegram
@@ -217,6 +219,22 @@ python run.py cli journal                 # lihat jurnal eksekusi terakhir
 
 Perintah `trade` dalam mode `live` meminta konfirmasi pengetikan ulang simbol
 sebelum order dikirim.
+
+### Mengganti provider & model AI (tanpa edit `.env`)
+
+Provider dan model AI **tidak terkunci di `.env`** — nilai di sana hanya
+pilihan awal. Ganti kapan pun, berlaku langsung tanpa restart:
+
+- **Web UI:** panel **🤖 Provider & Model AI** di dasbor — pilih provider,
+  pilih/ketik model (ada saran + daftar model live BangunWeb), klik
+  **Terapkan**.
+- **CLI:** `python run.py cli ai-model --provider deepseek --model deepseek-chat`
+  (`ai-model --list` menampilkan saran model per provider).
+
+Pilihan tersimpan di `data/ai_settings.json`; server web yang sedang
+berjalan memuatnya otomatis, jadi pergantian dari CLI pun langsung
+berlaku di Web UI. Ini memudahkan bila model yang dipakai mencapai
+limit — tinggal pindah model/provider yang kuncinya sudah ada di `.env`.
 
 ### Siaran sinyal ke Telegram (`broadcast`)
 

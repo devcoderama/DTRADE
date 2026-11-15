@@ -146,6 +146,10 @@ class SignalEngine:
         self._binance = binance
         self._ai = ai
 
+    def set_ai(self, ai) -> None:
+        """Ganti provider AI saat runtime (Web UI / CLI) tanpa restart."""
+        self._ai = ai
+
     def snapshot_for(self, symbol: str, interval: Optional[str] = None) -> dict:
         interval = interval or self._settings.default_interval
         klines = self._binance.klines(symbol, interval=interval, limit=200)

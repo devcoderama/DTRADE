@@ -22,6 +22,16 @@ import time
 
 from config.settings import Settings, load_settings
 from core.ai_providers import create_ai_provider, describe_providers
+from core.ai_choice import (
+    KNOWN_MODELS as AI_KNOWN_MODELS,
+    PROVIDERS as AI_PROVIDERS,
+    build_provider as build_ai_provider,
+    choice_source as ai_choice_source,
+    default_model as ai_default_model,
+    load_choice as load_ai_choice,
+    normalize_provider as normalize_ai_provider,
+    save_choice as save_ai_choice,
+)
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.broadcaster import run_broadcast
@@ -60,7 +70,7 @@ class App:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.binance = BinanceFuturesClient(settings)
-        self.ai = create_ai_provider(settings)
+        self.ai = build_ai_provider(settings)
         self.notifier = build_notifier(settings)
         self.journal = TradeJournal(settings.trade_journal_path)
         self.symbols = SymbolManager(self.binance, settings)
@@ -309,6 +319,37 @@ def cmd_journal(app: App, args) -> int:
     return 0
 
 
+def cmd_ai_model(app: App, args) -> int:
+    provider, model = load_ai_choice(app.settings)
+    if args.provider or args.model:
+        new_provider = normalize_ai_provider(args.provider) if args.provider else provider
+        if new_provider not in AI_PROVIDERS:
+            _print(f"[red]Provider tidak dikenal:[/red] {args.provider} — pilihan: {', '.join(AI_PROVIDERS)}")
+            return 1
+        new_model = (args.model or "").strip() or (
+            model if new_provider == provider else ai_default_model(app.settings, new_provider)
+        )
+        try:
+            save_ai_choice(new_provider, new_model)
+        except ValueError as exc:
+            _print(f"[red]{exc}[/red]")
+            return 1
+        _print(f"[green]Pilihan AI disimpan:[/green] {new_provider}:{new_model}")
+        _print("[dim]Berlaku untuk perintah berikutnya; server web yang sedang berjalan memuatnya otomatis.[/dim]")
+        return 0
+    sumber = "data/ai_settings.json" if ai_choice_source() == "file" else ".env (bawaan)"
+    configured = bool(app.ai is not None and app.ai.is_configured())
+    _print(f"[bold]Provider aktif:[/bold] {provider} · [bold]Model:[/bold] {model}")
+    _print(f"Sumber pilihan: {sumber} · Kunci API: {'terkonfigurasi' if configured else 'belum ada (analisis teknikal murni)'}")
+    if args.list:
+        for p in AI_PROVIDERS:
+            models = AI_KNOWN_MODELS.get(p) or []
+            _print(f"  {p:<10} {', '.join(models) if models else '(model bebas — ketik manual)'}")
+    else:
+        _print("[dim]Ganti: ai-model --provider deepseek --model deepseek-chat · Saran model: ai-model --list[/dim]")
+    return 0
+
+
 def cmd_broadcast(app: App, args) -> int:
     symbols = app.symbols.all_symbols()
     cache: dict[str, float] = {}
@@ -383,6 +424,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl.add_argument("symbol")
 
     sub.add_parser("ai-account", help="Status provider AI (+ sisa token BangunWeb bila aktif)")
+
+    p = sub.add_parser("ai-model", help="Lihat/ganti provider & model AI (tersimpan, tanpa edit .env)")
+    p.add_argument("--provider", default=None, help="bangunweb/openai/anthropic/deepseek/grok/nous/custom")
+    p.add_argument("--model", default=None, help="Nama model (bebas, mis. deepseek-v4-flash)")
+    p.add_argument("--list", action="store_true", help="Tampilkan saran model per provider")
     sub.add_parser("notify-test", help="Kirim pesan uji ke Telegram")
 
     p = sub.add_parser("backtest", help="Uji strategi pada data historis (skor teknikal murni)")
@@ -425,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
         "trade": cmd_trade,
         "close": cmd_close,
         "ai-account": cmd_ai_account,
+        "ai-model": cmd_ai_model,
         "notify-test": cmd_notify_test,
         "backtest": cmd_backtest,
         "watch": cmd_watch,

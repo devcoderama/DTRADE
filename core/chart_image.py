@@ -10,10 +10,15 @@ Fungsi utama: `render_signal_chart(...) -> bytes (PNG)`.
 from __future__ import annotations
 
 import io
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 import matplotlib
+
+# Redam INFO font_manager (keluhan font sistem yang tidak terbaca saat
+# cache font pertama dibangun) agar log start server tetap bersih.
+logging.getLogger("matplotlib.font_manager").setLevel(logging.WARNING)
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402

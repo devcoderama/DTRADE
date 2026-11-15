@@ -84,6 +84,64 @@ async function loadSymbols() {
   } catch (e) { /* abaikan */ }
 }
 
+/* ---------------- provider & model AI (runtime) ---------------- */
+let aiModelsData = null;
+
+function fillModelOptions(provider) {
+  if (!aiModelsData) return;
+  const list = $("ai-model-options");
+  let models = (aiModelsData.known_models || {})[provider] || [];
+  if (provider === "bangunweb" && (aiModelsData.bangunweb_live_models || []).length) {
+    models = [...new Set([...aiModelsData.bangunweb_live_models, ...models])];
+  }
+  list.innerHTML = models.map((m) => `<option value="${m}">`).join("");
+}
+
+async function loadAiPanel() {
+  try {
+    aiModelsData = await api("/api/ai/models");
+    const sel = $("ai-provider");
+    sel.innerHTML = (aiModelsData.providers || []).map((p) =>
+      `<option value="${p.provider}" ${p.provider === aiModelsData.current.provider ? "selected" : ""}>` +
+      `${p.provider}${p.configured ? "" : " (belum ada kunci)"}</option>`).join("");
+    $("ai-model").value = aiModelsData.current.model || "";
+    $("ai-current").textContent =
+      "Aktif: " + aiModelsData.current.provider + " · " + aiModelsData.current.model +
+      (aiModelsData.current.source === "file" ? " · tersimpan" : " · dari .env");
+    fillModelOptions(aiModelsData.current.provider);
+  } catch (e) { /* panel AI tidak kritis */ }
+}
+
+async function applyAiModel() {
+  const provider = $("ai-provider").value;
+  const model = $("ai-model").value.trim();
+  if (!model) { toast("Isi nama model terlebih dahulu."); return; }
+  const btn = $("btn-ai-apply");
+  btn.disabled = true;
+  btn.textContent = "Menerapkan…";
+  try {
+    const res = await api("/api/ai/model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model }),
+    });
+    toast(res.warning ? "⚠️ " + res.warning : "🤖 AI diganti ke " + res.provider + " · " + res.model);
+    loadAiPanel();
+    loadConfig();
+  } catch (e) {
+    toast("Gagal mengganti model: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Terapkan";
+  }
+}
+$("btn-ai-apply").addEventListener("click", applyAiModel);
+$("ai-provider").addEventListener("change", () => {
+  fillModelOptions($("ai-provider").value);
+  const known = aiModelsData && (aiModelsData.known_models || {})[$("ai-provider").value];
+  if (known && known.length) $("ai-model").value = known[0];
+});
+
 /* ---------------- posisi ---------------- */
 function renderPositions(positions) {
   const tbody = document.querySelector("#pos-table tbody");
@@ -454,5 +512,6 @@ $("btn-scan").addEventListener("click", scan);
 $("btn-refresh").addEventListener("click", loadAccount);
 
 loadConfig();
+loadAiPanel();
 loadSymbols();
 loadAccount();

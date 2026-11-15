@@ -35,6 +35,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config.settings import load_settings
+from core.ai_choice import (
+    KNOWN_MODELS,
+    build_provider as build_ai_provider,
+    choice_source,
+    load_choice,
+    save_choice,
+    settings_with_choice,
+    state_mtime,
+)
 from core.ai_providers import create_ai_provider, describe_providers
 from core.backtest import BacktestConfig, Backtester
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
@@ -53,12 +62,28 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 settings = load_settings()
 binance = BinanceFuturesClient(settings)
-ai_client = create_ai_provider(settings)
+ai_client = build_ai_provider(settings)
 notifier = build_notifier(settings)
 journal = TradeJournal(settings.trade_journal_path)
 backtester = Backtester(binance)
 symbol_manager = SymbolManager(binance, settings)
 engine = SignalEngine(settings, binance, ai_client)
+
+# Pilihan AI (provider+model) dapat diganti saat runtime lewat Web UI / CLI
+# dan disimpan di data/ai_settings.json. Server memuat ulang otomatis bila
+# file itu berubah dari luar (mis. perintah CLI `ai-model`).
+_ai_mtime: list = [state_mtime()]
+
+
+def _refresh_ai_from_store() -> None:
+    global ai_client
+    m = state_mtime()
+    if m is not None and m != _ai_mtime[0]:
+        _ai_mtime[0] = m
+        ai_client = build_ai_provider(settings)
+        engine.set_ai(ai_client)
+        provider, model = load_choice(settings)
+        log.info("Pilihan AI dimuat ulang: %s:%s", provider, model)
 risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager)
 
@@ -88,6 +113,7 @@ def _auto_broadcast_loop() -> None:
         try:
             if _broadcast_lock.acquire(blocking=False):
                 try:
+                    _refresh_ai_from_store()
                     run_broadcast(
                         settings, engine, binance, notifier,
                         symbol_manager.all_symbols(),
@@ -170,7 +196,12 @@ def health() -> dict:
 
 @app.get("/api/config")
 def config() -> dict:
-    return settings.public_summary()
+    summary = settings.public_summary()
+    provider, model = load_choice(settings)
+    summary["ai_provider"] = provider
+    summary["ai_model"] = model
+    summary["ai_configured"] = bool(ai_client is not None and ai_client.is_configured())
+    return summary
 
 
 @app.get("/api/account")
@@ -227,12 +258,14 @@ def snapshot(symbol: str, interval: Optional[str] = None) -> dict:
 
 @app.get("/api/analyze/{symbol}")
 def analyze(symbol: str, interval: Optional[str] = None, ai: bool = True) -> dict:
+    _refresh_ai_from_store()
     return _guard(lambda: _signal_payload(engine.analyze(symbol.upper(), interval, use_ai=ai)))
 
 
 @app.get("/api/scan")
 def scan(top: int = Query(10, ge=1, le=50), interval: Optional[str] = None, ai: bool = False) -> dict:
     def _run():
+        _refresh_ai_from_store()
         signals = engine.scan(symbol_manager.all_symbols(), interval=interval, use_ai=ai)
         return {"results": [_signal_payload(s) for s in signals[:top]]}
 
@@ -292,7 +325,7 @@ def close(symbol: str) -> dict:
 @app.get("/api/ai/account")
 def ai_account() -> dict:
     def _load():
-        providers = describe_providers(settings)
+        providers = describe_providers(settings_with_choice(settings))
         active = next((p for p in providers if p["active"]), None)
         payload: dict = {"providers": providers, "active": active}
         if ai_client is not None and ai_client.name == "bangunweb" and ai_client.is_configured():
@@ -301,6 +334,54 @@ def ai_account() -> dict:
         return payload
 
     return _guard(_load)
+
+
+@app.get("/api/ai/models")
+def ai_models() -> dict:
+    """Daftar provider + saran model untuk panel ganti model di Web UI."""
+    provider, model = load_choice(settings)
+    live: list[str] = []
+    if ai_client is not None and ai_client.name == "bangunweb" and ai_client.is_configured():
+        try:
+            live = [str(m.get("id")) for m in ai_client._client.list_models() if m.get("id")]
+        except Exception:
+            live = []  # daftar live bersifat tambahan; saran statis tetap ada
+    return {
+        "current": {"provider": provider, "model": model, "source": choice_source()},
+        "providers": describe_providers(settings_with_choice(settings)),
+        "known_models": KNOWN_MODELS,
+        "bangunweb_live_models": live,
+    }
+
+
+class AIModelRequest(BaseModel):
+    provider: str
+    model: str
+
+
+@app.post("/api/ai/model")
+def ai_set_model(req: AIModelRequest) -> dict:
+    """Ganti provider+model AI saat runtime — tanpa edit .env, tanpa restart."""
+    global ai_client
+    try:
+        save_choice(req.provider, req.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ai_client = build_ai_provider(settings)
+    engine.set_ai(ai_client)
+    _ai_mtime[0] = state_mtime()
+    provider, model = load_choice(settings)
+    configured = bool(ai_client is not None and ai_client.is_configured())
+    return {
+        "ok": True,
+        "provider": provider,
+        "model": model,
+        "configured": configured,
+        "warning": None if configured else (
+            f"Provider {provider} belum memiliki kunci API di .env — "
+            "analisis berjalan teknikal murni sampai kuncinya diisi."
+        ),
+    }
 
 
 @app.get("/api/backtest/{symbol}")
@@ -351,6 +432,7 @@ def broadcast(min_score: int = Query(50, ge=10, le=100), max_signals: int = Quer
         )
 
     def _run() -> dict:
+        _refresh_ai_from_store()
         with _broadcast_lock:
             return run_broadcast(
                 settings, engine, binance, notifier, symbol_manager.all_symbols(),
