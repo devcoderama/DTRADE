@@ -1,4 +1,9 @@
-"""Uji lapisan database Supabase/PostgreSQL dengan koneksi palsu."""
+"""Uji lapisan database Supabase/PostgreSQL dengan koneksi palsu.
+
+Sejak Fase 1.5 penulisan bersifat ASINKRON (antrean + thread pekerja):
+pemanggil hanya memasukkan catatan ke antrean; test memakai flush()
+untuk menunggu pekerja menyelesaikan tulisannya.
+"""
 import json
 
 from config.settings import Settings
@@ -46,8 +51,8 @@ def test_disabled_without_url():
 
 def test_schema_and_journal_insert_are_parameterized():
     db, conn = _db_with_fake_conn()
-    ok = db.insert_journal({"time": 123, "symbol": "BTCUSDT", "side": "LONG", "quantity": 0.01})
-    assert ok is True
+    assert db.insert_journal({"time": 123, "symbol": "BTCUSDT", "side": "LONG", "quantity": 0.01}) is True
+    db.flush()
     sqls = [s for s, _ in conn.executed]
     assert any("CREATE TABLE IF NOT EXISTS trade_journal" in s for s in sqls)
     insert_sql, params = conn.executed[-1]
@@ -58,22 +63,43 @@ def test_schema_and_journal_insert_are_parameterized():
 
 def test_execution_event_insert():
     db, conn = _db_with_fake_conn()
-    ok = db.insert_execution_event(
+    assert db.insert_execution_event(
         {"ts": 5, "symbol": "ETHUSDT", "client_order_id": "baf-x", "state": "PROTECTED"}
-    )
-    assert ok is True
+    ) is True
+    db.flush()
     sql, params = conn.executed[-1]
     assert "INSERT INTO execution_events" in sql
     assert params[2] == "baf-x" and params[3] == "PROTECTED"
 
 
-def test_db_failure_is_swallowed():
+def test_db_failure_is_swallowed_and_breaker_opens():
     def boom(url):
         raise RuntimeError("koneksi ditolak")
 
     settings = Settings(database_url="postgresql://u:p@db.example:5432/postgres")
     db = Database(settings, connect_fn=boom)
     # Tidak boleh melempar — jalur trading harus tetap hidup.
-    assert db.insert_journal({"ts": 1, "symbol": "BTCUSDT"}) is False
+    assert db.insert_journal({"ts": 1, "symbol": "BTCUSDT"}) is True  # masuk antrean
+    db.flush()
     health = db.health()
     assert health["configured"] is True and health["ok"] is False
+
+
+def test_insert_is_non_blocking_with_slow_db():
+    """DB yang menggantung tidak boleh menahan pemanggil (jalur kritis)."""
+    import threading
+    import time as _time
+
+    gate = threading.Event()
+
+    def slow_connect(url):
+        gate.wait(10)  # koneksi menggantung sampai test melepaskannya
+        return _Conn()
+
+    settings = Settings(database_url="postgresql://u:p@db.example:5432/postgres")
+    db = Database(settings, connect_fn=slow_connect)
+    started = _time.time()
+    assert db.insert_journal({"ts": 1, "symbol": "BTCUSDT"}) is True
+    assert _time.time() - started < 1.0  # kembali seketika, pekerja yang menunggu
+    gate.set()
+    db.flush()

@@ -13,6 +13,13 @@ function fmtUsd(v) {
   if (v === null || v === undefined) return "—";
   return Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " USDT";
 }
+/* Escape WAJIB untuk semua string dinamis sebelum masuk innerHTML
+   (alasan AI, pesan error, simbol, model — semuanya data luar). */
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
 function toast(msg) {
   const el = $("toast");
   el.textContent = msg;
@@ -20,24 +27,22 @@ function toast(msg) {
   setTimeout(() => el.classList.remove("show"), 4200);
 }
 async function api(path, options, _retried) {
-  const opts = Object.assign({}, options || {});
-  const token = localStorage.getItem("baf-api-token");
-  if (token) {
-    opts.headers = Object.assign({}, opts.headers || {}, { "X-API-Token": token });
-  }
-  const resp = await fetch(path, opts);
+  // Autentikasi HANYA lewat cookie HttpOnly `baf_token` dari /api/auth/login
+  // (fetch mengirim cookie same-origin secara bawaan). Token TIDAK disimpan
+  // di localStorage — skrip apa pun di halaman tidak boleh bisa membacanya.
+  const resp = await fetch(path, options || {});
   const data = await resp.json().catch(() => ({}));
   if (resp.status === 401 && !_retried) {
-    // Server mewajibkan token (WEB_API_TOKEN): minta sekali, simpan, ulangi.
+    // Server mewajibkan token (WEB_API_TOKEN): minta sekali → login → ulangi.
     const entered = window.prompt("Server ini dilindungi token API. Masukkan WEB_API_TOKEN:");
     if (entered) {
-      localStorage.setItem("baf-api-token", entered.trim());
-      await fetch("/api/auth/login", {
+      const login = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: entered.trim() }),
-      }).catch(() => {});
-      return api(path, options, true);
+      }).catch(() => null);
+      if (login && login.ok) return api(path, options, true);
+      throw new Error("Token salah — login ditolak server.");
     }
   }
   if (!resp.ok) throw new Error(data.detail || ("HTTP " + resp.status));
@@ -138,7 +143,7 @@ async function loadAccount() {
 async function loadSymbols() {
   try {
     const data = await api("/api/symbols");
-    $("symbol-list").innerHTML = data.symbols.map((s) => `<option value="${s}">`).join("");
+    $("symbol-list").innerHTML = data.symbols.map((s) => `<option value="${esc(s)}">`).join("");
   } catch (e) { /* abaikan */ }
 }
 
@@ -152,7 +157,7 @@ function fillModelOptions(provider) {
   if (provider === "bangunweb" && (aiModelsData.bangunweb_live_models || []).length) {
     models = [...new Set([...aiModelsData.bangunweb_live_models, ...models])];
   }
-  list.innerHTML = models.map((m) => `<option value="${m}">`).join("");
+  list.innerHTML = models.map((m) => `<option value="${esc(m)}">`).join("");
 }
 
 async function loadAiPanel() {
@@ -160,7 +165,7 @@ async function loadAiPanel() {
     aiModelsData = await api("/api/ai/models");
     const sel = $("ai-provider");
     sel.innerHTML = (aiModelsData.providers || []).map((p) =>
-      `<option value="${p.provider}" ${p.provider === aiModelsData.current.provider ? "selected" : ""}>` +
+      `<option value="${esc(p.provider)}" ${p.provider === aiModelsData.current.provider ? "selected" : ""}>` +
       `${p.provider}${p.configured ? "" : " (belum ada kunci)"}</option>`).join("");
     $("ai-model").value = aiModelsData.current.model || "";
     $("ai-current").textContent =
@@ -212,17 +217,23 @@ function renderPositions(positions) {
     const side = amt > 0 ? "LONG" : "SHORT";
     const upnl = parseFloat(p.unRealizedProfit);
     return `<tr>
-      <td>${p.symbol}</td>
+      <td>${esc(p.symbol)}</td>
       <td class="${sideClass(side)}">${side}</td>
       <td>${Math.abs(amt)}</td>
       <td>${fmtPrice(parseFloat(p.entryPrice))}</td>
       <td>${fmtPrice(parseFloat(p.markPrice))}</td>
       <td class="${upnl >= 0 ? "pos" : "neg"}">${fmtUsd(upnl)}</td>
-      <td>${p.leverage}x</td>
-      <td><button class="small danger" onclick="closePosition('${p.symbol}')">Tutup</button></td>
+      <td>${esc(p.leverage)}x</td>
+      <td><button class="small danger" data-close-symbol="${esc(p.symbol)}">Tutup</button></td>
     </tr>`;
   }).join("");
 }
+
+/* Delegasi klik tabel posisi (tanpa inline onclick berisi string simbol). */
+document.querySelector("#pos-table tbody").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-close-symbol]");
+  if (btn) closePosition(btn.getAttribute("data-close-symbol"));
+});
 
 async function closePosition(symbol) {
   if (!confirm("Tutup posisi " + symbol + " pada harga pasar?")) return;
@@ -237,7 +248,7 @@ async function closePosition(symbol) {
 async function analyze(symbol) {
   const box = $("analysis");
   box.className = "analysis-empty";
-  box.innerHTML = '<span class="muted">Menganalisis ' + symbol + " …</span>";
+  box.innerHTML = '<span class="muted">Menganalisis ' + esc(symbol) + " …</span>";
   try {
     const s = await api("/api/analyze/" + encodeURIComponent(symbol));
     const snap = s.snapshot;
@@ -257,13 +268,13 @@ async function analyze(symbol) {
       'stroke-dasharray="100.5" stroke-dashoffset="' + (100.5 * (1 - ringFrac)).toFixed(1) + '"/></svg>';
     const aiTile = s.ai
       ? '<div class="t-value ' + (s.ai.signal === "LONG" ? "pos" : s.ai.signal === "SHORT" ? "neg" : "") + '">' +
-        s.ai.signal + " · " + s.ai.confidence + '%</div><div class="t-sub muted">' + s.ai.model_used + "</div>"
+        esc(s.ai.signal) + " · " + esc(s.ai.confidence) + '%</div><div class="t-sub muted">' + esc(s.ai.model_used) + "</div>"
       : '<div class="t-value">—</div><div class="t-sub muted">AI tidak aktif</div>';
     box.className = "";
     box.innerHTML =
       '<div class="tiles">' +
       '<div class="tile"><span class="t-label">Harga</span><div class="t-value">' + fmtPrice(s.price) + chgHtml + "</div></div>" +
-      '<div class="tile"><span class="t-label">Tren</span><div class="t-value ' + trendCls + '">' + snap.trend +
+      '<div class="tile"><span class="t-label">Tren</span><div class="t-value ' + trendCls + '">' + esc(snap.trend) +
       ' <span style="float:right">' + trendArrow + "</span></div></div>" +
       '<div class="tile"><span class="t-label">RSI 14</span><div class="t-value">' +
       (snap.rsi14 != null ? snap.rsi14.toFixed(1) : "—") + "</div></div>" +
@@ -276,10 +287,10 @@ async function analyze(symbol) {
 
     /* --- panel sinyal gabungan --- */
     $("signal-panel").innerHTML =
-      '<div class="signal-head"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Sinyal Gabungan: <span class="pill ' + s.side.toLowerCase() + '">' + s.side + "</span>" +
-      (s.side !== "NEUTRAL" ? '<span class="muted" style="font-size:13px">keyakinan ' + s.confidence + "%</span>" : "") + "</div>" +
-      (s.ai ? '<p class="signal-why">' + s.ai.reasoning + "</p>" : "") +
-      '<ul class="reasons">' + s.reasons.map((r) => "<li>" + r + "</li>").join("") + "</ul>";
+      '<div class="signal-head"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Sinyal Gabungan: <span class="pill ' + s.side.toLowerCase() + '">' + esc(s.side) + "</span>" +
+      (s.side !== "NEUTRAL" ? '<span class="muted" style="font-size:13px">keyakinan ' + esc(s.confidence) + "%</span>" : "") + "</div>" +
+      (s.ai ? '<p class="signal-why">' + esc(s.ai.reasoning) + "</p>" : "") +
+      '<ul class="reasons">' + s.reasons.map((r) => "<li>" + esc(r) + "</li>").join("") + "</ul>";
 
     /* --- gauge indikator --- */
     const histPct = snap.macd_histogram != null && snap.price
@@ -297,11 +308,11 @@ async function analyze(symbol) {
       bbp == null ? "—" : bbp.toFixed(2),
       bbp == null ? "—" : bbp >= 0.75 ? "Upper Band" : bbp <= 0.25 ? "Lower Band" : "Middle Band");
 
-    /* --- kartu eksekusi --- */
+    /* --- kartu eksekusi (tombol data-* + delegasi, tanpa inline onclick) --- */
     $("execute-card").innerHTML =
-      '<button class="primary exec-main" onclick="tradeSymbol(\'' + s.symbol + '\', null)"><i class="fa-solid fa-bolt"></i> Eksekusi Sinyal <i class="fa-solid fa-chevron-right"></i></button>' +
-      '<div class="exec-sub"><button onclick="tradeSymbol(\'' + s.symbol + '\', \'LONG\')">Paksa LONG</button>' +
-      '<button onclick="tradeSymbol(\'' + s.symbol + '\', \'SHORT\')">Paksa SHORT</button></div>' +
+      '<button class="primary exec-main" data-trade-symbol="' + esc(s.symbol) + '"><i class="fa-solid fa-bolt"></i> Eksekusi Sinyal <i class="fa-solid fa-chevron-right"></i></button>' +
+      '<div class="exec-sub"><button data-trade-symbol="' + esc(s.symbol) + '" data-trade-side="LONG">Paksa LONG</button>' +
+      '<button data-trade-symbol="' + esc(s.symbol) + '" data-trade-side="SHORT">Paksa SHORT</button></div>' +
       '<div class="exec-note"><i class="fa-solid fa-circle-info"></i> Pastikan analisis sebelum trading.</div>';
     $("signal-row").hidden = false;
 
@@ -312,9 +323,19 @@ async function analyze(symbol) {
     $("chart-title").textContent = "Grafik Candlestick — " + s.symbol;
     loadChart(s.symbol);
   } catch (e) {
-    box.innerHTML = '<span class="neg">Gagal menganalisis: ' + e.message + "</span>";
+    box.innerHTML = '<span class="neg">Gagal menganalisis: ' + esc(e.message) + "</span>";
   }
 }
+
+/* Delegasi klik kartu eksekusi & tabel scan (tanpa inline onclick). */
+$("execute-card").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-trade-symbol]");
+  if (btn) tradeSymbol(btn.getAttribute("data-trade-symbol"), btn.getAttribute("data-trade-side") || null);
+});
+document.querySelector("#scan-table tbody").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-detail-symbol]");
+  if (btn) openDetail(btn.getAttribute("data-detail-symbol"));
+});
 
 async function tradeSymbol(symbol, side) {
   const label = side ? side + " " + symbol : "sinyal untuk " + symbol;
@@ -350,8 +371,8 @@ async function scan() {
       return;
     }
     tbody.innerHTML = rows.map((s) => `<tr>
-      <td><button class="sym-link" onclick="openDetail('${s.symbol}')">${s.symbol}<span class="sym-arrow">›</span></button></td>
-      <td class="${sideClass(s.side)}">${s.side}</td>
+      <td><button class="sym-link" data-detail-symbol="${esc(s.symbol)}">${esc(s.symbol)}<span class="sym-arrow">›</span></button></td>
+      <td class="${sideClass(s.side)}">${esc(s.side)}</td>
       <td>${fmtPrice(s.price)}</td>
       <td>${s.confidence}%</td>
       <td>${s.technical_score}</td>
@@ -359,7 +380,7 @@ async function scan() {
       <td>${fmtPrice(s.take_profit)}</td>
     </tr>`).join("");
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="7" class="neg">Gagal memindai: ' + e.message + "</td></tr>";
+    tbody.innerHTML = '<tr><td colspan="7" class="neg">Gagal memindai: ' + esc(e.message) + "</td></tr>";
   } finally {
     btn.disabled = false;
     btn.textContent = "Pindai Sekarang";
@@ -521,11 +542,9 @@ function connectLive(symbol, interval) {
   if (liveSocket && liveKey === key) return;
   disconnectLive();
   liveKey = key;
-  const token = localStorage.getItem("baf-api-token");
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
   let url = proto + location.host + "/api/ws/klines/" + encodeURIComponent(symbol) +
     "?interval=" + encodeURIComponent(interval);
-  if (token) url += "&token=" + encodeURIComponent(token);
   let ws;
   try { ws = new WebSocket(url); } catch (e) { return; }
   liveSocket = ws;
@@ -618,8 +637,8 @@ async function runBacktest() {
     $("equity-wrap").hidden = lastEquity.length < 2;
     drawEquity();
     const rows = (d.trades || []).slice(-10).reverse().map((t) =>
-      "<tr><td>" + t.side + "</td><td>" + fmtPrice(t.entry_price) + "</td><td>" + fmtPrice(t.exit_price) +
-      "</td><td>" + t.exit_reason + '</td><td class="' + (t.pnl >= 0 ? "pos" : "neg") + '">' + fmtUsd(t.pnl) + "</td></tr>"
+      "<tr><td>" + esc(t.side) + "</td><td>" + fmtPrice(t.entry_price) + "</td><td>" + fmtPrice(t.exit_price) +
+      "</td><td>" + esc(t.exit_reason) + '</td><td class="' + (t.pnl >= 0 ? "pos" : "neg") + '">' + fmtUsd(t.pnl) + "</td></tr>"
     ).join("");
     $("backtest-trades").innerHTML = rows
       ? '<table style="margin-top:12px"><thead><tr><th>Sisi</th><th>Entri</th><th>Keluar</th><th>Alasan</th><th>PnL</th></tr></thead><tbody>' + rows + "</tbody></table>"

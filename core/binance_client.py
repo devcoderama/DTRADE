@@ -84,6 +84,30 @@ class BinanceFuturesClient:
         path: str,
         params: Optional[dict[str, Any]] = None,
         signed: bool = False,
+        _retried_1021: bool = False,
+    ) -> Any:
+        try:
+            return self._request_once(method, path, params, signed)
+        except BinanceAPIError as exc:
+            # -1021: timestamp di luar recvWindow. Request DITOLAK sebelum
+            # diproses bursa, jadi mengulanginya setelah sinkronisasi jam
+            # aman — termasuk untuk penempatan order.
+            if getattr(exc, "code", None) == -1021 and not _retried_1021:
+                log.warning("Error -1021 (jam tidak sinkron) — sinkronisasi waktu lalu ulangi sekali.")
+                try:
+                    self.sync_time()
+                except Exception as sync_exc:  # sinkronisasi gagal: teruskan error asli
+                    log.warning("Sinkronisasi waktu gagal: %s", sync_exc)
+                    raise exc
+                return self._request(method, path, params, signed, _retried_1021=True)
+            raise
+
+    def _request_once(
+        self,
+        method: str,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+        signed: bool = False,
     ) -> Any:
         params = dict(params or {})
         headers: dict[str, str] = {}

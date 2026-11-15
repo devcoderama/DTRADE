@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backend binance-ai-future biasanya berjalan di jaringan lokal (IP LAN)
-     atau VPS tanpa HTTPS, jadi lalu lintas HTTP (cleartext) diizinkan agar
-     Web UI dapat dimuat. Bila server Anda memakai HTTPS, konfigurasi ini
-     tidak berpengaruh. -->
+<!-- Kebijakan jaringan D TRADE (diperketat):
+     - Bawaan: HTTPS wajib, cleartext (HTTP) DITOLAK.
+     - Cleartext hanya diizinkan untuk pengembangan lokal: localhost dan
+       emulator host 10.0.2.2.
+     - Android TIDAK mendukung rentang CIDR privat (192.168.0.0/16 dsb.)
+       di domain-config. Bila backend Anda berjalan di IP LAN tertentu,
+       tambahkan SATU entri domain-config dengan IP persis itu (lihat
+       android/README.md), atau — lebih aman — akses backend lewat
+       Tailscale/HTTPS dan tidak perlu cleartext sama sekali. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
 </network-security-config>

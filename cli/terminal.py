@@ -38,6 +38,7 @@ from core.broadcaster import run_broadcast
 from core.executor import OrderExecutor
 from core.database import build_database
 from core.journal import TradeJournal
+from core.service import TradingService
 from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
@@ -105,6 +106,7 @@ class App:
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
         self.executor = OrderExecutor(settings, self.binance, self.symbols, db=self.database)
+        self.service = TradingService(settings, self.risk, self.executor, self.binance)
 
 
 # ----------------------------------------------------------------------
@@ -230,36 +232,48 @@ def cmd_positions(app: App, _args) -> int:
 
 
 def cmd_trade(app: App, args) -> int:
-    signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai)
-    if args.side:  # override sisi dari user; level SL/TP tetap dari mesin sinyal/ATR
+    import dataclasses
+
+    # Eksekusi WAJIB analisis segar (melewati cache).
+    signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai, fresh=True)
+    if args.side:  # override sisi dari user → sinyal TURUNAN; sinyal asli tidak dimutasi
         from core.strategy import _atr_levels
 
-        signal.side = args.side.upper()
-        sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), signal.side)
-        signal.stop_loss, signal.take_profit = sl, tp
-        signal.reasons.append(f"Sisi di-override manual oleh user: {signal.side}; SL/TP dari ATR.")
+        side = args.side.upper()
+        sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), side)
+        signal = dataclasses.replace(
+            signal, side=side, stop_loss=sl, take_profit=tp,
+            reasons=[*signal.reasons, f"Sisi di-override manual oleh user: {side}; SL/TP dari ATR."],
+        )
 
     if signal.side == "NEUTRAL":
         _print("Sinyal NEUTRAL — tidak ada eksekusi. Jalankan `analyze` untuk detail.")
         return 0
 
-    decision = app.risk.evaluate(signal)
-    for reason in decision.reasons:
+    # Pra-cek informatif untuk teks konfirmasi; keputusan OTORITATIF dibuat
+    # di dalam TradingService.submit secara atomik (evaluate+execute satu lock).
+    pre = app.risk.evaluate(signal)
+    for reason in pre.reasons:
         _print(f"  [risk] {reason}")
-    if not decision.allowed:
+    if not pre.allowed:
         _print("Eksekusi DITOLAK oleh RiskManager.")
         return 1
 
     if app.settings.is_live:
         answer = input(
-            f"\nMODE LIVE — kirim order {decision.side} {decision.quantity} {decision.symbol} "
-            f"(notional {decision.notional:.2f} USDT)? Ketik simbol untuk konfirmasi: "
+            f"\nMODE LIVE — kirim order {pre.side} {pre.quantity} {pre.symbol} "
+            f"(notional {pre.notional:.2f} USDT)? Ketik simbol untuk konfirmasi: "
         )
-        if answer.strip().upper() != decision.symbol:
+        if answer.strip().upper() != pre.symbol:
             _print("Dibatalkan.")
             return 1
 
-    result = app.executor.execute(decision, signal.price)
+    decision, result = app.service.submit(signal)
+    if result is None:
+        for reason in decision.reasons:
+            _print(f"  [risk] {reason}")
+        _print("Eksekusi DITOLAK pada validasi akhir (harga/risiko).")
+        return 1
     for note in result.notes:
         _print(f"  {note}")
     app.journal.record_execution(decision, result, signal.price)

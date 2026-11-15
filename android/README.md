@@ -23,6 +23,30 @@ ponsel dengan nama **D TRADE**.
 > Bawaan alamat server adalah `http://10.0.2.2:8000` (localhost komputer
 > host dari emulator Android) — ganti sesuai alamat backend Anda.
 
+## Catatan Keamanan Jaringan (penting sejak pengerasan 2026-11-16)
+
+Aplikasi kini **menolak HTTP (cleartext) secara bawaan**; hanya
+`localhost` dan `10.0.2.2` (emulator) yang diizinkan memakai HTTP.
+Akibatnya, alamat backend berupa IP LAN biasa (mis. `http://192.168.1.10:8000`)
+**tidak akan dimuat** sampai Anda memilih salah satu:
+
+1. **(Dianjurkan) Tailscale/HTTPS** — jalankan backend di belakang
+   Tailscale atau reverse proxy HTTPS, lalu isi alamat `https://…` di
+   aplikasi. Tidak perlu mengubah aplikasi sama sekali.
+2. **Tambahkan IP LAN Anda secara eksplisit** — Android tidak mendukung
+   rentang CIDR di `network_security_config.xml`; tambahkan satu entri
+   untuk IP persis backend Anda lalu build ulang APK:
+
+   ```xml
+   <domain-config cleartextTrafficPermitted="true">
+       <domain includeSubdomains="false">192.168.1.10</domain>
+   </domain-config>
+   ```
+
+Backend juga kini **menolak start** bila bind non-loopback tanpa
+`WEB_API_TOKEN` — isi token di `.env` backend; Web UI akan memintanya
+sekali di dalam aplikasi.
+
 ## Build dari Sumber
 
 Syarat: JDK 17 + Android SDK (platform 34, build-tools 34).

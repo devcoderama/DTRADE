@@ -11,9 +11,11 @@ from core.symbols import SymbolFilters
 class FakeBinance:
     """Meniru perilaku penting Binance Futures untuk skenario executor."""
 
-    def __init__(self, fail_sl=False, entry_unknown=False):
+    def __init__(self, fail_sl=False, entry_unknown=False, fail_close=False, fail_verify_runtime=False):
         self.fail_sl = fail_sl
         self.entry_unknown = entry_unknown
+        self.fail_close = fail_close
+        self.fail_verify_runtime = fail_verify_runtime
         self.orders = []          # semua place_order yang diterima
         self._open = []           # order proteksi yang menggantung
         self.position_amt = 0.0
@@ -50,6 +52,8 @@ class FakeBinance:
                 raise ConnectionError("timeout — hasil tidak diketahui")
             return dict(self._entry_order)
         if order_type == "MARKET" and reduce_only:
+            if self.fail_close:
+                raise BinanceAPIError(400, -1000, "simulasi perintah tutup ditolak")
             self.position_amt = 0.0
             self.orders.append({"type": "EMERGENCY_CLOSE"})
             return {"orderId": 99, "status": "FILLED"}
@@ -73,6 +77,8 @@ class FakeBinance:
         return order
 
     def open_algo_orders(self, symbol=None):
+        if self.fail_verify_runtime:
+            raise RuntimeError("ledakan tak terduga saat verifikasi")
         return list(self._open)
 
     def cancel_all_algo_orders(self, symbol):
@@ -150,3 +156,40 @@ def test_pending_recovery_reads_state_log(tmp_path):
     ex.execute(_decision(), 100.0)
     # Eksekusi di atas berakhir CLOSED (terminal) → tidak ada yang pending.
     assert ex.pending_recovery() == []
+
+
+# --- Fase 1.4/1.5: urutan penutupan aman & jaring pengaman pasca-fill ---
+
+def _open_protected(tmp_path, fake):
+    ex = _executor(tmp_path, fake)
+    result = ex.execute(_decision(), 100.0)
+    assert result.state == "PROTECTED"
+    return ex
+
+
+def test_close_success_cleans_all_orders(tmp_path):
+    fake = FakeBinance()
+    ex = _open_protected(tmp_path, fake)
+    assert len(fake._open) == 2  # SL + TP algo terpasang
+    out = ex.close_position("BTCUSDT")
+    assert out["closed"] is True
+    assert fake.position_amt == 0.0
+    assert fake._open == []  # sisa order dibersihkan SETELAH posisi nol
+
+
+def test_close_failure_keeps_protection_intact(tmp_path):
+    fake = FakeBinance()
+    ex = _open_protected(tmp_path, fake)
+    fake.fail_close = True  # perintah tutup mulai ditolak bursa
+    out = ex.close_position("BTCUSDT")
+    assert out["closed"] is False
+    assert fake.position_amt != 0.0
+    assert len(fake._open) == 2  # SL/TP TIDAK dibatalkan — posisi tetap terlindungi
+
+
+def test_random_exception_after_fill_triggers_emergency_close(tmp_path):
+    fake = FakeBinance(fail_verify_runtime=True)
+    ex = _executor(tmp_path, fake)
+    result = ex.execute(_decision(), 100.0)
+    assert result.state == "CLOSED"  # bukan exception mentah yang lolos
+    assert fake.position_amt == 0.0

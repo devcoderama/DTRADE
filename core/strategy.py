@@ -177,15 +177,22 @@ class SignalEngine:
         symbol: str,
         interval: Optional[str] = None,
         use_ai: bool = True,
+        fresh: bool = False,
     ) -> TradeSignal:
         """Analisis satu simbol.
 
         Hasil analisis di-cache selama `analysis_cache_ttl_sec` detik
-        (bawaan 180) agar semua permukaan — siaran Telegram, Web UI, CLI,
-        termasuk tombol eksekusi — memakai sinyal yang sama persis untuk
-        momen yang sama (dan hemat token AI). Lewat masa cache itu,
-        analisis berikutnya dijalankan segar.
+        (bawaan 180) agar semua permukaan — siaran Telegram, Web UI, CLI —
+        memakai sinyal yang sama untuk momen yang sama (dan hemat token AI).
+
+        Dua jaminan untuk jalur eksekusi:
+        - Yang dikembalikan SELALU salinan (deepcopy): pemanggil boleh
+          memutasi hasilnya tanpa meracuni cache.
+        - `fresh=True` melewati cache sepenuhnya — WAJIB untuk eksekusi,
+          agar keputusan trading tidak memakai harga basi.
         """
+        import copy
+
         symbol = symbol.upper()
         interval = interval or self._settings.default_interval
         ttl = max(0, int(getattr(self._settings, "analysis_cache_ttl_sec", 180)))
@@ -193,16 +200,16 @@ class SignalEngine:
         if use_ai and self._ai is not None:
             ai_key = f"{getattr(self._ai, 'name', '?')}:{getattr(self._ai, 'model', '?')}"
         key = (symbol, interval, use_ai, ai_key)
-        if ttl > 0:
+        if ttl > 0 and not fresh:
             with self._cache_lock:
                 hit = self._analysis_cache.get(key)
                 if hit is not None and time.time() - hit[0] < ttl:
-                    return hit[1]
+                    return copy.deepcopy(hit[1])
         result = self._analyze_fresh(symbol, interval, use_ai=use_ai)
         if ttl > 0:
             with self._cache_lock:
                 self._analysis_cache[key] = (time.time(), result)
-        return result
+        return copy.deepcopy(result)
 
     def _analyze_fresh(self, symbol: str, interval: Optional[str] = None, use_ai: bool = True) -> TradeSignal:
         symbol = symbol.upper()

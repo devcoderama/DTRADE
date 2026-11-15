@@ -137,8 +137,10 @@ class Settings:
     database_url: str = ""            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
 
     # --- Web UI ---
-    web_host: str = "0.0.0.0"
+    web_host: str = "127.0.0.1"  # aman secara default: hanya mesin ini sendiri
     web_port: int = 8000
+    allow_insecure_web: bool = False  # True = izinkan bind publik/LIVE tanpa token (BERBAHAYA)
+    max_entry_deviation_pct: float = 0.3  # tolak eksekusi bila harga bergeser > % ini dari sinyal
 
     # ------------------------------------------------------------------
     @property
@@ -246,6 +248,8 @@ def load_settings() -> Settings:
         database_url=os.getenv("DATABASE_URL", "").strip(),
         default_interval=os.environ.get("DEFAULT_INTERVAL", "15m").strip(),
         quote_asset=os.environ.get("QUOTE_ASSET", "USDT").strip().upper(),
-        web_host=os.environ.get("WEB_HOST", "0.0.0.0").strip(),
+        web_host=os.environ.get("WEB_HOST", "127.0.0.1").strip(),
         web_port=_get_int("WEB_PORT", 8000),
+        allow_insecure_web=_get_bool("ALLOW_INSECURE_WEB", False),
+        max_entry_deviation_pct=_get_float("MAX_ENTRY_DEVIATION_PCT", 0.3),
     )

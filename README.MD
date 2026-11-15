@@ -142,8 +142,11 @@ cp .env.example .env
 ### iOS
 
 iOS tidak menjalankan Python secara native. Jalankan proyek ini di
-komputer/VPS, mulai Web UI dengan `WEB_HOST=0.0.0.0`, lalu buka
-`http://<ip-server>:8000` dari browser iPhone Anda.
+komputer/VPS, isi `WEB_API_TOKEN` di `.env`, mulai Web UI dengan
+`WEB_HOST=0.0.0.0`, lalu buka `http://<ip-server>:8000` dari browser
+iPhone Anda dan masukkan token saat diminta. Untuk akses dari luar
+jaringan rumah, gunakan reverse proxy HTTPS (Caddy/nginx) atau VPN
+(Tailscale) — jangan mengekspos port 8000 langsung ke internet.
 
 ## Konfigurasi `.env`
 
@@ -167,7 +170,7 @@ komputer/VPS, mulai Web UI dengan `WEB_HOST=0.0.0.0`, lalu buka
 | `MAX_OPEN_POSITIONS` | Batas posisi terbuka (bawaan 3) |
 | `DAILY_LOSS_LIMIT_PCT` | Berhenti trading bila rugi harian mencapai % ini |
 | `DEFAULT_INTERVAL` | Interval candle bawaan (bawaan `15m`) |
-| `WEB_HOST` / `WEB_PORT` | Alamat & port Web UI (bawaan `0.0.0.0:8000`) |
+| `WEB_HOST` / `WEB_PORT` | Alamat & port Web UI (bawaan aman `127.0.0.1:8000`) |
 
 ### Mengganti Provider AI
 

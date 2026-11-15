@@ -54,6 +54,7 @@ from core.database import build_database
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.market_stream import MarketStream
+from core.service import TradingService
 from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
@@ -92,6 +93,7 @@ def _refresh_ai_from_store() -> None:
 risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager, db=database)
 market_stream = MarketStream(settings)
+trading_service = TradingService(settings, risk_manager, executor, binance)
 
 app = FastAPI(title="binance-ai-future", version="1.0.0")
 
@@ -110,6 +112,9 @@ app = FastAPI(title="binance-ai-future", version="1.0.0")
 MAX_REQUEST_BYTES = 1_048_576
 
 
+LOGIN_RATE_PER_MINUTE = 5  # percobaan login per IP — jauh lebih ketat dari batas umum
+
+
 class SecurityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, api_token: str, viewer_token: str, rate_per_minute: int):
         super().__init__(app)
@@ -117,28 +122,43 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self._viewer_token = viewer_token
         self._rate = rate_per_minute
         self._hits: dict[str, deque] = {}
+        self._login_hits: dict[str, deque] = {}
         self._hits_lock = threading.Lock()
 
     def _role(self, request: Request) -> Optional[str]:
+        import hmac
+
         token = request.headers.get("x-api-token") or request.cookies.get("baf_token") or ""
-        if self._api_token and token == self._api_token:
+        if self._api_token and hmac.compare_digest(token, self._api_token):
             return "admin"
-        if self._viewer_token and token == self._viewer_token:
+        if self._viewer_token and hmac.compare_digest(token, self._viewer_token):
             return "viewer"
         return None
 
-    def _rate_limited(self, client_ip: str) -> bool:
-        if self._rate <= 0:
+    @staticmethod
+    def _limited(store: dict, client_ip: str, limit: int) -> bool:
+        """Jendela geser 60 detik; bucket kosong dibuang agar memori terbatas."""
+        if limit <= 0:
             return False
         now = time.time()
+        bucket = store.setdefault(client_ip, deque())
+        while bucket and bucket[0] < now - 60:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            return True
+        bucket.append(now)
+        if len(store) > 5000:  # sapu bucket yang sudah kosong/kedaluwarsa
+            for ip in [ip for ip, b in store.items() if not b or b[-1] < now - 60]:
+                store.pop(ip, None)
+        return False
+
+    def _rate_limited(self, client_ip: str) -> bool:
         with self._hits_lock:
-            bucket = self._hits.setdefault(client_ip, deque())
-            while bucket and bucket[0] < now - 60:
-                bucket.popleft()
-            if len(bucket) >= self._rate:
-                return True
-            bucket.append(now)
-            return False
+            return self._limited(self._hits, client_ip, self._rate)
+
+    def _login_limited(self, client_ip: str) -> bool:
+        with self._hits_lock:
+            return self._limited(self._login_hits, client_ip, LOGIN_RATE_PER_MINUTE)
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -154,14 +174,21 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if path == "/api/health":
             return await call_next(request)
         client_ip = request.client.host if request.client else "unknown"
+        if path == "/api/auth/login":
+            # Batas login TERPISAH dan jauh lebih ketat; token diperiksa endpoint.
+            if self._login_limited(client_ip):
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Terlalu banyak percobaan login — tunggu satu menit."},
+                    headers={"Retry-After": "60"},
+                )
+            return await call_next(request)
         if self._rate_limited(client_ip):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Terlalu banyak request — coba lagi sebentar lagi."},
                 headers={"Retry-After": "30"},
             )
-        if path == "/api/auth/login":
-            return await call_next(request)  # token diperiksa di dalam endpoint itu sendiri
         if self._api_token:
             role = self._role(request)
             if role is None:
@@ -192,6 +219,16 @@ if _cors_origins:
 # sesuai BROADCAST_INTERVAL_MINUTES. Kunci (lock) yang sama dipakai
 # endpoint manual /api/broadcast agar dua putaran tidak berjalan bersamaan.
 # ---------------------------------------------------------------------------
+def _time_sync_loop() -> None:
+    """Segarkan offset jam Binance tiap 30 menit (best-effort, daemon)."""
+    while True:
+        time.sleep(1800)
+        try:
+            binance.sync_time()
+        except Exception as exc:
+            log.warning("Sinkronisasi waktu berkala gagal: %s", exc)
+
+
 _broadcast_lock = threading.Lock()
 _broadcast_cache: dict[str, float] = {}
 BROADCAST_FIRST_DELAY_SEC = 30
@@ -220,19 +257,58 @@ def _auto_broadcast_loop() -> None:
         time.sleep(interval)
 
 
+def enforce_web_safety() -> None:
+    """Tolak konfigurasi web yang berbahaya. Dipanggil sebelum server naik.
+
+    Aturan: tanpa WEB_API_TOKEN, server hanya boleh (a) mode dry-run DAN
+    (b) terikat ke loopback. Pengecualian sadar-risiko: ALLOW_INSECURE_WEB=true.
+    """
+    if settings.web_api_token:
+        return
+    if settings.allow_insecure_web:
+        log.warning(
+            "⚠⚠ ALLOW_INSECURE_WEB=true: server berjalan TANPA autentikasi atas "
+            "keputusan eksplisit Anda. Jangan pernah memakai ini untuk mode LIVE "
+            "atau di jaringan yang tidak sepenuhnya Anda percaya."
+        )
+        return
+    loopback = settings.web_host in {"127.0.0.1", "::1", "localhost"}
+    if settings.is_live:
+        raise RuntimeError(
+            "MENOLAK START: TRADING_MODE=live tanpa WEB_API_TOKEN. Isi WEB_API_TOKEN "
+            "di .env (token acak panjang), atau set ALLOW_INSECURE_WEB=true bila Anda "
+            "sadar penuh risikonya."
+        )
+    if not loopback:
+        raise RuntimeError(
+            f"MENOLAK START: WEB_HOST={settings.web_host} (bukan loopback) tanpa "
+            "WEB_API_TOKEN — siapa pun di jaringan dapat mengeksekusi trade. Isi "
+            "WEB_API_TOKEN di .env, kembalikan WEB_HOST=127.0.0.1, atau set "
+            "ALLOW_INSECURE_WEB=true bila Anda sadar penuh risikonya."
+        )
+    log.warning(
+        "Autentikasi API nonaktif (WEB_API_TOKEN kosong) — diizinkan hanya karena "
+        "mode dry-run + bind loopback (%s).", settings.web_host,
+    )
+
+
 @app.on_event("startup")
 def _validate_startup() -> None:
     """Validasi keamanan & pemulihan saat server mulai."""
+    enforce_web_safety()
     if settings.is_live:
         log.warning("⚠ MODE LIVE AKTIF — order akan dikirim dengan dana sungguhan.")
     if settings.is_live and not settings.has_binance_keys:
         log.error("MODE LIVE tetapi kunci Binance kosong — eksekusi pasti gagal.")
-    if not settings.web_api_token:
-        log.warning(
-            "⚠ Autentikasi API NONAKTIF (WEB_API_TOKEN kosong): siapa pun yang dapat "
-            "mengakses server ini dapat melihat akun & mengeksekusi trade. Isi "
-            "WEB_API_TOKEN di .env bila server dapat dijangkau perangkat lain."
-        )
+    if settings.has_binance_keys:
+        # Sinkronkan jam dengan Binance (best-effort) + segarkan berkala,
+        # agar request bertanda tangan tidak ditolak dengan error -1021.
+        try:
+            binance.sync_time()
+            log.info("Sinkronisasi waktu Binance selesai.")
+        except Exception as exc:
+            log.warning("Sinkronisasi waktu awal gagal (dilanjutkan): %s", exc)
+        threading.Thread(target=_time_sync_loop, name="time-sync", daemon=True).start()
     pending = executor.pending_recovery()
     for rec in pending:
         log.warning(
@@ -308,12 +384,9 @@ def _signal_payload(signal) -> dict:
 # ----------------------------------------------------------------------
 @app.get("/api/health")
 def health() -> dict:
-    return {
-        "ok": True,
-        "service": "binance-ai-future",
-        "config": settings.public_summary(),
-        "market_stream": market_stream.health(),
-    }
+    # Sengaja minimal: endpoint publik ini tidak membocorkan konfigurasi.
+    # Ringkasan konfigurasi & status komponen ada di /api/config (bertoken).
+    return {"ok": True, "service": "binance-ai-future"}
 
 
 @app.websocket("/api/ws/klines/{symbol}")
@@ -328,8 +401,21 @@ async def ws_klines(websocket: WebSocket, symbol: str, interval: Optional[str] =
     import asyncio
 
     if settings.web_api_token:
-        token = websocket.query_params.get("token") or websocket.cookies.get("baf_token") or ""
-        if token not in {settings.web_api_token, settings.web_viewer_token} - {""}:
+        import hmac
+
+        # Urutan kepercayaan: cookie sesi → header → query (?token= DEPRECATED,
+        # tetap diterima untuk kompatibilitas; jangan dipakai — token di URL
+        # mudah bocor lewat log & riwayat peramban).
+        token = (
+            websocket.cookies.get("baf_token")
+            or websocket.headers.get("x-api-token")
+            or websocket.query_params.get("token")
+            or ""
+        )
+        ok = hmac.compare_digest(token, settings.web_api_token) or (
+            bool(settings.web_viewer_token) and hmac.compare_digest(token, settings.web_viewer_token)
+        )
+        if not ok:
             await websocket.close(code=4401)
             return
     await websocket.accept()
@@ -368,6 +454,7 @@ def config() -> dict:
     summary["ai_model"] = model
     summary["ai_configured"] = bool(ai_client is not None and ai_client.is_configured())
     summary["database"] = database.health() if database is not None else {"configured": False, "ok": None}
+    summary["market_stream"] = market_stream.health()
     return summary
 
 
@@ -467,19 +554,23 @@ class AuthRequest(BaseModel):
 
 
 @app.post("/api/auth/login")
-def auth_login(req: AuthRequest) -> JSONResponse:
+def auth_login(req: AuthRequest, request: Request) -> JSONResponse:
     """Tukar token API menjadi cookie sesi (untuk Web UI di peramban)."""
+    import hmac
+
     if not settings.web_api_token:
         return JSONResponse({"ok": True, "role": "admin", "auth_enabled": False})
-    if req.token == settings.web_api_token:
+    if hmac.compare_digest(req.token, settings.web_api_token):
         role = "admin"
-    elif settings.web_viewer_token and req.token == settings.web_viewer_token:
+    elif settings.web_viewer_token and hmac.compare_digest(req.token, settings.web_viewer_token):
         role = "viewer"
     else:
         raise HTTPException(status_code=401, detail="Token salah.")
+    # Cookie Secure hanya pada HTTPS (langsung atau lewat reverse proxy).
+    is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     resp = JSONResponse({"ok": True, "role": role, "auth_enabled": True})
     resp.set_cookie(
-        "baf_token", req.token, httponly=True, samesite="strict",
+        "baf_token", req.token, httponly=True, samesite="strict", secure=is_https,
         path="/api", max_age=7 * 24 * 3600,
     )
     return resp
@@ -488,24 +579,32 @@ def auth_login(req: AuthRequest) -> JSONResponse:
 @app.post("/api/trade")
 def trade(req: TradeRequest) -> dict:
     def _run():
-        signal = engine.analyze(req.symbol.upper(), use_ai=True)
+        import dataclasses
+
+        # Eksekusi WAJIB analisis segar (melewati cache 180 detik).
+        signal = engine.analyze(req.symbol.upper(), use_ai=True, fresh=True)
         if req.side:
             from core.strategy import _atr_levels
 
-            signal.side = req.side.upper()
-            sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), signal.side)
-            signal.stop_loss, signal.take_profit = sl, tp
+            side = req.side.upper()
+            sl, tp = _atr_levels(signal.price, signal.snapshot.get("atr14"), side)
+            # Sinyal TURUNAN — sinyal asli tidak dimutasi; alasan eksplisit.
+            signal = dataclasses.replace(
+                signal, side=side, stop_loss=sl, take_profit=tp,
+                reasons=[*signal.reasons, f"Override manual pengguna: sisi dipaksa {side}; SL/TP dari ATR."],
+            )
         if signal.side == "NEUTRAL":
             return {"executed": False, "note": "Sinyal NEUTRAL — tidak dieksekusi.", "signal": _signal_payload(signal)}
-        decision = risk_manager.evaluate(signal)
-        if not decision.allowed:
+        # evaluate + execute atomik di dalam TradingService (satu lock),
+        # termasuk validasi penyimpangan harga terkini.
+        decision, result = trading_service.submit(signal)
+        if result is None:
             return {
                 "executed": False,
-                "note": "Ditolak RiskManager.",
+                "note": "Ditolak RiskManager / validasi harga segar.",
                 "reasons": decision.reasons,
                 "signal": _signal_payload(signal),
             }
-        result = executor.execute(decision, signal.price)
         journal.record_execution(decision, result, signal.price)
         if notifier.enabled:
             notifier.notify_execution(decision, result, signal.price)
@@ -670,6 +769,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def run() -> None:
     import uvicorn
 
+    enforce_web_safety()  # gagal cepat dengan pesan jelas, sebelum port dibuka
     log.info(
         "Web UI berjalan di http://%s:%d (mode %s)",
         settings.web_host,

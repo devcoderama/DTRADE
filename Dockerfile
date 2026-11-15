@@ -13,7 +13,11 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Folder runtime (state risiko, jurnal, pilihan AI) — pasang volume agar persisten
-RUN mkdir -p data logs
+# Proses berjalan sebagai user non-root.
+RUN mkdir -p data logs \
+    && useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 VOLUME ["/app/data", "/app/logs"]
 
 EXPOSE 8000

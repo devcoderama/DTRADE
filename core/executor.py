@@ -199,7 +199,7 @@ class OrderExecutor:
                     close_position=True,
                     client_algo_id=client_algo_id,
                 )
-            except BinanceAPIError as exc:
+            except Exception as exc:  # kegagalan APA PUN dihitung sebagai percobaan gagal
                 last_error = exc
                 log.warning(
                     "Pasang %s %s gagal (percobaan %d/%d): %s",
@@ -255,7 +255,7 @@ class OrderExecutor:
             )
             remaining = self._binance.positions(symbol)
             return not remaining
-        except BinanceAPIError as exc:
+        except Exception as exc:
             log.error("EMERGENCY CLOSE %s GAGAL: %s — posisi mungkin masih terbuka!", symbol, exc)
             return False
 
@@ -342,6 +342,33 @@ class OrderExecutor:
                 f"terisi {filled}/{decision.quantity}",
             )
 
+            # Validasi SL/TP terhadap harga isi rata-rata AKTUAL (avgPrice):
+            # pergeseran harga saat entri bisa menempatkan SL di sisi yang
+            # salah terhadap harga isi — keadaan itu tidak boleh diteruskan.
+            try:
+                avg_price = float(entry.get("avgPrice") or 0) or float(reference_price)
+            except (TypeError, ValueError):
+                avg_price = float(reference_price)
+            if decision.stop_loss and decision.take_profit:
+                if decision.side == "LONG":
+                    sltp_valid = decision.stop_loss < avg_price < decision.take_profit
+                else:
+                    sltp_valid = decision.take_profit < avg_price < decision.stop_loss
+                if not sltp_valid:
+                    log.error(
+                        "SL/TP tidak valid terhadap avgPrice %.8f untuk %s — emergency close.",
+                        avg_price, decision.symbol,
+                    )
+                    result.notes.append(
+                        "Harga isi rata-rata membuat SL/TP tidak valid — posisi ditutup darurat."
+                    )
+                    if self._emergency_close(decision.symbol):
+                        self._transition(result, CLOSED, "emergency close: SL/TP invalid vs avgPrice")
+                    else:
+                        self._transition(result, RECOVERY_REQUIRED, "SL/TP invalid + emergency close gagal")
+                        result.notes.append("PERHATIAN: posisi mungkin masih terbuka — periksa Binance sekarang!")
+                    return result
+
             # --- Proteksi: SL wajib, TP menyusul. ---
             self._transition(result, PROTECTION_PENDING)
             sl_order = None
@@ -386,6 +413,27 @@ class OrderExecutor:
             result.notes.append(f"Eksekusi gagal: {exc}")
             log.error("Eksekusi %s gagal: %s", decision.symbol, exc)
             return result
+        except Exception as exc:
+            # Jaring pengaman terakhir: exception APA PUN setelah entri terisi
+            # tidak boleh meninggalkan posisi tanpa perlindungan/masa depan
+            # yang jelas. Posisi terisi → coba tutup darurat; hasilnya
+            # menentukan status akhir yang terlihat jelas.
+            log.exception("Exception tak terduga saat eksekusi %s", decision.symbol)
+            if result.filled_qty > 0:
+                result.notes.append(
+                    f"Exception setelah entri terisi ({exc}) — menjalankan emergency close."
+                )
+                if self._emergency_close(decision.symbol):
+                    self._transition(result, CLOSED, "emergency close setelah exception pasca-fill")
+                else:
+                    self._transition(result, RECOVERY_REQUIRED, "exception pasca-fill + emergency close gagal")
+                    result.notes.append(
+                        "PERHATIAN: posisi mungkin masih terbuka — periksa Binance sekarang!"
+                    )
+            else:
+                self._transition(result, FAILED, f"Exception: {exc}")
+                result.notes.append(f"Eksekusi gagal: {exc}")
+            return result
 
     # ------------------------------------------------------------------
     def close_position(self, symbol: str) -> dict[str, Any]:
@@ -405,22 +453,37 @@ class OrderExecutor:
 
             marker = ExecutionResult(symbol=symbol, side="LONG" if amt > 0 else "SHORT", dry_run=False)
             self._transition(marker, CLOSING)
-            self._binance.cancel_all_orders(symbol)
+            # URUTAN AMAN: tutup posisi DULU. SL/TP tidak dibatalkan sebelum
+            # posisi terbukti nol — bila perintah tutup gagal, posisi tetap
+            # terlindungi persis seperti sebelumnya.
             try:
-                self._binance.cancel_all_algo_orders(symbol)
-            except Exception as exc:  # SL/TP algo harus ikut dibatalkan; kegagalan dicatat saja
-                log.warning("Batalkan algo orders %s saat tutup posisi gagal: %s", symbol, exc)
-            order = self._binance.place_order(
-                symbol=symbol,
-                side=side,
-                order_type="MARKET",
-                quantity=abs(amt),
-                reduce_only=True,
-            )
+                order = self._binance.place_order(
+                    symbol=symbol,
+                    side=side,
+                    order_type="MARKET",
+                    quantity=abs(amt),
+                    reduce_only=True,
+                )
+            except Exception as exc:
+                self._transition(marker, RECOVERY_REQUIRED, f"perintah tutup gagal: {exc}")
+                return {
+                    "symbol": symbol, "closed": False, "error": str(exc),
+                    "note": "Perintah tutup GAGAL — posisi dan SL/TP tidak diubah sama sekali.",
+                }
             remaining = self._binance.positions(symbol)
             if remaining:
                 self._transition(marker, RECOVERY_REQUIRED, "posisi masih ada setelah perintah tutup")
                 return {"symbol": symbol, "closed": False, "order": order,
-                        "note": "Perintah tutup terkirim tetapi posisi masih tercatat — periksa Binance."}
+                        "note": "Perintah tutup terkirim tetapi posisi masih tercatat — "
+                                "SL/TP dibiarkan terpasang; periksa Binance."}
+            # Posisi terbukti nol — sekarang aman membersihkan sisa order.
+            try:
+                self._binance.cancel_all_orders(symbol)
+            except Exception as exc:
+                log.warning("Batalkan order biasa %s setelah tutup gagal: %s", symbol, exc)
+            try:
+                self._binance.cancel_all_algo_orders(symbol)
+            except Exception as exc:
+                log.warning("Batalkan algo orders %s setelah tutup gagal: %s", symbol, exc)
             self._transition(marker, CLOSED)
             return {"symbol": symbol, "closed": True, "order": order}

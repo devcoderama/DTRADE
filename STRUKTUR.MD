@@ -45,6 +45,7 @@ binance-ai-future/
 │   ├── executor.py          ← eksekusi order berstatus (state machine), idempotency, verifikasi fill & proteksi, emergency close
 │   ├── backtest.py          ← mesin backtest deterministik atas klines historis
 │   ├── journal.py           ← jurnal perdagangan JSONL (jejak audit eksekusi)
+│   ├── service.py           ← TradingService: pintu eksekusi tunggal Web & CLI (lock atomik + validasi harga segar)
 │   ├── market_stream.py     ← WebSocket data pasar real-time (kline + mark price, reconnect & deteksi basi)
 │   ├── database.py          ← cermin opsional jurnal & peristiwa eksekusi ke Supabase/PostgreSQL (DATABASE_URL)
 │   ├── notifier.py          ← notifikasi Telegram (teks + foto) untuk eksekusi & sinyal
@@ -110,6 +111,7 @@ binance-ai-future/
 │   ├── test_market_stream.py ← parsing pesan WS, cache candle, backoff reconnect, deteksi basi
 │   ├── test_ai_retry.py     ← klasifikasi error AI & retry post_with_retry
 │   ├── test_database.py     ← skema & insert Supabase terparameter + kegagalan DB tidak fatal
+│   ├── test_phase1.py       ← Fase 1: cache sinyal anti-racun, service atomik, redaksi log, start aman, -1021
 │   └── test_security.py     ← token API, peran viewer, login cookie, CORS, rate limit, endpoint WS
 │
 ├── data/                    ← DATA RUNTIME (dibuat otomatis, di-gitignore)
