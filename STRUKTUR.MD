@@ -28,6 +28,8 @@ binance-ai-future/
 │   ├── __init__.py
 │   ├── binance_client.py    ← REST client Binance USDⓈ-M Futures (signed + public)
 │   ├── ai_client.py         ← client AI Router BangunWeb (OpenAI-compatible)
+│   ├── ai_providers.py      ← lapisan multi-provider AI + factory (OpenAI, Anthropic, DeepSeek, Grok, Nous, custom)
+│   ├── notifier.py          ← notifikasi Telegram (Bot API) untuk hasil eksekusi
 │   ├── symbols.py           ← penemuan & filter semua simbol futures
 │   ├── indicators.py        ← indikator teknikal murni (EMA, RSI, MACD, ATR, BB)
 │   ├── strategy.py          ← mesin sinyal: skor teknikal + konfirmasi AI
@@ -60,7 +62,9 @@ binance-ai-future/
 |---|---|---|
 | `config/settings.py` | Membaca `.env`, menyediakan satu objek `Settings` immutable untuk semua modul | Mengandung secret yang di-hardcode |
 | `core/binance_client.py` | Semua panggilan REST ke `fapi.binance.com` / testnet: data publik, akun, posisi, order. Menandatangani request (HMAC-SHA256) | Mengandung strategi / keputusan trading |
-| `core/ai_client.py` | Semua panggilan ke `router.bangunweb.com/v1`: chat completions, cek saldo token, daftar model | Mengandung logika Binance |
+| `core/ai_client.py` | Semua panggilan ke `router.bangunweb.com/v1`: chat completions, cek saldo token, daftar model. Juga rumah bagi prompt sistem & skema `AIAnalysis` bersama | Mengandung logika Binance |
+| `core/ai_providers.py` | Abstraksi provider AI: satu antarmuka `analyze_market` untuk BangunWeb, OpenAI, Anthropic, DeepSeek, Grok (xAI), Nous Portal, dan gateway OpenAI-compatible custom; factory `create_ai_provider` membaca `AI_PROVIDER` | Menempatkan order; tahu soal Binance |
+| `core/notifier.py` | Mengirim ringkasan eksekusi/sinyal ke Telegram (user id atau channel id) lewat Bot API. Kegagalan kirim tidak pernah menggagalkan trading | Mengambil keputusan trading |
 | `core/symbols.py` | Memuat `exchangeInfo`, menyaring perpetual USDT yang `TRADING`, menyediakan filter presisi (stepSize, tickSize, minNotional) + pembulatan qty/harga | Memanggil order |
 | `core/indicators.py` | Fungsi matematika murni dari deret harga → nilai indikator. Tanpa I/O, tanpa jaringan — mudah diuji | Mengambil data sendiri |
 | `core/strategy.py` | Menggabungkan snapshot indikator menjadi skor teknikal, meminta penilaian AI, menghasilkan `TradeSignal` (side, confidence, SL, TP, alasan) | Menempatkan order |

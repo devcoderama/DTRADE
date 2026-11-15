@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from config.settings import Settings
-from core.ai_client import AIAnalysis, BangunWebAIClient
+from core.ai_client import AIAnalysis
+from core.ai_providers import BaseAIProvider
 from core.binance_client import BinanceFuturesClient
 from core.indicators import build_snapshot
 from utils.logger import get_logger
@@ -132,7 +133,7 @@ class SignalEngine:
         self,
         settings: Settings,
         binance: BinanceFuturesClient,
-        ai: Optional[BangunWebAIClient] = None,
+        ai: Optional[BaseAIProvider] = None,
     ):
         self._settings = settings
         self._binance = binance
@@ -158,7 +159,7 @@ class SignalEngine:
             tech_side = "SHORT"
 
         ai_result: Optional[AIAnalysis] = None
-        if use_ai and self._ai is not None and self._settings.has_ai_key:
+        if use_ai and self._ai is not None and self._ai.is_configured():
             try:
                 ai_result = self._ai.analyze_market(symbol, snapshot)
             except Exception as exc:  # AI bersifat penasihat; kegagalannya tidak fatal
@@ -261,7 +262,7 @@ class SignalEngine:
             )
         staged.sort(key=lambda s: abs(s.technical_score), reverse=True)
 
-        if use_ai and self._ai is not None and self._settings.has_ai_key:
+        if use_ai and self._ai is not None and self._ai.is_configured():
             refined: list[TradeSignal] = []
             for candidate in staged[:5]:
                 refined.append(self.analyze(candidate.symbol, interval, use_ai=True))

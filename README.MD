@@ -26,15 +26,21 @@ Tersedia dalam dua antarmuka di atas core yang sama:
   Binance saat runtime; simbol baru otomatis ikut terpindai.
 - **Analisis teknikal lengkap** — EMA, RSI, MACD, Bollinger Bands, ATR, dan
   skor tren teragregasi per simbol.
-- **Penilaian AI** — snapshot pasar dikirim ke
-  [AI Router BangunWeb](https://bangunweb.com/ai/docs) (OpenAI-compatible,
-  model `bw-focus` secara bawaan) dan dikembalikan sebagai keputusan JSON
-  terstruktur: sinyal, keyakinan, stop loss, take profit, dan alasan.
+- **Penilaian AI multi-provider** — snapshot pasar dinilai AI dan dikembalikan
+  sebagai keputusan JSON terstruktur: sinyal, keyakinan, stop loss, take
+  profit, dan alasan. Provider aktif dipilih lewat `.env` (`AI_PROVIDER`):
+  **BangunWeb** (bawaan, model `bw-focus`), **OpenAI**, **Anthropic**,
+  **DeepSeek**, **Grok (xAI)**, **Nous Portal**, atau gateway
+  OpenAI-compatible lain (`custom`).
 - **Manajemen risiko wajib** — position sizing berbasis % risiko, batas
   leverage, batas jumlah posisi, dan batas rugi harian. Tidak ada jalur
   eksekusi yang melewati modul ini.
 - **Eksekusi aman** — entri market/limit disertai Stop Loss & Take Profit
   otomatis; mode dry-run mensimulasikan semuanya tanpa menyentuh akun.
+- **Grafik candlestick** — Web UI menggambar candle + garis EMA20 + volume
+  langsung dari data Binance, dengan pilihan interval 1m–1d.
+- **Notifikasi Telegram** — hasil eksekusi (dan pesan uji) dikirim ke user id
+  atau channel Telegram Anda lewat bot (@BotFather).
 - **Cross-platform** — Python murni; berjalan di macOS, Windows, Linux, dan
   Android (Termux). Untuk iOS: jalankan server di komputer/VPS, buka Web UI
   dari Safari/Chrome ponsel.
@@ -104,6 +110,14 @@ komputer/VPS, mulai Web UI dengan `WEB_HOST=0.0.0.0`, lalu buka
 | `BINANCE_TESTNET` | `true` = testnet dana virtual, `false` = mainnet |
 | `BANGUNWEB_API_KEY` | Kunci AI Router BangunWeb (`bwr_live_...`) |
 | `BANGUNWEB_MODEL` | `bw-swift` / `bw-focus` (bawaan) / `bw-pro` / `bw-apex` |
+| `AI_PROVIDER` | Provider AI aktif: `bangunweb` (bawaan) / `openai` / `anthropic` / `deepseek` / `grok` / `nous` / `custom` |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | Provider OpenAI (bawaan model `gpt-4o`) |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Provider Anthropic (bawaan `claude-sonnet-4-5`) |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | Provider DeepSeek (bawaan `deepseek-chat`) |
+| `XAI_API_KEY` / `XAI_MODEL` | Provider Grok dari xAI (bawaan `grok-4`) |
+| `NOUS_API_KEY` / `NOUS_MODEL` | Provider Nous Portal (bawaan `Hermes-4-70B`) |
+| `AI_CUSTOM_BASE_URL` / `AI_CUSTOM_API_KEY` / `AI_CUSTOM_MODEL` | Gateway OpenAI-compatible lain (mis. OpenRouter) |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Notifikasi Telegram: token bot dari @BotFather + user id / channel id tujuan |
 | `TRADING_MODE` | `dry_run` (bawaan) atau `live` |
 | `RISK_PER_TRADE_PCT` | % saldo yang dirisikokan per posisi (bawaan 1.0) |
 | `MAX_LEVERAGE` | Batas leverage (bawaan 5) |
@@ -111,6 +125,22 @@ komputer/VPS, mulai Web UI dengan `WEB_HOST=0.0.0.0`, lalu buka
 | `DAILY_LOSS_LIMIT_PCT` | Berhenti trading bila rugi harian mencapai % ini |
 | `DEFAULT_INTERVAL` | Interval candle bawaan (bawaan `15m`) |
 | `WEB_HOST` / `WEB_PORT` | Alamat & port Web UI (bawaan `0.0.0.0:8000`) |
+
+### Mengganti Provider AI
+
+Set `AI_PROVIDER` di `.env` ke salah satu provider dan isi kuncinya —
+sisanya otomatis: prompt, skema JSON, dan penggabungan keputusan di
+`strategy.py` identik untuk semua provider. Provider selain BangunWeb
+tidak memiliki endpoint saldo token, jadi perintah `ai-account` akan
+menampilkan status konfigurasi semua provider sebagai gantinya.
+
+### Notifikasi Telegram
+
+1. Buat bot lewat [@BotFather](https://t.me/BotFather) (`/newbot`), salin tokennya ke `TELEGRAM_BOT_TOKEN`.
+2. Tujuan pribadi: ambil user id Anda dari [@userinfobot](https://t.me/userinfobot), isi ke `TELEGRAM_CHAT_ID`, lalu kirim `/start` ke bot Anda.
+3. Tujuan channel: tambahkan bot sebagai **admin** channel, dan isi `TELEGRAM_CHAT_ID` dengan id channel (diawali `-100…`; bisa dilihat dari `getUpdates` atau forward pesan channel ke @userinfobot).
+4. Uji dengan `python run.py cli notify-test`. Setelah itu setiap eksekusi
+   `trade` (CLI maupun Web UI) otomatis mengirim ringkasannya ke Telegram.
 
 ### Keamanan API key Binance (wajib)
 
@@ -146,7 +176,8 @@ python run.py cli analyze BTCUSDT         # analisis teknikal + AI satu simbol
 python run.py cli positions               # posisi terbuka saat ini
 python run.py cli trade BTCUSDT --side LONG   # eksekusi (dry-run kecuali live)
 python run.py cli close BTCUSDT           # tutup posisi satu simbol
-python run.py cli ai-account              # sisa token AI BangunWeb Anda
+python run.py cli ai-account              # status provider AI (+ sisa token BangunWeb bila aktif)
+python run.py cli notify-test             # kirim pesan uji ke Telegram
 ```
 
 Perintah `trade` dalam mode `live` meminta konfirmasi pengetikan ulang simbol

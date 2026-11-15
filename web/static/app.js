@@ -58,7 +58,14 @@ async function loadAccount() {
   }
   try {
     const ai = await api("/api/ai/account");
-    $("acc-ai").textContent = Number(ai.tokens_remaining).toLocaleString("en-US");
+    if (ai.tokens_remaining !== null && ai.tokens_remaining !== undefined) {
+      $("acc-ai").textContent = Number(ai.tokens_remaining).toLocaleString("en-US");
+    } else if (ai.active) {
+      $("acc-ai-label").textContent = "Provider AI Aktif";
+      $("acc-ai").textContent = ai.active.provider + " · " + ai.active.model;
+    } else {
+      $("acc-ai").textContent = "—";
+    }
   } catch (e) { $("acc-ai").textContent = "—"; }
 }
 
@@ -131,6 +138,10 @@ async function analyze(symbol) {
         <button onclick="tradeSymbol('${s.symbol}', 'LONG')">Paksa LONG</button>
         <button onclick="tradeSymbol('${s.symbol}', 'SHORT')">Paksa SHORT</button>
       </div>`;
+    chartSymbol = s.symbol;
+    $("chart-block").hidden = false;
+    $("chart-title").textContent = "Grafik Candlestick — " + s.symbol;
+    loadChart(s.symbol);
   } catch (e) {
     box.innerHTML = '<span class="neg">Gagal menganalisis: ' + e.message + "</span>";
   }
@@ -186,6 +197,113 @@ async function scan() {
     btn.textContent = "Pindai Sekarang";
   }
 }
+
+/* ---------------- grafik candlestick ---------------- */
+let chartSymbol = null;
+let lastCandles = [];
+
+function emaSeries(values, period) {
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = null;
+  for (const v of values) {
+    prev = prev === null ? v : (v - prev) * k + prev;
+    out.push(prev);
+  }
+  return out;
+}
+
+async function loadChart(symbol) {
+  try {
+    const interval = $("chart-interval").value;
+    const data = await api("/api/klines/" + encodeURIComponent(symbol) + "?interval=" + interval + "&limit=120");
+    lastCandles = data.candles || [];
+    drawCandles();
+  } catch (e) {
+    toast("Gagal memuat grafik: " + e.message);
+  }
+}
+
+function drawCandles() {
+  const canvas = $("candle-chart");
+  if (!canvas || !lastCandles.length) return;
+  const wrap = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const candles = lastCandles;
+  const labelW = 64;                       // ruang label harga di kanan
+  const plotW = W - labelW;
+  const volH = Math.round(H * 0.16);       // area volume di bawah
+  const priceH = H - volH - 6;
+
+  let hi = -Infinity, lo = Infinity, vmax = 0;
+  for (const c of candles) {
+    hi = Math.max(hi, c.high); lo = Math.min(lo, c.low); vmax = Math.max(vmax, c.volume);
+  }
+  const pad = (hi - lo) * 0.06 || 1;
+  hi += pad; lo -= pad;
+  const y = (p) => priceH - ((p - lo) / (hi - lo)) * priceH;
+  const step = plotW / candles.length;
+  const bodyW = Math.max(1, Math.floor(step * 0.65));
+
+  // grid + label harga
+  ctx.strokeStyle = "rgba(132,142,156,.18)";
+  ctx.fillStyle = "#848e9c";
+  ctx.font = "10px sans-serif";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + ((hi - lo) * i) / 4;
+    const yy = y(p);
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(plotW, yy); ctx.stroke();
+    ctx.fillText(fmtPrice(p), plotW + 6, yy + 3);
+  }
+
+  // volume
+  candles.forEach((c, i) => {
+    const x = i * step + step / 2;
+    const up = c.close >= c.open;
+    ctx.fillStyle = up ? "rgba(14,203,129,.45)" : "rgba(246,70,93,.45)";
+    const vh = vmax ? (c.volume / vmax) * volH : 0;
+    ctx.fillRect(x - bodyW / 2, H - vh, bodyW, vh);
+  });
+
+  // candle
+  candles.forEach((c, i) => {
+    const x = i * step + step / 2;
+    const up = c.close >= c.open;
+    ctx.strokeStyle = up ? "#0ecb81" : "#f6465d";
+    ctx.fillStyle = up ? "#0ecb81" : "#f6465d";
+    ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
+    const top = y(Math.max(c.open, c.close));
+    const bottom = y(Math.min(c.open, c.close));
+    ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bottom - top));
+  });
+
+  // garis EMA20
+  const ema = emaSeries(candles.map((c) => c.close), 20);
+  ctx.strokeStyle = "#f0b90b";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ema.forEach((v, i) => {
+    const x = i * step + step / 2;
+    if (i === 0) ctx.moveTo(x, y(v)); else ctx.lineTo(x, y(v));
+  });
+  ctx.stroke();
+
+  // label harga terakhir
+  const last = candles[candles.length - 1];
+  ctx.fillStyle = last.close >= last.open ? "#0ecb81" : "#f6465d";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText(fmtPrice(last.close), plotW + 6, y(last.close) + 3);
+}
+
+$("chart-interval").addEventListener("change", () => { if (chartSymbol) loadChart(chartSymbol); });
+window.addEventListener("resize", drawCandles);
 
 /* ---------------- ikat event ---------------- */
 $("btn-analyze").addEventListener("click", () => {

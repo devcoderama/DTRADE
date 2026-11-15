@@ -64,6 +64,32 @@ class Settings:
     bangunweb_base_url: str = "https://router.bangunweb.com/v1"
     bangunweb_model: str = "bw-focus"
 
+    # --- Multi-provider AI (dipilih lewat ai_provider) ---
+    ai_provider: str = "bangunweb"  # bangunweb|openai|anthropic|deepseek|grok|nous|custom
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    openai_base_url: str = "https://api.openai.com/v1"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-5"
+    anthropic_base_url: str = "https://api.anthropic.com"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    xai_api_key: str = ""
+    xai_model: str = "grok-4"
+    xai_base_url: str = "https://api.x.ai/v1"
+    nous_api_key: str = ""
+    nous_model: str = "Hermes-4-70B"
+    nous_base_url: str = "https://inference-api.nousresearch.com/v1"
+    ai_custom_base_url: str = ""
+    ai_custom_api_key: str = ""
+    ai_custom_model: str = ""
+
+    # --- Notifikasi Telegram ---
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_notifications: bool = True
+
     # --- Mode trading ---
     trading_mode: str = "dry_run"  # "dry_run" | "live"
 
@@ -105,6 +131,8 @@ class Settings:
             "binance_keys_configured": self.has_binance_keys,
             "ai_configured": self.has_ai_key,
             "ai_model": self.bangunweb_model,
+            "ai_provider": self.ai_provider,
+            "telegram_configured": bool(self.telegram_bot_token and self.telegram_chat_id),
             "trading_mode": "live" if self.is_live else "dry_run",
             "risk_per_trade_pct": self.risk_per_trade_pct,
             "max_leverage": self.max_leverage,
@@ -126,6 +154,28 @@ def load_settings() -> Settings:
             "BANGUNWEB_BASE_URL", "https://router.bangunweb.com/v1"
         ).strip().rstrip("/"),
         bangunweb_model=os.environ.get("BANGUNWEB_MODEL", "bw-focus").strip(),
+        ai_provider=os.environ.get("AI_PROVIDER", "bangunweb").strip().lower(),
+        openai_api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
+        openai_model=os.environ.get("OPENAI_MODEL", "gpt-4o").strip(),
+        openai_base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/"),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5").strip(),
+        anthropic_base_url=os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com").strip().rstrip("/"),
+        deepseek_api_key=os.environ.get("DEEPSEEK_API_KEY", "").strip(),
+        deepseek_model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat").strip(),
+        deepseek_base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").strip().rstrip("/"),
+        xai_api_key=(os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY", "")).strip(),
+        xai_model=os.environ.get("XAI_MODEL", os.environ.get("GROK_MODEL", "grok-4")).strip(),
+        xai_base_url=os.environ.get("XAI_BASE_URL", "https://api.x.ai/v1").strip().rstrip("/"),
+        nous_api_key=(os.environ.get("NOUS_API_KEY") or os.environ.get("NOUS_PORTAL_API_KEY", "")).strip(),
+        nous_model=os.environ.get("NOUS_MODEL", "Hermes-4-70B").strip(),
+        nous_base_url=os.environ.get("NOUS_BASE_URL", "https://inference-api.nousresearch.com/v1").strip().rstrip("/"),
+        ai_custom_base_url=os.environ.get("AI_CUSTOM_BASE_URL", "").strip().rstrip("/"),
+        ai_custom_api_key=os.environ.get("AI_CUSTOM_API_KEY", "").strip(),
+        ai_custom_model=os.environ.get("AI_CUSTOM_MODEL", "").strip(),
+        telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
+        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
+        telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),
         trading_mode=os.environ.get("TRADING_MODE", "dry_run").strip().lower(),
         risk_per_trade_pct=_get_float("RISK_PER_TRADE_PCT", 1.0),
         max_leverage=_get_int("MAX_LEVERAGE", 5),

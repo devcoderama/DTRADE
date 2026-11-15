@@ -38,7 +38,7 @@
       <strong id="acc-upnl">—</strong>
     </div>
     <div class="card">
-      <span class="label">Token AI Tersisa</span>
+      <span class="label" id="acc-ai-label">Token AI Tersisa</span>
       <strong id="acc-ai">—</strong>
     </div>
   </section>
@@ -52,6 +52,22 @@
       <button id="btn-analyze" class="primary">Analisis + AI</button>
     </div>
     <div id="analysis" class="analysis-empty">Pilih simbol lalu klik Analisis untuk melihat snapshot teknikal dan penilaian AI.</div>
+
+    <div id="chart-block" class="chart-block" hidden>
+      <div class="row space-between">
+        <h3 id="chart-title">Grafik Candlestick</h3>
+        <select id="chart-interval">
+          <option value="1m">1m</option>
+          <option value="5m">5m</option>
+          <option value="15m" selected>15m</option>
+          <option value="1h">1h</option>
+          <option value="4h">4h</option>
+          <option value="1d">1d</option>
+        </select>
+      </div>
+      <div class="chart-wrap"><canvas id="candle-chart"></canvas></div>
+      <p class="muted small-note">Garis oranye = EMA20 · batang di bagian bawah = volume · data langsung dari Binance Futures</p>
+    </div>
   </section>
 
   <!-- Pemindai -->

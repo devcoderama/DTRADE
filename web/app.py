@@ -29,9 +29,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config.settings import load_settings
-from core.ai_client import BangunWebAIClient
+from core.ai_providers import create_ai_provider, describe_providers
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.executor import OrderExecutor
+from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
 from core.symbols import SymbolManager
@@ -43,7 +44,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 settings = load_settings()
 binance = BinanceFuturesClient(settings)
-ai_client = BangunWebAIClient(settings)
+ai_client = create_ai_provider(settings)
+notifier = build_notifier(settings)
 symbol_manager = SymbolManager(binance, settings)
 engine = SignalEngine(settings, binance, ai_client)
 risk_manager = RiskManager(settings, binance, symbol_manager)
@@ -130,6 +132,28 @@ def symbols() -> dict:
     return _guard(lambda: {"symbols": symbol_manager.all_symbols()})
 
 
+@app.get("/api/klines/{symbol}")
+def klines(symbol: str, interval: Optional[str] = None, limit: int = Query(120, ge=10, le=500)) -> dict:
+    """Data OHLC untuk grafik candlestick Web UI."""
+
+    def _load():
+        raw = binance.klines(symbol.upper(), interval or settings.default_interval, limit)
+        candles = [
+            {
+                "time": int(k[0]),
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "volume": float(k[5]),
+            }
+            for k in raw
+        ]
+        return {"symbol": symbol.upper(), "interval": interval or settings.default_interval, "candles": candles}
+
+    return _guard(_load)
+
+
 @app.get("/api/snapshot/{symbol}")
 def snapshot(symbol: str, interval: Optional[str] = None) -> dict:
     return _guard(lambda: engine.snapshot_for(symbol.upper(), interval))
@@ -175,6 +199,8 @@ def trade(req: TradeRequest) -> dict:
                 "signal": _signal_payload(signal),
             }
         result = executor.execute(decision, signal.price)
+        if notifier.enabled:
+            notifier.notify_execution(decision, result, signal.price)
         return {
             "executed": True,
             "dry_run": result.dry_run,
@@ -198,7 +224,26 @@ def close(symbol: str) -> dict:
 
 @app.get("/api/ai/account")
 def ai_account() -> dict:
-    return _guard(lambda: ai_client.account())
+    def _load():
+        providers = describe_providers(settings)
+        active = next((p for p in providers if p["active"]), None)
+        payload: dict = {"providers": providers, "active": active}
+        if ai_client is not None and ai_client.name == "bangunweb" and ai_client.is_configured():
+            payload["bangunweb_account"] = ai_client.account()
+            payload["tokens_remaining"] = payload["bangunweb_account"].get("tokens_remaining")
+        return payload
+
+    return _guard(_load)
+
+
+@app.post("/api/notify/test")
+def notify_test() -> dict:
+    if not notifier.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram belum dikonfigurasi: isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env",
+        )
+    return {"sent": notifier.notify_test()}
 
 
 # ----------------------------------------------------------------------

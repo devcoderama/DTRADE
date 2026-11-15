@@ -20,9 +20,10 @@ import argparse
 import sys
 
 from config.settings import Settings, load_settings
-from core.ai_client import BangunWebAIClient
+from core.ai_providers import create_ai_provider, describe_providers
 from core.binance_client import BinanceAPIError, BinanceFuturesClient
 from core.executor import OrderExecutor
+from core.notifier import build_notifier
 from core.risk import RiskManager
 from core.strategy import SignalEngine
 from core.symbols import SymbolManager
@@ -55,7 +56,8 @@ class App:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.binance = BinanceFuturesClient(settings)
-        self.ai = BangunWebAIClient(settings)
+        self.ai = create_ai_provider(settings)
+        self.notifier = build_notifier(settings)
         self.symbols = SymbolManager(self.binance, settings)
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
@@ -184,6 +186,9 @@ def cmd_trade(app: App, args) -> int:
     result = app.executor.execute(decision, signal.price)
     for note in result.notes:
         _print(f"  {note}")
+    if app.notifier.enabled:
+        sent = app.notifier.notify_execution(decision, result, signal.price)
+        _print(f"  [telegram] Notifikasi {'terkirim' if sent else 'gagal terkirim (cek log)'}")
     return 0
 
 
@@ -194,15 +199,31 @@ def cmd_close(app: App, args) -> int:
 
 
 def cmd_ai_account(app: App, _args) -> int:
-    info = app.ai.account()
-    _print("[bold]AI Router BangunWeb[/bold]")
-    _print(f"  Email          : {info.get('email')}")
-    _print(f"  Nama kunci     : {info.get('key_name')}")
-    _print(f"  Token tersisa  : {info.get('tokens_remaining')}")
-    _print(f"  Terpakai (kunci): {info.get('key_tokens_used')}")
-    last7 = info.get("last_7_days") or {}
-    _print(f"  7 hari terakhir: {last7.get('requests')} request, {last7.get('billed_tokens')} token")
+    _print("[bold]Provider AI[/bold]")
+    for row in describe_providers(app.settings):
+        mark = "→ AKTIF" if row["active"] else ""
+        state = "terkonfigurasi" if row["configured"] else "belum diisi"
+        _print(f"  {row['provider']:<10} model={row['model']:<18} {state} {mark}")
+    provider = app.ai
+    if provider is not None and provider.name == "bangunweb" and provider.is_configured():
+        info = provider.account()
+        _print("[bold]AI Router BangunWeb — akun[/bold]")
+        _print(f"  Email          : {info.get('email')}")
+        _print(f"  Nama kunci     : {info.get('key_name')}")
+        _print(f"  Token tersisa  : {info.get('tokens_remaining')}")
+        _print(f"  Terpakai (kunci): {info.get('key_tokens_used')}")
+        last7 = info.get("last_7_days") or {}
+        _print(f"  7 hari terakhir: {last7.get('requests')} request, {last7.get('billed_tokens')} token")
     return 0
+
+
+def cmd_notify_test(app: App, _args) -> int:
+    if not app.notifier.enabled:
+        _print("Telegram belum dikonfigurasi: isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID di .env")
+        return 1
+    ok = app.notifier.notify_test()
+    _print("Pesan uji Telegram terkirim." if ok else "Pesan uji GAGAL terkirim — periksa token/chat id dan log.")
+    return 0 if ok else 1
 
 
 # ----------------------------------------------------------------------
@@ -234,7 +255,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_cl = sub.add_parser("close", help="Tutup posisi satu simbol")
     p_cl.add_argument("symbol")
 
-    sub.add_parser("ai-account", help="Sisa token & pemakaian AI BangunWeb")
+    sub.add_parser("ai-account", help="Status provider AI (+ sisa token BangunWeb bila aktif)")
+    sub.add_parser("notify-test", help="Kirim pesan uji ke Telegram")
     return parser
 
 
@@ -253,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         "trade": cmd_trade,
         "close": cmd_close,
         "ai-account": cmd_ai_account,
+        "notify-test": cmd_notify_test,
     }
     try:
         if settings.has_binance_keys and args.command not in {"ai-account"}:
