@@ -54,6 +54,28 @@ Tersedia dalam dua antarmuka di atas core yang sama:
   Android (Termux). Untuk iOS: jalankan server di komputer/VPS, buka Web UI
   dari Safari/Chrome ponsel.
 
+## Tangkapan Layar
+
+> Diambil dari data **Binance Futures Testnet** dalam mode **dry-run**
+> (tanpa kunci API, tanpa dana asli) — angka yang tampil adalah keluaran
+> nyata aplikasi.
+
+**Web UI — Dasbor**
+
+![Web UI — Dasbor](screenshots/web-dashboard.png)
+
+**Web UI — Analisis BTCUSDT: skor teknikal, grafik candlestick + EMA20, dan hasil backtest dengan kurva ekuitas**
+
+![Web UI — Analisis, grafik candlestick, dan backtest](screenshots/web-analysis.png)
+
+**Terminal CLI — `analyze BTCUSDT`**
+
+![CLI — analyze BTCUSDT](screenshots/cli-analyze.png)
+
+**Terminal CLI — `backtest BTCUSDT` (500 candle)**
+
+![CLI — backtest BTCUSDT](screenshots/cli-backtest.png)
+
 ## Arsitektur Singkat
 
 Lihat **[STRUKTUR.MD](STRUKTUR.MD)** untuk peta folder, tanggung jawab tiap

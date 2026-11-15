@@ -240,7 +240,7 @@ function drawCandles() {
   const labelW = 64;                       // ruang label harga di kanan
   const plotW = W - labelW;
   const volH = Math.round(H * 0.16);       // area volume di bawah
-  const priceH = H - volH - 6;
+  const priceH = H - volH - 16;
 
   let hi = -Infinity, lo = Infinity, vmax = 0;
   for (const c of candles) {
@@ -248,7 +248,7 @@ function drawCandles() {
   }
   const pad = (hi - lo) * 0.06 || 1;
   hi += pad; lo -= pad;
-  const y = (p) => priceH - ((p - lo) / (hi - lo)) * priceH;
+  const y = (p) => 10 + priceH - ((p - lo) / (hi - lo)) * priceH;
   const step = plotW / candles.length;
   const bodyW = Math.max(1, Math.floor(step * 0.65));
 
@@ -319,8 +319,8 @@ async function runBacktest() {
     const d = await api("/api/backtest/" + encodeURIComponent(chartSymbol) + "?interval=" + interval + "&limit=1000");
     const pf = d.profit_factor === null ? "∞" : d.profit_factor;
     $("backtest-stats").innerHTML =
-      '<div class="kv"><span>Saldo awal → akhir</span><b>' + fmtUSD(d.initial_balance) + " → " + fmtUSD(d.final_balance) + '</b></div>' +
-      '<div class="kv"><span>Return</span><b class="' + (d.return_pct >= 0 ? "pos" : "neg") + '">' + fmtPct(d.return_pct) + '</b></div>' +
+      '<div class="kv"><span>Saldo awal → akhir</span><b>' + fmtUsd(d.initial_balance) + " → " + fmtUsd(d.final_balance) + '</b></div>' +
+      '<div class="kv"><span>Return</span><b class="' + (d.return_pct >= 0 ? "pos" : "neg") + '">' + (d.return_pct >= 0 ? "+" : "") + d.return_pct + "%" + '</b></div>' +
       '<div class="kv"><span>Trade</span><b>' + d.trades_count + " (" + d.wins + " menang / " + d.losses + ' kalah)</b></div>' +
       '<div class="kv"><span>Win rate</span><b>' + d.win_rate + '%</b></div>' +
       '<div class="kv"><span>Profit factor</span><b>' + pf + '</b></div>' +
@@ -331,7 +331,7 @@ async function runBacktest() {
     drawEquity();
     const rows = (d.trades || []).slice(-10).reverse().map((t) =>
       "<tr><td>" + t.side + "</td><td>" + fmtPrice(t.entry_price) + "</td><td>" + fmtPrice(t.exit_price) +
-      "</td><td>" + t.exit_reason + '</td><td class="' + (t.pnl >= 0 ? "pos" : "neg") + '">' + fmtUSD(t.pnl) + "</td></tr>"
+      "</td><td>" + t.exit_reason + '</td><td class="' + (t.pnl >= 0 ? "pos" : "neg") + '">' + fmtUsd(t.pnl) + "</td></tr>"
     ).join("");
     $("backtest-trades").innerHTML = rows
       ? '<table style="margin-top:12px"><thead><tr><th>Sisi</th><th>Entri</th><th>Keluar</th><th>Alasan</th><th>PnL</th></tr></thead><tbody>' + rows + "</tbody></table>"
@@ -357,13 +357,13 @@ function drawEquity() {
   let hi = Math.max(...vals), lo = Math.min(...vals);
   const pad = (hi - lo) * 0.1 || 1; hi += pad; lo -= pad;
   const x = (i) => (i / (vals.length - 1)) * (W - 70);
-  const y = (v) => H - ((v - lo) / (hi - lo)) * H;
+  const y = (v) => 9 + (H - 18) - ((v - lo) / (hi - lo)) * (H - 18);
   ctx.strokeStyle = "rgba(132,142,156,.18)";
   ctx.fillStyle = "#848e9c"; ctx.font = "10px sans-serif";
   for (let i = 0; i <= 3; i++) {
     const v = lo + ((hi - lo) * i) / 3, yy = y(v);
     ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - 70, yy); ctx.stroke();
-    ctx.fillText(fmtUSD(v), W - 64, yy + 3);
+    ctx.fillText(fmtUsd(v), W - 64, yy + 3);
   }
   const rising = vals[vals.length - 1] >= vals[0];
   ctx.strokeStyle = rising ? "#0ecb81" : "#f6465d";
@@ -374,6 +374,20 @@ function drawEquity() {
 }
 
 $("btn-backtest").addEventListener("click", runBacktest);
+
+/* ---------------- tautan langsung (deep link) ---------------- */
+// Contoh: /?symbol=BTCUSDT&backtest=1 — langsung menganalisis simbol tersebut
+// (dan menjalankan backtest bila diminta). Berguna untuk membagikan tampilan.
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const symbol = (params.get("symbol") || "").toUpperCase();
+  if (symbol) {
+    $("symbol-input").value = symbol;
+    analyze(symbol).then(() => {
+      if (params.get("backtest") === "1") runBacktest();
+    });
+  }
+})();
 
 /* ---------------- ikat event ---------------- */
 $("btn-analyze").addEventListener("click", () => {

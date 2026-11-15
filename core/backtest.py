@@ -265,11 +265,12 @@ class Backtester:
     def run(
         self,
         symbol: str,
-        interval: str = "15m",
+        interval: Optional[str] = "15m",
         limit: int = 1000,
         config: Optional[BacktestConfig] = None,
     ) -> BacktestResult:
         config = config or BacktestConfig()
+        interval = interval or "15m"
         klines = self._binance.klines(symbol.upper(), interval=interval, limit=min(limit, 1500))
         log.info("Backtest %s %s atas %d candle", symbol, interval, len(klines))
         return run_backtest(symbol.upper(), interval, klines, config)
