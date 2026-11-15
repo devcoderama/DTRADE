@@ -21,7 +21,7 @@ importlib.reload(webapp)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-client = TestClient(webapp.app)
+client = TestClient(webapp.app, base_url="http://127.0.0.1:8000")  # Fase 6-C1: Host harus literal IP/localhost
 
 
 def test_health_is_public():
@@ -115,6 +115,6 @@ def test_ws_requires_token_and_streams(monkeypatch):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/api/ws/klines/BTCUSDT") as ws:
             ws.receive_json()
-    with client.websocket_connect("/api/ws/klines/BTCUSDT?token=token-utama-uji-yang-cukup-panjang") as ws:
+    with client.websocket_connect("/api/ws/klines/BTCUSDT", headers={"X-API-Token": os.environ["WEB_API_TOKEN"]}) as ws:
         payload = ws.receive_json()
         assert payload["symbol"] == "BTCUSDT" and payload["candle"]["close"] == 1.0

@@ -183,6 +183,7 @@ class Settings:
     # Daftar origin CORS yang diizinkan, pisah koma. Kosong = tanpa CORS
     # (hanya same-origin). JANGAN gunakan "*" bersamaan dengan token.
     cors_origins: str = ""
+    trusted_proxies: str = ""  # Fase 6-C1: daftar IP proksi tepercaya (koma) untuk X-Forwarded-For
     rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
     mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
     market_ws_enabled: bool = True    # WebSocket data pasar real-time untuk grafik Web UI
@@ -399,6 +400,7 @@ def load_settings() -> Settings:
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
         web_viewer_token=os.environ.get("WEB_VIEWER_TOKEN", "").strip(),
         cors_origins=os.environ.get("CORS_ORIGINS", "").strip(),
+        trusted_proxies=os.environ.get("TRUSTED_PROXIES", "").strip(),
         rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
         mtf_enabled=_get_bool("MTF_ENABLED", True),
         market_ws_enabled=_get_bool("MARKET_WS_ENABLED", True),

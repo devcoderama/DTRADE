@@ -414,3 +414,72 @@ def test_a7_oneway_passes_and_signed_ping_ok():
     assert by_name["Mode posisi akun"].ok is True
     assert by_name["Konektivitas Binance"].ok is True
     assert selfcheck_failed(checks) is False
+
+
+# ----------------------------------------------------------------------
+# Cakupan executor (Fase 6-C2: gerbang executor ≥78%)
+# ----------------------------------------------------------------------
+def test_exec_find_order_not_found_returns_none(tmp_path):
+    from core.binance_client import BinanceAPIError
+
+    class _Fake:
+        def query_order(self, symbol, client_order_id=None):
+            raise BinanceAPIError(400, -2013, "Order does not exist")
+
+    ex = _executor(tmp_path, _Fake())
+    assert ex._find_order("BTCUSDT", "baf-x") is None
+
+    class _Fake2:
+        def query_order(self, symbol, client_order_id=None):
+            raise BinanceAPIError(400, -1000, "Unknown error")
+
+    ex2 = _executor(tmp_path, _Fake2())
+    with pytest.raises(BinanceAPIError):
+        ex2._find_order("BTCUSDT", "baf-x")
+
+
+def test_exec_await_fill_polls_until_filled(tmp_path):
+    class _Fake:
+        def __init__(self):
+            self.calls = 0
+
+        def query_order(self, symbol, client_order_id=None):
+            self.calls += 1
+            return {"status": "FILLED", "executedQty": "0.01", "avgPrice": "100.0"}
+
+    fake = _Fake()
+    ex = _executor(tmp_path, fake)
+    import core.executor as exmod
+
+    orig_sleep = exmod.time.sleep
+    exmod.time.sleep = lambda s: None
+    try:
+        order = ex._await_fill("BTCUSDT", {"status": "NEW"}, "baf-y")
+    finally:
+        exmod.time.sleep = orig_sleep
+    assert order["status"] == "FILLED" and fake.calls == 1
+
+
+def test_exec_mark_resolved_clears_pending(tmp_path):
+    ex = _executor(tmp_path, _FakeBinanceClose())
+    from core.executor import ExecutionResult, RECOVERY_REQUIRED
+
+    rec = ExecutionResult(symbol="BTCUSDT", side="LONG", dry_run=False,
+                          client_order_id="baf-pending-1")
+    ex._transition(rec, RECOVERY_REQUIRED, "uji")
+    assert any(r["client_order_id"] == "baf-pending-1" for r in ex.pending_recovery())
+    ex.mark_resolved("baf-pending-1", "sudah ditangani")
+    assert not any(r["client_order_id"] == "baf-pending-1" for r in ex.pending_recovery())
+
+
+def test_exec_close_tolerates_cancel_failures(tmp_path):
+    class _FakeCloseFail(_FakeBinanceClose):
+        def cancel_all_orders(self, symbol):
+            raise RuntimeError("cancel gagal")
+
+        def cancel_all_algo_orders(self, symbol):
+            raise RuntimeError("cancel algo gagal")
+
+    ex = _executor(tmp_path, _FakeCloseFail())
+    result = ex.close_position("BTCUSDT")
+    assert result["closed"] is True  # kegagalan bersih-bersih tidak membatalkan penutupan

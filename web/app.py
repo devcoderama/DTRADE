@@ -135,7 +135,8 @@ LOGIN_RATE_PER_MINUTE = 5  # percobaan login per IP — jauh lebih ketat dari ba
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, api_token: str, viewer_token: str, rate_per_minute: int):
+    def __init__(self, app, api_token: str, viewer_token: str, rate_per_minute: int,
+                 trusted_proxies: Optional[list] = None, cors_origins: Optional[list] = None):
         super().__init__(app)
         self._api_token = api_token
         self._viewer_token = viewer_token
@@ -143,6 +144,55 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self._hits: dict[str, deque] = {}
         self._login_hits: dict[str, deque] = {}
         self._hits_lock = threading.Lock()
+        # Fase 6-C1: X-Forwarded-For hanya dipercaya dari proksi ini.
+        self._trusted_proxies = set(trusted_proxies or [])
+        self._cors_hosts = set()
+        for origin in cors_origins or []:
+            from urllib.parse import urlsplit
+
+            host = urlsplit(origin).hostname
+            if host:
+                self._cors_hosts.add(host)
+
+    def _client_ip(self, request: Request) -> str:
+        """IP klien untuk rate limit: XFF hanya dari proksi tepercaya."""
+        peer = request.client.host if request.client else "unknown"
+        if peer in self._trusted_proxies:
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                return xff.split(",")[0].strip() or peer
+        return peer
+
+    def _host_allowed(self, request: Request) -> bool:
+        """Anti DNS-rebinding (Fase 6-C1): nama publik tak dikenal ditolak;
+        loopback + IP privat/link-local (kasus LAN D TRADE) diizinkan."""
+        import ipaddress
+        from urllib.parse import urlsplit
+
+        host = request.headers.get("host", "")
+        hostname = urlsplit(f"//{host}").hostname or ""
+        if not hostname or hostname == "localhost" or hostname in self._cors_hosts:
+            return True
+        try:
+            ipaddress.ip_address(hostname)
+            return True  # literal IP (LAN/VPS/loopback) — rebinding memakai nama domain
+        except ValueError:
+            return hostname == (settings.web_host if settings is not None else "")
+
+    def _origin_allowed(self, request: Request) -> bool:
+        """CSRF (Fase 6-C1): untuk POST ber-cookie, Origin harus se-host."""
+        from urllib.parse import urlsplit
+
+        origin = request.headers.get("origin")
+        if not origin:
+            return True  # bukan request peramban lintas-origin
+        if request.headers.get("x-api-token"):
+            return True  # auth header bukan target CSRF cookie
+        if not request.cookies.get("baf_token"):
+            return True
+        origin_host = urlsplit(origin).hostname or ""
+        request_host = urlsplit(f"//{request.headers.get('host', '')}").hostname or ""
+        return origin_host == request_host or origin_host in self._cors_hosts
 
     def _role(self, request: Request) -> Optional[str]:
         import hmac
@@ -183,6 +233,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if not path.startswith("/api/"):
             return await call_next(request)
+        # Fase 6-C1: validasi Host (anti DNS-rebinding).
+        if not self._host_allowed(request):
+            return JSONResponse(status_code=400, content={"detail": "Host tidak diizinkan."})
+        # Fase 6-C1: POST/PUT/PATCH berbadan wajib JSON.
+        if request.method in {"POST", "PUT", "PATCH"}:
+            ctype = request.headers.get("content-type", "")
+            clength = request.headers.get("content-length")
+            if clength not in (None, "0") and ctype and "application/json" not in ctype:
+                return JSONResponse(status_code=415, content={"detail": "Content-Type harus application/json."})
+            # Fase 6-C1: CSRF — Origin asing pada request ber-cookie.
+            if not self._origin_allowed(request):
+                return JSONResponse(status_code=403, content={"detail": "Origin tidak diizinkan untuk sesi cookie."})
         length = request.headers.get("content-length")
         if length is not None:
             try:
@@ -192,7 +254,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(status_code=400, content={"detail": "Content-Length tidak valid."})
         if path == "/api/health":
             return await call_next(request)
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = self._client_ip(request)  # Fase 6-C1: XFF sadar-proksi
         if path == "/api/auth/login":
             # Batas login TERPISAH dan jauh lebih ketat; token diperiksa endpoint.
             if self._login_limited(client_ip):
@@ -222,6 +284,8 @@ app.add_middleware(
     api_token=settings.web_api_token,
     viewer_token=settings.web_viewer_token,
     rate_per_minute=settings.rate_limit_per_minute,
+    trusted_proxies=[p.strip() for p in settings.trusted_proxies.split(",") if p.strip()],
+    cors_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
 )
 _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 if _cors_origins:
@@ -441,13 +505,11 @@ async def ws_klines(websocket: WebSocket, symbol: str, interval: Optional[str] =
     if settings.web_api_token:
         import hmac
 
-        # Urutan kepercayaan: cookie sesi → header → query (?token= DEPRECATED,
-        # tetap diterima untuk kompatibilitas; jangan dipakai — token di URL
-        # mudah bocor lewat log & riwayat peramban).
+        # Fase 6-C1: ?token= DIHAPUS — token di URL bocor lewat log &
+        # riwayat peramban. Urutan kepercayaan: cookie sesi → header.
         token = (
             websocket.cookies.get("baf_token")
             or websocket.headers.get("x-api-token")
-            or websocket.query_params.get("token")
             or ""
         )
         ok = hmac.compare_digest(token, settings.web_api_token) or (
@@ -623,6 +685,14 @@ def auth_login(req: AuthRequest, request: Request) -> JSONResponse:
         "baf_token", req.token, httponly=True, samesite="strict", secure=is_https,
         path="/api", max_age=7 * 24 * 3600,
     )
+    return resp
+
+
+@app.post("/api/auth/logout")
+def auth_logout() -> JSONResponse:
+    """Akhiri sesi peramban: hapus cookie token (Fase 6-C1)."""
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("baf_token", path="/api")
     return resp
 
 

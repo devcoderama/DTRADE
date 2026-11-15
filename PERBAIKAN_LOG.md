@@ -418,3 +418,39 @@ termasuk token pada URL WS), `test_phase1.py::test_enforce_web_safety`
 fixture diperpanjang), `test_phase3.py::test_gate_adx_and_regime`
 (ekspektasi sideways dibalik sesuai B7d), `test_phase3.py::
 test_pm_breakeven_*` (target BE 100,0 → 100,1 sesuai buffer B1).
+
+### Fase C — selesai (uji 150 → 160; workflow CI terpisah di a14135c)
+
+- **C1 Hardening web.** Validasi Host di middleware (nama domain
+  publik tak dikenal → 400, anti DNS-rebinding; literal IP/localhost/
+  host CORS diizinkan agar akses LAN D TRADE & VPS tetap jalan);
+  pemeriksaan Origin untuk POST ber-cookie (asing → 403, anti CSRF);
+  Content-Type wajib application/json untuk request berbadan (→ 415);
+  endpoint baru `POST /api/auth/logout` menghapus cookie sesi;
+  `X-Forwarded-For` hanya dipercaya dari `TRUSTED_PROXIES` (baru,
+  bawaan kosong) untuk kunci rate-limit; dukungan `?token=` pada
+  WebSocket **dihapus** (cookie/header saja).
+- **C2 CI & lockfile.** Workflow: `permissions: contents: read`,
+  actions ter-pin SHA penuh (checkout v4 `11d5960…`, setup-python v5
+  `a26af69…`), instalasi dari `requirements.lock` (76 paket, pip
+  freeze), dan gerbang cakupan per berkas via
+  `scripts/check_coverage.py`. Ambang ditetapkan dari pengukuran
+  nyata (bukan tebakan): risk 78 (terukur 83,4), executor 78 (81,3 —
+  naik dari 77,6 berkat 4 uji executor baru), journal 70 (75,9),
+  strategy 60 (63,2), reconciler 65 (70,7), position_manager 60
+  (66,7), indicators 70 (93,7), market_stream 70 (81,0), settings 80
+  (90,2), web/app 50 (59,0).
+- **C3 Android.** `shouldOverrideUrlLoading`: WebView hanya boleh
+  bernavigasi ke host server yang dikonfigurasi (host lain diblokir);
+  `minifyEnabled true` untuk rilis. (Sumber saja — APK belum dibangun
+  ulang; perlu rebuild dengan keystore rilis yang sama agar berlaku.)
+- **C4 Dokumentasi.** Bagian ini + README (lapisan Fase 6, DATA_DIR,
+  logout, token ≥24) + `.env.example` (RECONCILER_GRACE_SEC,
+  BREAKEVEN_BUFFER_PCT, DATA_DIR, TRUSTED_PROXIES).
+
+**Uji lama yang diubah (aturan 7):** `test_security.py` — klien uji
+memakai base_url literal IP (validasi Host C1) dan uji WS memakai
+header X-API-Token menggantikan `?token=` yang dihapus.
+`test_phase6_c.py` membaca token/klien secara malas per uji karena
+`test_security` me-reload modul web.app saat impor (menangkapnya saat
+impor mengikat instance lama).
