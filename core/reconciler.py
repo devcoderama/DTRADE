@@ -28,28 +28,37 @@ from utils.logger import get_logger
 log = get_logger(__name__)
 
 
+def open_registry(journal) -> dict[str, dict]:
+    """client_order_id → entri eksekusi yang posisinya diyakini terbuka.
+
+    Diturunkan murni dari jurnal: eksekusi PROTECTED/FILLED dikurangi
+    event penutupan. Dipakai bersama oleh Reconciler & PositionManager.
+    """
+    registry: dict[str, dict] = {}
+    for e in journal.all_entries():
+        cid = e.get("client_order_id")
+        if not cid:
+            continue
+        if e.get("type") == "close":
+            registry.pop(cid, None)
+        elif e.get("execution_state") in {"PROTECTED", "FILLED", "PARTIALLY_FILLED"}:
+            registry[cid] = e
+    return registry
+
+
 class Reconciler:
-    def __init__(self, settings: Settings, binance, executor, journal):
+    def __init__(self, settings: Settings, binance, executor, journal, position_manager=None):
         self._settings = settings
         self._binance = binance
         self._executor = executor
         self._journal = journal
+        self._position_manager = position_manager
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
     # ------------------------------------------------------------------
     def _open_registry(self) -> dict[str, dict]:
-        """client_order_id → entri eksekusi yang posisinya diyakini terbuka."""
-        registry: dict[str, dict] = {}
-        for e in self._journal.all_entries():
-            cid = e.get("client_order_id")
-            if not cid:
-                continue
-            if e.get("type") == "close":
-                registry.pop(cid, None)
-            elif e.get("execution_state") in {"PROTECTED", "FILLED", "PARTIALLY_FILLED"}:
-                registry[cid] = e
-        return registry
+        return open_registry(self._journal)
 
     # ------------------------------------------------------------------
     def run_once(self) -> dict[str, Any]:
@@ -150,6 +159,13 @@ class Reconciler:
             )
             log.info("Rekonsiliasi: penutupan %s dicatat (PnL %s).", symbol, pnl)
             summary["closes_recorded"].append(symbol)
+
+        # Manajemen keluar (Fase 3.5) — fitur-fitur di dalamnya bawaan mati.
+        if self._position_manager is not None:
+            try:
+                summary["position_manager"] = self._position_manager.manage()
+            except Exception as exc:
+                log.warning("PositionManager gagal pada putaran ini: %s", exc)
         return summary
 
     def _realized_pnl_since(self, symbol: str, since_ms: int) -> Optional[float]:

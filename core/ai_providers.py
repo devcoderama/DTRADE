@@ -28,6 +28,7 @@ import json
 from typing import Any, Optional
 
 import requests
+from pydantic import BaseModel, field_validator
 
 from config.settings import Settings
 from core.ai_client import (
@@ -89,6 +90,38 @@ class BaseAIProvider:
         return _parse_analysis(symbol, content, model_used, self.name)
 
 
+class _AIOutput(BaseModel):
+    """Skema ketat keluaran AI — divalidasi pydantic sebelum dipakai."""
+
+    signal: str = "NEUTRAL"
+    confidence: int = 0
+    entry: Optional[float] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    reasoning: str = ""
+    risks: list[str] = []
+
+    @field_validator("signal", mode="before")
+    @classmethod
+    def _signal_ok(cls, v):
+        s = str(v or "NEUTRAL").upper()
+        return s if s in {"LONG", "SHORT", "NEUTRAL"} else "NEUTRAL"
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _confidence_ok(cls, v):
+        try:
+            return max(0, min(100, int(v)))
+        except (TypeError, ValueError):
+            return 0
+
+    @field_validator("entry", "stop_loss", "take_profit", mode="before")
+    @classmethod
+    def _price_ok(cls, v):
+        f = _to_float(v)
+        return f if (f is None or f > 0) else None
+
+
 def _parse_analysis(symbol: str, content: str, model_used: str, provider: str) -> AIAnalysis:
     parsed = _extract_json(content)
     if parsed is None:
@@ -100,22 +133,27 @@ def _parse_analysis(symbol: str, content: str, model_used: str, provider: str) -
             reasoning="Balasan AI tidak dapat diparse; dianggap NEUTRAL demi keamanan.",
             model_used=f"{provider}:{model_used}",
         )
-    signal = str(parsed.get("signal", "NEUTRAL")).upper()
-    if signal not in {"LONG", "SHORT", "NEUTRAL"}:
-        signal = "NEUTRAL"
     try:
-        confidence = max(0, min(100, int(parsed.get("confidence", 0))))
-    except (TypeError, ValueError):
-        confidence = 0
+        out = _AIOutput(**parsed)
+    except Exception as exc:  # skema tidak lolos → NEUTRAL demi keamanan
+        log.warning("Keluaran AI %s tidak lolos skema untuk %s: %s", provider, symbol, exc)
+        return AIAnalysis(
+            symbol=symbol,
+            signal="NEUTRAL",
+            confidence=0,
+            reasoning="Keluaran AI tidak lolos validasi skema; dianggap NEUTRAL demi keamanan.",
+            model_used=f"{provider}:{model_used}",
+            raw=parsed,
+        )
     return AIAnalysis(
         symbol=symbol,
-        signal=signal,
-        confidence=confidence,
-        entry=_to_float(parsed.get("entry")),
-        stop_loss=_to_float(parsed.get("stop_loss")),
-        take_profit=_to_float(parsed.get("take_profit")),
-        reasoning=str(parsed.get("reasoning", "")),
-        risks=[str(r) for r in parsed.get("risks", []) if r],
+        signal=out.signal,
+        confidence=out.confidence,
+        entry=out.entry,
+        stop_loss=out.stop_loss,
+        take_profit=out.take_profit,
+        reasoning=out.reasoning,
+        risks=[str(r) for r in out.risks if r],
         model_used=f"{provider}:{model_used}",
         raw=parsed,
     )

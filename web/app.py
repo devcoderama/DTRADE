@@ -54,6 +54,7 @@ from core.database import build_database
 from core.executor import OrderExecutor
 from core.journal import TradeJournal
 from core.market_stream import MarketStream
+from core.position_manager import PositionManager
 from core.reconciler import Reconciler
 from core.service import TradingService
 from core.notifier import build_notifier
@@ -95,7 +96,8 @@ risk_manager = RiskManager(settings, binance, symbol_manager)
 executor = OrderExecutor(settings, binance, symbol_manager, db=database)
 market_stream = MarketStream(settings)
 trading_service = TradingService(settings, risk_manager, executor, binance)
-reconciler = Reconciler(settings, binance, executor, journal)
+position_manager = PositionManager(settings, binance, executor, journal, symbol_manager)
+reconciler = Reconciler(settings, binance, executor, journal, position_manager=position_manager)
 
 from contextlib import asynccontextmanager
 

@@ -129,6 +129,31 @@ class Settings:
     protection_working_type: str = "MARK_PRICE"  # pemicu SL/TP algo: MARK_PRICE | CONTRACT_PRICE
     reconciler_enabled: bool = True   # rekonsiliasi posisi berkala di web server
     reconciler_interval_sec: int = 60  # jeda antar putaran rekonsiliasi
+
+    # --- Fase 3: strategi sinyal (semua bisa dimatikan; bawaan konservatif) ---
+    use_closed_candles_only: bool = True  # indikator hanya dari candle tertutup
+    scoring_version: int = 1              # 1 = skor lama; 2 = skor per kategori
+    ai_can_initiate: bool = False         # False: AI hanya konfirmasi/veto, tak memulai trade
+    adx_min: float = 20.0                 # entri trend-following ditolak bila ADX di bawah ini
+    mtf_gate_enabled: bool = True         # tolak sinyal yang dilawan tren 1h/4h
+    regime_gate_enabled: bool = True      # tolak entri pada rezim ekstrem (volatilitas tinggi/rendah)
+    # Manajemen keluar (bawaan SEMUA mati):
+    move_sl_to_be: bool = False           # geser SL ke break-even setelah profit 1R
+    breakeven_trigger_r: float = 1.0
+    trailing_stop_enabled: bool = False   # trailing stop ATR setelah trailing_trigger_r
+    trailing_trigger_r: float = 1.5
+    trailing_atr_mult: float = 1.0
+    partial_tp_enabled: bool = False      # tutup sebagian di partial_tp_r
+    partial_tp_r: float = 1.5
+    partial_tp_fraction: float = 0.5
+    max_hold_hours: float = 0.0           # 0 = tanpa batas waktu posisi
+    # Risiko portofolio:
+    max_same_direction_positions: int = 2  # maks posisi searah bersamaan
+    max_open_risk_pct: float = 0.0         # 0 = 2× risk_per_trade_pct
+    min_quote_volume_usd: float = 0.0      # 0 = filter likuiditas mati
+    funding_guard_minutes: int = 0         # 0 = penjaga waktu funding mati
+    funding_extreme_pct: float = 0.1       # |funding| >= ini dianggap ekstrem
+    btc_filter: bool = False               # altcoin mengikuti tren kuat BTC
     risk_state_path: str = "data/risk_state.json"  # baseline ekuitas harian/mingguan + kunci harian (persisten)
     protection_retries: int = 3             # percobaan pasang SL/TP sebelum emergency close
     default_interval: str = "15m"
@@ -218,6 +243,10 @@ class Settings:
         valid_intervals = {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"}
         if self.default_interval not in valid_intervals:
             errors.append(f"DEFAULT_INTERVAL tidak dikenal: {self.default_interval!r}")
+        if self.scoring_version not in (1, 2):
+            errors.append(f"SCORING_VERSION harus 1 atau 2, kini {self.scoring_version}")
+        if self.protection_working_type not in {"MARK_PRICE", "CONTRACT_PRICE"}:
+            errors.append(f"PROTECTION_WORKING_TYPE tidak dikenal: {self.protection_working_type!r}")
         if errors:
             raise ConfigError("Konfigurasi tidak valid — " + "; ".join(errors))
 
@@ -301,6 +330,27 @@ def load_settings() -> Settings:
         protection_working_type=os.environ.get("PROTECTION_WORKING_TYPE", "MARK_PRICE").strip().upper(),
         reconciler_enabled=_get_bool("RECONCILER_ENABLED", True),
         reconciler_interval_sec=_get_int("RECONCILER_INTERVAL_SEC", 60),
+        use_closed_candles_only=_get_bool("USE_CLOSED_CANDLES_ONLY", True),
+        scoring_version=_get_int("SCORING_VERSION", 1),
+        ai_can_initiate=_get_bool("AI_CAN_INITIATE", False),
+        adx_min=_get_float("ADX_MIN", 20.0),
+        mtf_gate_enabled=_get_bool("MTF_GATE_ENABLED", True),
+        regime_gate_enabled=_get_bool("REGIME_GATE_ENABLED", True),
+        move_sl_to_be=_get_bool("MOVE_SL_TO_BE", False),
+        breakeven_trigger_r=_get_float("BREAKEVEN_TRIGGER_R", 1.0),
+        trailing_stop_enabled=_get_bool("TRAILING_STOP_ENABLED", False),
+        trailing_trigger_r=_get_float("TRAILING_TRIGGER_R", 1.5),
+        trailing_atr_mult=_get_float("TRAILING_ATR_MULT", 1.0),
+        partial_tp_enabled=_get_bool("PARTIAL_TP_ENABLED", False),
+        partial_tp_r=_get_float("PARTIAL_TP_R", 1.5),
+        partial_tp_fraction=_get_float("PARTIAL_TP_FRACTION", 0.5),
+        max_hold_hours=_get_float("MAX_HOLD_HOURS", 0.0),
+        max_same_direction_positions=_get_int("MAX_SAME_DIRECTION_POSITIONS", 2),
+        max_open_risk_pct=_get_float("MAX_OPEN_RISK_PCT", 0.0),
+        min_quote_volume_usd=_get_float("MIN_QUOTE_VOLUME_USD", 0.0),
+        funding_guard_minutes=_get_int("FUNDING_GUARD_MINUTES", 0),
+        funding_extreme_pct=_get_float("FUNDING_EXTREME_PCT", 0.1),
+        btc_filter=_get_bool("BTC_FILTER", False),
         risk_state_path=os.environ.get("RISK_STATE_PATH", "data/risk_state.json").strip(),
         protection_retries=_get_int("PROTECTION_RETRIES", 3),
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),

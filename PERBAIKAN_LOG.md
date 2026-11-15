@@ -124,3 +124,47 @@ Perilaku yang sengaja berubah & test-nya disesuaikan: `test_database.py`
   kini UTC (satu sumber waktu). Algo order menerima `workingType`
   (`PROTECTION_WORKING_TYPE`, bawaan MARK_PRICE) — ditandai
   `TODO(verify)` di kode sesuai aturan kehati-hatian API.
+
+## Fase 3 — Strategi Sinyal — SELESAI, 93 test hijau (79 → +14)
+
+- **3.1 Candle tertutup saja** (`USE_CLOSED_CANDLES_ONLY=true` bawaan):
+  candle berjalan dibuang sebelum indikator dihitung di kedua jalur
+  snapshot; harga acuan entri/SL/TP tetap harga kini (mark price).
+  Backtest tidak terpengaruh (data historis memang tertutup).
+- **3.2 Gerbang keras** (sebelumnya MTF hanya peringatan): tren 1h/4h
+  berlawanan → sinyal dibatalkan (`MTF_GATE_ENABLED`); rezim
+  high/low_volatility → semua entri arah ditolak; rezim trending dengan
+  adx14 < `ADX_MIN` (20) → ditolak (`REGIME_GATE_ENABLED`). Berlaku di
+  analisis penuh maupun jalur pindai; alasan selalu tertulis di sinyal.
+- **3.3 Skor v2 per kategori** (`SCORING_VERSION=2`, bawaan tetap 1):
+  trend (maks 40, dilemahkan di luar rezim trending) / mean-reversion
+  (maks 25, hanya aktif saat sideways) / positioning (maks 20: funding
+  berjenjang + volume). Syarat minimal 2 kategori sepakat — satu
+  kategori sendirian dibatasi skornya ke ≤24 (di bawah ambang entri).
+  v1 dipertahankan persis & menjadi bawaan agar perilaku lama bisa
+  dibandingkan. Catatan jujur: riwayat perubahan OI tidak tersedia dari
+  snapshot saat ini, jadi positioning memakai funding + volume.
+- **3.4 AI hanya konfirmasi/veto** (`AI_CAN_INITIATE=false` bawaan):
+  jalur lama "teknikal netral + AI ≥75 → trade" kini mati secara
+  bawaan. Konteks AI diperkaya: MTF, tren/regim BTC 1h (cache 60 dtk),
+  rezim, dan 25 candle terakhir (`recent_candles` di snapshot). Level
+  SL/TP dari AI kini juga divalidasi jaraknya terhadap ATR (SL
+  0,5–3×ATR, TP ≤5×ATR) — di luar rentang diganti level ATR. Keluaran
+  AI divalidasi skema pydantic (`_AIOutput`); gagal skema → NEUTRAL.
+- **3.5 PositionManager BARU** (`core/position_manager.py`), semua
+  fitur bawaan MATI: break-even setelah 1R, trailing stop ATR setelah
+  1,5R, TP parsial 50% pada 1,5R, batas waktu posisi
+  (`MAX_HOLD_HOURS`). Penggantian SL aman: pasang baru → verifikasi →
+  baru batalkan lama. Berjalan di dalam putaran reconciler; state
+  persisten di `data/position_manager_state.json`; dry-run hanya log.
+  **Belum dikerjakan di fase ini:** model keluar yang sama di backtest —
+  ditunda ke Fase 4 yang memang menulis ulang loop backtest (window
+  indikator), agar tidak dikerjakan dua kali.
+- **3.6 Risiko portofolio** di `RiskManager._portfolio_checks`:
+  batas posisi searah (`MAX_SAME_DIRECTION_POSITIONS=2`), total risiko
+  terbuka dari SL algo tiap posisi + risiko rencana ≤
+  `MAX_OPEN_RISK_PCT` (bawaan 2× risiko per trade), filter likuiditas
+  (`MIN_QUOTE_VOLUME_USD`, bawaan mati), penjaga waktu funding
+  (`FUNDING_GUARD_MINUTES`, bawaan mati; funding ekstrem di sekitar
+  00/08/16 UTC ditolak), dan `BTC_FILTER` (bawaan mati; arah kuat BTC
+  dari EMA 1h & 4h, cache 60 dtk).

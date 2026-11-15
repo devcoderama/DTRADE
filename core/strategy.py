@@ -49,7 +49,150 @@ class TradeSignal:
     mtf: dict = field(default_factory=dict)  # tren per timeframe {interval: {trend, regime}}
 
 
-def technical_score(snapshot: dict) -> tuple[int, list[str]]:
+def technical_score(snapshot: dict, version: int = 1) -> tuple[int, list[str]]:
+    """Skor teknikal: v1 (lama, dipertahankan) atau v2 (per kategori)."""
+    if version == 2:
+        return technical_score_v2(snapshot)
+    return technical_score_v1(snapshot)
+
+
+def technical_components(snapshot: dict) -> dict[str, tuple[int, list[str]]]:
+    """Komponen skor v2 per kategori: trend / mean_reversion / positioning.
+
+    Setiap kategori dibatasi kontribusi maksimumnya agar satu keluarga
+    indikator tidak mendominasi (double counting). Mean-reversion hanya
+    dinilai pada rezim sideways; komponen trend hanya pada rezim trending.
+    """
+    regime = snapshot.get("regime") or "uncertain"
+    trend_pts = 0
+    trend_reasons: list[str] = []
+    trend = snapshot.get("trend")
+    if trend == "UPTREND":
+        trend_pts += 25
+        trend_reasons.append("Tren naik +25")
+    elif trend == "DOWNTREND":
+        trend_pts -= 25
+        trend_reasons.append("Tren turun -25")
+    hist = snapshot.get("macd_histogram")
+    macd_v = snapshot.get("macd")
+    if hist is not None and macd_v is not None:
+        if hist > 0 and macd_v > 0:
+            trend_pts += 15
+            trend_reasons.append("MACD bullish +15")
+        elif hist < 0 and macd_v < 0:
+            trend_pts -= 15
+            trend_reasons.append("MACD bearish -15")
+        elif hist > 0:
+            trend_pts += 6
+            trend_reasons.append("Momentum MACD membaik +6")
+        elif hist < 0:
+            trend_pts -= 6
+            trend_reasons.append("Momentum MACD melemah -6")
+    change_1h = snapshot.get("change_1h_pct")
+    if change_1h is not None:
+        if change_1h > 1.0:
+            trend_pts += 8
+            trend_reasons.append(f"Momentum 1 jam kuat ({change_1h:+.2f}%) +8")
+        elif change_1h < -1.0:
+            trend_pts -= 8
+            trend_reasons.append(f"Momentum 1 jam lemah ({change_1h:+.2f}%) -8")
+    if regime not in {"bullish_trending", "bearish_trending", "breakout", "uncertain"}:
+        # Di luar rezim trending, komponen trend dilemahkan separuh —
+        # sinyal tren pada pasar sideways adalah sumber whipsaw utama.
+        trend_pts = int(round(trend_pts * 0.5))
+        if trend_pts:
+            trend_reasons.append(f"Komponen trend dilemahkan (rezim {regime})")
+
+    mr_pts = 0
+    mr_reasons: list[str] = []
+    if regime == "sideways":
+        rsi = snapshot.get("rsi14")
+        if rsi is not None:
+            if rsi < 30:
+                mr_pts += 15
+                mr_reasons.append(f"RSI oversold ({rsi:.0f}) +15")
+            elif rsi > 70:
+                mr_pts -= 15
+                mr_reasons.append(f"RSI overbought ({rsi:.0f}) -15")
+        pct_b = snapshot.get("bb_pct_b")
+        if pct_b is not None:
+            if pct_b < 0.05:
+                mr_pts += 10
+                mr_reasons.append("Harga di tepi bawah Bollinger +10")
+            elif pct_b > 0.95:
+                mr_pts -= 10
+                mr_reasons.append("Harga di tepi atas Bollinger -10")
+    elif snapshot.get("rsi14") is not None:
+        # Momentum RSI sehat tetap bernilai kecil di luar sideways.
+        rsi = snapshot["rsi14"]
+        if 50 <= rsi < 65:
+            mr_pts += 5
+            mr_reasons.append(f"RSI sehat untuk long ({rsi:.0f}) +5")
+        elif 35 < rsi < 50:
+            mr_pts -= 5
+            mr_reasons.append(f"RSI lemah ({rsi:.0f}) -5")
+
+    pos_pts = 0
+    pos_reasons: list[str] = []
+    funding = snapshot.get("funding_rate") or 0.0
+    if funding >= 0.001:
+        pos_pts -= 10
+        pos_reasons.append(f"Funding ekstrem positif ({funding * 100:.3f}%) -10")
+    elif funding > 0.0005:
+        pos_pts -= 5
+        pos_reasons.append("Funding sangat positif -5")
+    elif funding <= -0.001:
+        pos_pts += 10
+        pos_reasons.append(f"Funding ekstrem negatif ({funding * 100:.3f}%) +10")
+    elif funding < -0.0005:
+        pos_pts += 5
+        pos_reasons.append("Funding sangat negatif +5")
+    volume = snapshot.get("last_volume")
+    avg_volume = snapshot.get("avg_volume")
+    if volume and avg_volume:
+        if volume > 1.5 * avg_volume:
+            pos_pts += 5
+            pos_reasons.append("Volume di atas rata-rata (partisipasi kuat) +5")
+
+    def _cap(v: int, cap: int) -> int:
+        return max(-cap, min(cap, v))
+
+    return {
+        "trend": (_cap(trend_pts, 40), trend_reasons),
+        "mean_reversion": (_cap(mr_pts, 25), mr_reasons),
+        "positioning": (_cap(pos_pts, 20), pos_reasons),
+    }
+
+
+def technical_score_v2(snapshot: dict) -> tuple[int, list[str]]:
+    """Skor v2: jumlah kategori terbatas + syarat minimal 2 kategori sepakat.
+
+    Satu indikator/kategori saja tidak boleh melewati ambang entri:
+    bila kurang dari 2 kategori searah dengan total, skor dibatasi
+    maksimal 24 (di bawah ambang trade 25).
+    """
+    components = technical_components(snapshot)
+    total = sum(v for v, _ in components.values())
+    reasons: list[str] = []
+    for name, (value, rs) in components.items():
+        if value:
+            reasons.append(f"[{name} {value:+d}] " + "; ".join(rs))
+    total = max(-100, min(100, total))
+    if total != 0:
+        agreeing = sum(
+            1 for v, _ in components.values() if abs(v) >= 8 and (v > 0) == (total > 0)
+        )
+        if agreeing < 2:
+            capped = max(-24, min(24, total))
+            reasons.append(
+                f"Skor v2 dibatasi {total} → {capped}: hanya {agreeing} kategori sepakat "
+                "(syarat minimal 2 kategori)"
+            )
+            total = capped
+    return total, reasons
+
+
+def technical_score_v1(snapshot: dict) -> tuple[int, list[str]]:
     """Skor -100..+100 dari snapshot indikator, beserta alasan per komponen."""
     score = 0
     reasons: list[str] = []
@@ -165,6 +308,23 @@ class SignalEngine:
         """Nama provider AI aktif (untuk pencatatan jurnal)."""
         return getattr(self._ai, "name", None) if self._ai is not None else None
 
+    def _closed_only(self, klines: list) -> tuple[list, bool]:
+        """Buang candle terakhir yang belum tertutup (kebijakan Fase 3.1).
+
+        Mengembalikan (klines_untuk_indikator, dibuang?). Harga referensi
+        entri TIDAK ikut dibuang — pemanggil menggantinya dengan mark
+        price terkini. Backtest tidak memakai jalur ini (data historis
+        sudah tertutup semua).
+        """
+        if not getattr(self._settings, "use_closed_candles_only", True):
+            return klines, False
+        if klines and len(klines) > 50 and len(klines[-1]) > 6:
+            import time as _time
+
+            if int(klines[-1][6]) > int(_time.time() * 1000):
+                return klines[:-1], True
+        return klines, False
+
     def snapshot_for(self, symbol: str, interval: Optional[str] = None) -> dict:
         interval = interval or self._settings.default_interval
         # 300 candle agar EMA200 terhitung dari data yang cukup (bukan pas-pasan).
@@ -176,7 +336,14 @@ class SignalEngine:
         except Exception as exc:  # OI bersifat pelengkap; kegagalannya tidak fatal
             log.debug("Open interest %s tidak tersedia: %s", symbol, exc)
             oi = None
-        return build_snapshot(symbol, klines, ticker, funding, open_interest=oi, interval=interval)
+        klines, dropped = self._closed_only(klines)
+        snapshot = build_snapshot(symbol, klines, ticker, funding, open_interest=oi, interval=interval)
+        if dropped:
+            # Indikator dari candle tertutup; harga acuan tetap harga kini.
+            mark = float(funding.get("markPrice") or 0)
+            if mark > 0:
+                snapshot["price"] = mark
+        return snapshot
 
     def analyze(
         self,
@@ -230,7 +397,7 @@ class SignalEngine:
     def _analyze_fresh(self, symbol: str, interval: Optional[str] = None, use_ai: bool = True) -> TradeSignal:
         symbol = symbol.upper()
         snapshot = self.snapshot_for(symbol, interval)
-        score, reasons = technical_score(snapshot)
+        score, reasons = technical_score(snapshot, version=int(getattr(self._settings, "scoring_version", 1)))
         price = float(snapshot["price"])
 
         tech_side = "NEUTRAL"
@@ -239,10 +406,21 @@ class SignalEngine:
         elif score <= -MIN_TECH_SCORE_FOR_TRADE:
             tech_side = "SHORT"
 
+        # Konteks MTF + BTC dihitung SEBELUM AI agar ikut memperkaya prompt.
+        mtf: dict = {}
+        if self._settings.mtf_enabled:
+            mtf = self._multi_timeframe(symbol, interval or self._settings.default_interval)
+        btc_ctx = self._btc_context(symbol) if use_ai else None
+
         ai_result: Optional[AIAnalysis] = None
         if use_ai and self._ai is not None and self._ai.is_configured():
             try:
-                ai_result = self._ai.analyze_market(symbol, snapshot)
+                ai_snapshot = dict(snapshot)
+                if mtf:
+                    ai_snapshot["mtf"] = mtf
+                if btc_ctx:
+                    ai_snapshot["btc_context"] = btc_ctx
+                ai_result = self._ai.analyze_market(symbol, ai_snapshot)
             except Exception as exc:  # AI bersifat penasihat; kegagalannya tidak fatal
                 log.warning("Analisis AI gagal untuk %s: %s", symbol, exc)
 
@@ -254,14 +432,27 @@ class SignalEngine:
                 reasons.append(
                     f"AI sepakat ({ai_result.signal}, confidence {ai_result.confidence}) — {ai_result.reasoning}"
                 )
-            elif tech_side == "NEUTRAL" and ai_result.signal != "NEUTRAL" and ai_result.confidence >= 75:
+            elif (
+                tech_side == "NEUTRAL" and ai_result.signal != "NEUTRAL"
+                and ai_result.confidence >= 75
+                and getattr(self._settings, "ai_can_initiate", False)
+            ):
                 side = ai_result.signal
                 confidence = int(ai_result.confidence * 0.7)
                 reasons.append(f"Teknikal netral; AI sangat yakin ({ai_result.confidence}) — diambil dengan bobot tereduksi")
             else:
                 side = "NEUTRAL"
                 confidence = int(min(abs(score), ai_result.confidence) * 0.5)
-                if ai_result.signal == tech_side and tech_side != "NEUTRAL":
+                if (
+                    tech_side == "NEUTRAL" and ai_result.signal != "NEUTRAL"
+                    and ai_result.confidence >= 75
+                    and not getattr(self._settings, "ai_can_initiate", False)
+                ):
+                    reasons.append(
+                        f"AI sangat yakin ({ai_result.signal}, {ai_result.confidence}) tetapi teknikal "
+                        "NEUTRAL dan AI_CAN_INITIATE=false — AI hanya boleh mengonfirmasi/memveto → NEUTRAL"
+                    )
+                elif ai_result.signal == tech_side and tech_side != "NEUTRAL":
                     reasons.append(
                         f"AI searah ({ai_result.signal}) tetapi confidence {ai_result.confidence} "
                         f"di bawah minimum konfirmasi {MIN_AI_CONFIDENCE} → NEUTRAL"
@@ -289,15 +480,27 @@ class SignalEngine:
         # --- Level SL/TP: utamakan usulan AI yang valid, jika tidak pakai ATR ---
         stop_loss = take_profit = None
         if side != "NEUTRAL":
-            if (
+            atr_v = snapshot.get("atr14")
+            ai_levels_ok = (
                 ai_result is not None
                 and ai_result.stop_loss
                 and ai_result.take_profit
                 and ((side == "LONG" and ai_result.stop_loss < price < ai_result.take_profit)
                      or (side == "SHORT" and ai_result.stop_loss > price > ai_result.take_profit))
-            ):
+            )
+            if ai_levels_ok and atr_v:
+                # Validasi jarak vs ATR: SL dalam 0,5–3× ATR, TP ≤ 5× ATR.
+                sl_dist = abs(price - float(ai_result.stop_loss))
+                tp_dist = abs(float(ai_result.take_profit) - price)
+                if not (0.5 * atr_v <= sl_dist <= 3.0 * atr_v and tp_dist <= 5.0 * atr_v):
+                    ai_levels_ok = False
+                    reasons.append(
+                        f"Level AI di luar rentang ATR (SL {sl_dist / atr_v:.2f}×ATR, "
+                        f"TP {tp_dist / atr_v:.2f}×ATR) — diganti level ATR"
+                    )
+            if ai_levels_ok:
                 stop_loss, take_profit = ai_result.stop_loss, ai_result.take_profit
-                reasons.append("Level SL/TP dari AI (lolos validasi arah)")
+                reasons.append("Level SL/TP dari AI (lolos validasi arah & rentang ATR)")
             else:
                 stop_loss, take_profit = _atr_levels(price, snapshot.get("atr14"), side)
                 reasons.append("Level SL/TP dari ATR (1.5× / 2.5×)")
@@ -316,11 +519,9 @@ class SignalEngine:
             regime=snapshot.get("regime"),
         )
 
-        # --- Konteks multi-timeframe (hierarki: 1D makro, 4H struktur,
-        # 1H konfirmasi, timeframe utama = setup entri). Murni informasi &
-        # peringatan keselarasan — TIDAK mengubah skor/keputusan yang ada.
+        # --- Konteks multi-timeframe (sudah dihitung sebelum AI) ---
         if self._settings.mtf_enabled:
-            signal.mtf = self._multi_timeframe(symbol, interval or self._settings.default_interval)
+            signal.mtf = mtf
             if signal.mtf and side != "NEUTRAL":
                 want = "UPTREND" if side == "LONG" else "DOWNTREND"
                 aligned = [tf for tf, info in signal.mtf.items() if info.get("trend") == want]
@@ -332,7 +533,77 @@ class SignalEngine:
                     reasons.append(f"MTF selaras: {', '.join(aligned)} searah {side}")
                 if opposed:
                     reasons.append(f"MTF berlawanan: {', '.join(opposed)} melawan {side} — hati-hati")
+
+        # --- Gerbang keras Fase 3.2: MTF berlawanan / rezim / ADX ---
+        if signal.side != "NEUTRAL":
+            blocks = self._gate_blocks(snapshot, signal.side, signal.mtf)
+            if blocks:
+                reasons.extend(blocks)
+                reasons.append("Sinyal dibatalkan gerbang keras → NEUTRAL")
+                signal.side = "NEUTRAL"
+                signal.confidence = 0
+                signal.stop_loss = None
+                signal.take_profit = None
         return signal
+
+    def _gate_blocks(self, snapshot: dict, side: str, mtf: Optional[dict] = None) -> list[str]:
+        """Gerbang keras Fase 3.2 — daftar alasan penolakan (kosong = lolos).
+
+        - MTF: tren 1h/4h yang BERLAWANAN dengan arah sinyal menolak entri.
+        - ADX: entri pengikut-tren pada rezim trending ditolak bila
+          adx14 < ADX_MIN (tren terlalu lemah untuk diikuti).
+        - Rezim: high_volatility / low_volatility menolak semua entri arah.
+        """
+        blocks: list[str] = []
+        if side == "NEUTRAL":
+            return blocks
+        s = self._settings
+        if getattr(s, "mtf_gate_enabled", True) and mtf:
+            want_against = "DOWNTREND" if side == "LONG" else "UPTREND"
+            for tf in ("1h", "4h"):
+                info = mtf.get(tf)
+                if info and info.get("trend") == want_against:
+                    blocks.append(
+                        f"Gerbang MTF: tren {tf} {want_against} melawan sinyal {side} — entri ditolak"
+                    )
+        if getattr(s, "regime_gate_enabled", True):
+            regime = snapshot.get("regime")
+            if regime in {"high_volatility", "low_volatility"}:
+                blocks.append(f"Gerbang rezim: {regime} — entri arah ditolak")
+            adx = snapshot.get("adx14")
+            if (
+                regime in {"bullish_trending", "bearish_trending"}
+                and adx is not None
+                and adx < float(getattr(s, "adx_min", 20.0))
+            ):
+                blocks.append(
+                    f"Gerbang ADX: adx14 {adx:.1f} < ADX_MIN {float(getattr(s, 'adx_min', 20.0)):.0f} "
+                    "pada rezim trending — tren terlalu lemah"
+                )
+        return blocks
+
+    def _btc_context(self, symbol: str) -> Optional[dict]:
+        """Konteks tren BTC (cache 60 dtk) untuk memperkaya penilaian AI."""
+        if symbol.upper() == "BTCUSDT" or self._binance is None:
+            return None
+        import time as _time
+
+        now = _time.time()
+        cached = getattr(self, "_btc_ctx_cache", None)
+        if cached and now - cached[0] < 60:
+            return cached[1]
+        try:
+            snap = self.snapshot_for("BTCUSDT", "1h")
+            ctx = {
+                "trend_1h": snap.get("trend"),
+                "regime_1h": snap.get("regime"),
+                "change_24h_pct": snap.get("change_24h_pct"),
+            }
+        except Exception as exc:
+            log.debug("Konteks BTC tidak tersedia: %s", exc)
+            return None
+        self._btc_ctx_cache = (now, ctx)
+        return ctx
 
     def _multi_timeframe(self, symbol: str, primary_interval: str) -> dict:
         """Tren + rezim timeframe yang lebih tinggi dari timeframe utama."""
@@ -355,14 +626,26 @@ class SignalEngine:
         ticker & funding memakai hasil panggilan massal, open interest dilewati."""
         interval = interval or self._settings.default_interval
         klines = self._binance.klines(symbol, interval=interval, limit=200)
-        return build_snapshot(symbol, klines, ticker, funding, open_interest=None, interval=interval)
+        klines, dropped = self._closed_only(klines)
+        snapshot = build_snapshot(symbol, klines, ticker, funding, open_interest=None, interval=interval)
+        if dropped:
+            mark = float(funding.get("markPrice") or 0)
+            if mark > 0:
+                snapshot["price"] = mark
+        return snapshot
 
     def _score_snapshot(self, snapshot: dict, min_abs_score: int) -> Optional[TradeSignal]:
         """Ubah snapshot menjadi TradeSignal teknikal (None bila skor terlalu kecil)."""
-        score, reasons = technical_score(snapshot)
+        score, reasons = technical_score(snapshot, version=int(getattr(self._settings, "scoring_version", 1)))
         if abs(score) < min_abs_score:
             return None
         side = "LONG" if score > 0 else ("SHORT" if score < 0 else "NEUTRAL")
+        if side != "NEUTRAL":
+            # Gerbang rezim/ADX juga berlaku di jalur pindai (tanpa MTF).
+            blocks = self._gate_blocks(snapshot, side, None)
+            if blocks:
+                reasons.extend(blocks)
+                return None
         sl, tp = _atr_levels(float(snapshot["price"]), snapshot.get("atr14"), side)
         return TradeSignal(
             symbol=str(snapshot["symbol"]),

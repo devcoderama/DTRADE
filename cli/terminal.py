@@ -427,9 +427,11 @@ def cmd_performance(app: App, args) -> int:
 
 
 def cmd_reconcile(app: App, args) -> int:
+    from core.position_manager import PositionManager
     from core.reconciler import Reconciler
 
-    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal)
+    pm = PositionManager(app.settings, app.binance, app.executor, app.journal, app.symbols)
+    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal, position_manager=pm)
     summary = reconciler.run_once()
     _print(f"[bold]Rekonsiliasi selesai[/bold]: {summary}")
     return 0

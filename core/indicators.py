@@ -296,6 +296,10 @@ def build_snapshot(
         "includes_open_candle": bool(
             klines and len(klines[-1]) > 6 and int(klines[-1][6]) > int(time.time() * 1000)
         ),
+        # 25 candle terakhir ringkas [open, high, low, close] untuk konteks AI.
+        "recent_candles": [
+            [float(k[1]), float(k[2]), float(k[3]), float(k[4])] for k in klines[-25:]
+        ],
         "avg_volume": (sum(volumes) / len(volumes)) if volumes else None,
         "last_volume": volumes[-1] if volumes else None,
         "funding_rate": float(funding.get("lastFundingRate", 0) or 0),

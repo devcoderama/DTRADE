@@ -164,6 +164,133 @@ class RiskManager:
         return streak
 
     # ------------------------------------------------------------------
+    # Risiko portofolio (Fase 3.6)
+    # ------------------------------------------------------------------
+    def _portfolio_checks(self, signal: TradeSignal, open_positions: list, equity: float) -> Optional[str]:
+        """Pemeriksaan level portofolio. Mengembalikan alasan penolakan / None."""
+        s = self._settings
+        snap = signal.snapshot or {}
+
+        # Likuiditas minimum (dari snapshot sinyal).
+        min_vol = float(getattr(s, "min_quote_volume_usd", 0.0))
+        vol = snap.get("volume_24h_quote")
+        if min_vol > 0 and vol is not None and float(vol) < min_vol:
+            return (
+                f"Likuiditas tidak cukup: volume 24 jam {float(vol):,.0f} USDT "
+                f"< minimum {min_vol:,.0f} USDT."
+            )
+
+        # Penjaga waktu funding: tolak di sekitar jam funding bila ekstrem.
+        guard_min = int(getattr(s, "funding_guard_minutes", 0))
+        funding = snap.get("funding_rate")
+        if guard_min > 0 and funding is not None:
+            import datetime as _dt
+
+            now = _dt.datetime.now(_dt.timezone.utc)
+            minutes_now = now.hour * 60 + now.minute
+            boundaries = [0, 480, 960, 1440]  # funding 00:00 / 08:00 / 16:00 UTC
+            dist = min(min(abs(minutes_now - b), 1440 - abs(minutes_now - b)) for b in boundaries)
+            if dist <= guard_min and abs(float(funding)) * 100 >= float(getattr(s, "funding_extreme_pct", 0.1)):
+                return (
+                    f"Funding ekstrem ({float(funding) * 100:.3f}%) dalam {dist} menit "
+                    f"dari waktu funding (penjaga {guard_min} menit) — entri ditolak."
+                )
+
+        # Jumlah posisi searah.
+        max_same = int(getattr(s, "max_same_direction_positions", 0))
+        if max_same > 0:
+            same = sum(
+                1 for p in open_positions
+                if (float(p.get("positionAmt", 0)) > 0) == (signal.side == "LONG")
+            )
+            if same >= max_same:
+                return (
+                    f"Sudah ada {same} posisi searah {signal.side} "
+                    f"(batas MAX_SAME_DIRECTION_POSITIONS={max_same})."
+                )
+
+        # Total risiko terbuka (dari SL algo tiap posisi) + risiko rencana ini.
+        cap_pct = float(getattr(s, "max_open_risk_pct", 0.0)) or 2.0 * s.risk_per_trade_pct
+        cap_amount = equity * cap_pct / 100.0
+        open_risk = self._open_risk(open_positions)
+        planned_risk = equity * s.risk_per_trade_pct / 100.0
+        if open_risk is not None and open_risk + planned_risk > cap_amount:
+            return (
+                f"Total risiko terbuka {open_risk:.2f} + rencana {planned_risk:.2f} USDT "
+                f"melebihi batas {cap_amount:.2f} USDT ({cap_pct:.1f}% ekuitas)."
+            )
+
+        # Filter BTC untuk altcoin.
+        if getattr(s, "btc_filter", False) and signal.symbol != "BTCUSDT":
+            direction = self._btc_direction()
+            if direction == "DOWN" and signal.side == "LONG":
+                return "BTC_FILTER: BTC turun kuat (1h & 4h) — LONG altcoin ditolak."
+            if direction == "UP" and signal.side == "SHORT":
+                return "BTC_FILTER: BTC naik kuat (1h & 4h) — SHORT altcoin ditolak."
+        return None
+
+    def _open_risk(self, open_positions: list) -> Optional[float]:
+        """Jumlah risiko posisi terbuka = Σ |entri − SL algo| × |qty|.
+
+        Posisi tanpa SL algo yang terbaca dilewati (ditangani reconciler);
+        kegagalan total membaca → None (pemeriksaan dilewati, tercatat).
+        """
+        total = 0.0
+        try:
+            for p in open_positions:
+                symbol = p["symbol"]
+                amt = abs(float(p.get("positionAmt", 0)))
+                entry = float(p.get("entryPrice", 0))
+                if amt == 0 or entry <= 0:
+                    continue
+                sl_trigger = None
+                for o in self._binance.open_algo_orders(symbol):
+                    if (o.get("type") or o.get("orderType")) == "STOP_MARKET":
+                        sl_trigger = float(o.get("triggerPrice") or o.get("stopPrice") or 0)
+                        break
+                if sl_trigger:
+                    total += abs(entry - sl_trigger) * amt
+        except Exception as exc:
+            log.warning("Risiko terbuka tidak terbaca — pemeriksaan dilewati: %s", exc)
+            return None
+        return total
+
+    def _btc_direction(self) -> Optional[str]:
+        """Arah kuat BTC dari EMA 1h & 4h (cache 60 detik). None = tidak kuat."""
+        import time as _time
+
+        now = _time.time()
+        cached = getattr(self, "_btc_dir_cache", None)
+        if cached and now - cached[0] < 60:
+            return cached[1]
+        direction: Optional[str] = None
+        try:
+            from core.indicators import ema
+
+            trends = []
+            for tf in ("1h", "4h"):
+                klines = self._binance.klines("BTCUSDT", interval=tf, limit=120)
+                closes = [float(k[4]) for k in klines]
+                e20, e50 = ema(closes, 20), ema(closes, 50)
+                if e20 is None or e50 is None:
+                    trends.append(None)
+                elif closes[-1] < e20 < e50:
+                    trends.append("DOWN")
+                elif closes[-1] > e20 > e50:
+                    trends.append("UP")
+                else:
+                    trends.append(None)
+            if trends == ["DOWN", "DOWN"]:
+                direction = "DOWN"
+            elif trends == ["UP", "UP"]:
+                direction = "UP"
+        except Exception as exc:
+            log.warning("Arah BTC tidak terbaca untuk BTC_FILTER: %s", exc)
+            direction = None
+        self._btc_dir_cache = (now, direction)
+        return direction
+
+    # ------------------------------------------------------------------
     def evaluate(self, signal: TradeSignal) -> RiskDecision:
         s = self._settings
         base = RiskDecision(allowed=False, symbol=signal.symbol, side=signal.side)
@@ -235,6 +362,12 @@ class RiskManager:
             return base
         if any(p["symbol"] == signal.symbol for p in open_positions):
             base.reasons.append(f"Posisi {signal.symbol} sudah terbuka — penambahan posisi ditolak.")
+            return base
+
+        # --- Risiko portofolio (Fase 3.6) ---
+        portfolio_block = self._portfolio_checks(signal, open_positions, equity)
+        if portfolio_block:
+            base.reasons.append(portfolio_block)
             return base
 
         # --- Pengendali rugi harian/mingguan berbasis ekuitas (persisten) ---
