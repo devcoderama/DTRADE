@@ -6,27 +6,44 @@ mencerminkan perilaku sistem yang sebenarnya (tanpa komponen AI, karena
 AI tidak deterministik dan berbayar per panggilan).
 
 Aturan eksekusi simulasi:
-- Sinyal dinilai pada penutupan candle ke-i; entri pada pembukaan candle
-  berikutnya (tanpa look-ahead).
-- Ukuran posisi dari risiko tetap (% saldo per trade), SL 1.5×ATR dan
-  TP 2.5×ATR seperti strategi live.
+- Sinyal dinilai pada penutupan candle ke-i dari jendela indikator TETAP
+  (300 candle terakhir, sama seperti snapshot live); entri pada pembukaan
+  candle berikutnya (tanpa look-ahead).
+- Ukuran posisi dari risiko tetap (% saldo per trade), SL/TP kelipatan
+  ATR seperti strategi live.
 - Bila SL dan TP tersentuh pada candle yang sama, SL dianggap kena lebih
-  dulu (asumsi konservatif).
-- Biaya: fee taker per sisi (bawaan 0.05%) atas notional.
+  dulu (asumsi konservatif). Bila candle MEMBUKA melewati SL/TP (gap),
+  pengisian memakai harga pembukaan — bukan harga level.
+- Biaya: fee taker per sisi (bawaan 0,05%), slippage per pengisian
+  (bawaan 5 bps, selalu merugikan), dan funding per periode 8 jam selama
+  posisi ditahan (asumsi suku konstan `funding_rate_8h_pct`; LONG membayar
+  saat suku positif, SHORT menerima).
+- Model keluar PositionManager (break-even / trailing / TP parsial)
+  tersedia sebagai opsi dan memakai pemicu R yang sama seperti live;
+  penyesuaian SL berlaku mulai candle berikutnya.
+- Kurva ekuitas dicatat SETIAP candle (mark-to-market) sehingga
+  Sharpe/Sortino ter-annualisasi berbasis waktu dengan benar.
 - Posisi yang masih terbuka di akhir data ditutup pada harga terakhir.
+
+PERINGATAN: backtest yang bagus TIDAK menjamin profit di masa depan.
+Lihat `core/research.py` untuk validasi walk-forward & baseline acak.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 from core.binance_client import BinanceFuturesClient
+from core.history import interval_ms
 from core.indicators import build_snapshot
 from core.strategy import technical_score
 from utils.logger import get_logger
 
 log = get_logger(__name__)
+
+_FUNDING_PERIOD_MS = 8 * 3600 * 1000
 
 
 @dataclass
@@ -39,6 +56,19 @@ class BacktestConfig:
     tp_atr_mult: float = 2.5
     max_leverage: float = 5.0      # plafon notional = saldo × leverage ini
     warmup: int = 60               # candle awal untuk pemanasan indikator
+    # --- Fase 4 ---
+    window: int = 300              # jendela indikator tetap (samakan dgn live)
+    scoring_version: int = 1       # 1 | 2 — sama seperti SCORING_VERSION live
+    slippage_bps: float = 5.0      # slippage per pengisian, basis points
+    funding_rate_8h_pct: float = 0.01  # asumsi suku funding per 8 jam (%)
+    use_gates: bool = False        # gerbang rezim/ADX seperti live (Fase 3.2)
+    adx_min: float = 20.0
+    # Model keluar (None = mati), paritas PositionManager live (Fase 3.5):
+    breakeven_trigger_r: Optional[float] = None
+    trailing_trigger_r: Optional[float] = None
+    trailing_atr_mult: float = 1.0
+    partial_tp_r: Optional[float] = None
+    partial_tp_fraction: float = 0.5
 
 
 @dataclass
@@ -50,7 +80,7 @@ class BacktestTrade:
     exit_price: float
     quantity: float
     pnl: float
-    exit_reason: str  # TP | SL | END
+    exit_reason: str  # TP | SL | END — alasan leg penutup (PnL mencakup leg parsial)
     score: int
 
 
@@ -140,28 +170,30 @@ class BacktestResult:
                 out.append(cur["equity"] / prev["equity"] - 1.0)
         return out
 
+    def _bars_per_year(self) -> float:
+        ms = interval_ms(self.interval)
+        return (365.25 * 24 * 3600 * 1000) / ms if ms else 0.0
+
     @property
     def sharpe_ratio(self) -> Optional[float]:
-        """Sharpe dari return antar-titik kurva ekuitas (per langkah, bukan tahunan)."""
-        import math
-
+        """Sharpe ter-annualisasi dari return per-bar kurva ekuitas."""
         rets = self._equity_returns()
-        if len(rets) < 2:
+        bpy = self._bars_per_year()
+        if len(rets) < 2 or bpy <= 0:
             return None
         mean = sum(rets) / len(rets)
         var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
         std = math.sqrt(var)
         if std == 0:
             return None
-        return mean / std * math.sqrt(len(rets))
+        return mean / std * math.sqrt(bpy)
 
     @property
     def sortino_ratio(self) -> Optional[float]:
-        """Sortino: seperti Sharpe tetapi hanya memakai deviasi sisi turun."""
-        import math
-
+        """Sortino ter-annualisasi: hanya deviasi sisi turun yang dihitung."""
         rets = self._equity_returns()
-        if len(rets) < 2:
+        bpy = self._bars_per_year()
+        if len(rets) < 2 or bpy <= 0:
             return None
         mean = sum(rets) / len(rets)
         downside = [r for r in rets if r < 0]
@@ -171,7 +203,7 @@ class BacktestResult:
         dstd = math.sqrt(dvar)
         if dstd == 0:
             return None
-        return mean / dstd * math.sqrt(len(rets))
+        return mean / dstd * math.sqrt(bpy)
 
     def to_dict(self, max_trades: int = 50) -> dict:
         return {
@@ -222,6 +254,13 @@ def _candle(k: list) -> dict:
     }
 
 
+def _funding_periods(entry_time: int, exit_time: int) -> int:
+    """Jumlah batas periode funding 8 jam yang dilewati antara dua waktu."""
+    if exit_time <= entry_time:
+        return 0
+    return (exit_time // _FUNDING_PERIOD_MS) - (entry_time // _FUNDING_PERIOD_MS)
+
+
 def run_backtest(symbol: str, interval: str, klines: list[list], config: BacktestConfig) -> BacktestResult:
     """Fungsi murni: jalankan simulasi atas daftar klines mentah Binance."""
     candles = [_candle(k) for k in klines]
@@ -236,60 +275,140 @@ def run_backtest(symbol: str, interval: str, klines: list[list], config: Backtes
         return result
 
     balance = config.initial_balance
-    result.equity_curve.append({"time": candles[0]["time"], "equity": round(balance, 2)})
+    slip = config.slippage_bps / 10_000.0
+
+    def slipped(price: float, side: str, is_entry: bool) -> float:
+        """Harga pengisian setelah slippage (selalu merugikan trader)."""
+        direction = 1.0 if side == "LONG" else -1.0
+        # Entri LONG = beli (naik), keluar LONG = jual (turun); SHORT sebaliknya.
+        buy = (side == "LONG") == is_entry
+        return price * (1 + slip) if buy else price * (1 - slip)
 
     position: Optional[dict] = None
 
-    def close_position(exit_price: float, exit_time: int, reason: str) -> None:
+    def funding_cost(pos: dict, qty: float, exit_time: int) -> float:
+        """Biaya funding untuk porsi `qty` yang ditutup pada exit_time.
+
+        LONG membayar saat suku positif; SHORT menerima (biaya negatif).
+        """
+        periods = _funding_periods(pos["entry_time"], exit_time)
+        if periods == 0 or config.funding_rate_8h_pct == 0:
+            return 0.0
+        notional = pos["entry_price"] * qty
+        cost = notional * config.funding_rate_8h_pct / 100.0 * periods
+        return cost if pos["side"] == "LONG" else -cost
+
+    def close_leg(qty: float, raw_exit: float, exit_time: int, reason: str, final: bool) -> None:
+        """Tutup sebagian/seluruh posisi; akumulasi PnL ke trade saat final."""
         nonlocal balance, position
         assert position is not None
         direction = 1.0 if position["side"] == "LONG" else -1.0
-        gross = (exit_price - position["entry_price"]) * position["quantity"] * direction
-        exit_fee = exit_price * position["quantity"] * config.fee_pct / 100.0
-        pnl = gross - position["entry_fee"] - exit_fee
+        exit_price = slipped(raw_exit, position["side"], is_entry=False)
+        gross = (exit_price - position["entry_price"]) * qty * direction
+        exit_fee = exit_price * qty * config.fee_pct / 100.0
+        entry_fee_part = position["entry_fee"] * (qty / position["quantity_total"])
+        pnl = gross - exit_fee - entry_fee_part - funding_cost(position, qty, exit_time)
         balance += pnl
-        result.trades.append(
-            BacktestTrade(
-                side=position["side"],
-                entry_time=position["entry_time"],
-                entry_price=position["entry_price"],
-                exit_time=exit_time,
-                exit_price=exit_price,
-                quantity=position["quantity"],
-                pnl=pnl,
-                exit_reason=reason,
-                score=position["score"],
+        position["realized"] += pnl
+        position["quantity"] -= qty
+        if final or position["quantity"] <= 1e-12:
+            result.trades.append(
+                BacktestTrade(
+                    side=position["side"],
+                    entry_time=position["entry_time"],
+                    entry_price=position["entry_price"],
+                    exit_time=exit_time,
+                    exit_price=exit_price,
+                    quantity=position["quantity_total"],
+                    pnl=position["realized"],
+                    exit_reason=reason,
+                    score=position["score"],
+                )
             )
-        )
-        result.equity_curve.append({"time": exit_time, "equity": round(balance, 2)})
-        position = None
+            position = None
 
     for i in range(config.warmup, len(candles) - 1):
         candle = candles[i]
 
-        # 1) Kelola posisi terbuka: cek SL/TP pada candle ini
+        # 1) Kelola posisi terbuka pada candle ini
         if position is not None:
-            if position["side"] == "LONG":
-                hit_sl = candle["low"] <= position["stop_loss"]
-                hit_tp = candle["high"] >= position["take_profit"]
+            side = position["side"]
+            direction = 1.0 if side == "LONG" else -1.0
+            sl, tp = position["stop_loss"], position["take_profit"]
+            if side == "LONG":
+                hit_sl, hit_tp = candle["low"] <= sl, candle["high"] >= tp
+                gap_sl, gap_tp = candle["open"] <= sl, candle["open"] >= tp
             else:
-                hit_sl = candle["high"] >= position["stop_loss"]
-                hit_tp = candle["low"] <= position["take_profit"]
-            if hit_sl:  # konservatif: SL didahulukan bila keduanya kena
-                close_position(position["stop_loss"], candle["time"], "SL")
+                hit_sl, hit_tp = candle["high"] >= sl, candle["low"] <= tp
+                gap_sl, gap_tp = candle["open"] >= sl, candle["open"] <= tp
+            if hit_sl:  # konservatif: SL didahulukan; gap → isi di harga buka
+                close_leg(position["quantity"], candle["open"] if gap_sl else sl,
+                          candle["time"], "SL", final=True)
             elif hit_tp:
-                close_position(position["take_profit"], candle["time"], "TP")
+                close_leg(position["quantity"], candle["open"] if gap_tp else tp,
+                          candle["time"], "TP", final=True)
+            else:
+                # TP parsial: harga menyentuh level R parsial pada candle ini
+                if (
+                    config.partial_tp_r is not None
+                    and not position["partial_done"]
+                ):
+                    level = position["entry_price"] + direction * config.partial_tp_r * position["r_unit"]
+                    reached = candle["high"] >= level if side == "LONG" else candle["low"] <= level
+                    gapped = candle["open"] >= level if side == "LONG" else candle["open"] <= level
+                    if reached:
+                        qty = position["quantity"] * config.partial_tp_fraction
+                        close_leg(qty, candle["open"] if gapped else level,
+                                  candle["time"], "PARTIAL", final=False)
+                        if position is not None:
+                            position["partial_done"] = True
+                # Penyesuaian SL (BE / trailing) — berlaku candle berikutnya
+                if position is not None:
+                    best = (candle["high"] if side == "LONG" else candle["low"])
+                    profit_r = (best - position["entry_price"]) * direction / position["r_unit"]
+                    new_sl: Optional[float] = None
+                    if config.trailing_trigger_r is not None and profit_r >= config.trailing_trigger_r:
+                        atr_now = position["atr"]
+                        cand = (candle["close"] - direction * config.trailing_atr_mult * atr_now)
+                        if (side == "LONG" and cand > position["stop_loss"]) or (
+                            side == "SHORT" and cand < position["stop_loss"]
+                        ):
+                            new_sl = cand
+                    if (
+                        new_sl is None
+                        and config.breakeven_trigger_r is not None
+                        and profit_r >= config.breakeven_trigger_r
+                    ):
+                        be = position["entry_price"]
+                        if (side == "LONG" and be > position["stop_loss"]) or (
+                            side == "SHORT" and be < position["stop_loss"]
+                        ):
+                            new_sl = be
+                    if new_sl is not None:
+                        position["stop_loss"] = new_sl
 
         # 2) Cari sinyal baru pada penutupan candle ini
         if position is None:
-            window = klines[: i + 1]
-            snapshot = build_snapshot(symbol, window, {}, {})
-            score, _ = technical_score(snapshot)
+            start = max(0, i + 1 - config.window)
+            window = klines[start : i + 1]
+            snapshot = build_snapshot(symbol, window, {}, {}, interval=interval)
+            score, _ = technical_score(snapshot, version=config.scoring_version)
             atr_value = snapshot.get("atr14")
-            if abs(score) >= config.min_score and atr_value:
+            gated = False
+            if config.use_gates and abs(score) >= config.min_score:
+                regime = snapshot.get("regime")
+                adx = snapshot.get("adx14")
+                if regime in {"high_volatility", "low_volatility"}:
+                    gated = True
+                elif (
+                    regime in {"bullish_trending", "bearish_trending"}
+                    and adx is not None and adx < config.adx_min
+                ):
+                    gated = True
+            if abs(score) >= config.min_score and atr_value and not gated:
                 side = "LONG" if score > 0 else "SHORT"
                 nxt = candles[i + 1]
-                entry = nxt["open"]
+                entry = slipped(nxt["open"], side, is_entry=True)
                 if side == "LONG":
                     stop_loss = entry - config.sl_atr_mult * atr_value
                     take_profit = entry + config.tp_atr_mult * atr_value
@@ -311,21 +430,31 @@ def run_backtest(symbol: str, interval: str, klines: list[list], config: Backtes
                     "entry_price": entry,
                     "entry_time": nxt["time"],
                     "quantity": quantity,
+                    "quantity_total": quantity,
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                     "score": score,
                     "entry_fee": entry * quantity * config.fee_pct / 100.0,
+                    "r_unit": per_unit_risk,
+                    "atr": atr_value,
+                    "realized": 0.0,
+                    "partial_done": False,
                 }
 
-    # 3) Tutup posisi tersisa pada harga terakhir
+        # 3) Titik kurva ekuitas per candle (mark-to-market)
+        equity = balance
+        if position is not None:
+            direction = 1.0 if position["side"] == "LONG" else -1.0
+            equity += (candle["close"] - position["entry_price"]) * position["quantity"] * direction
+        result.equity_curve.append({"time": candle["time"], "equity": round(equity, 2)})
+
+    # 4) Tutup posisi tersisa pada harga terakhir
     if position is not None:
         last = candles[-1]
-        close_position(last["close"], last["time"], "END")
+        close_leg(position["quantity"], last["close"], last["time"], "END", final=True)
 
     result.final_balance = round(balance, 2)
-    # Samakan titik akhir kurva dengan saldo final
-    if result.equity_curve:
-        result.equity_curve[-1] = {"time": candles[-1]["time"], "equity": result.final_balance}
+    result.equity_curve.append({"time": candles[-1]["time"], "equity": result.final_balance})
     return result
 
 
@@ -341,9 +470,15 @@ class Backtester:
         interval: Optional[str] = "15m",
         limit: int = 1000,
         config: Optional[BacktestConfig] = None,
+        days: Optional[int] = None,
     ) -> BacktestResult:
         config = config or BacktestConfig()
         interval = interval or "15m"
-        klines = self._binance.klines(symbol.upper(), interval=interval, limit=min(limit, 1500))
+        if days:
+            from core.history import load_history
+
+            klines = load_history(self._binance, symbol.upper(), interval, days=days)
+        else:
+            klines = self._binance.klines(symbol.upper(), interval=interval, limit=min(limit, 1500))
         log.info("Backtest %s %s atas %d candle", symbol, interval, len(klines))
         return run_backtest(symbol.upper(), interval, klines, config)

@@ -157,11 +157,50 @@ class BinanceFuturesClient:
     def ticker_24h(self, symbol: str) -> dict:
         return self._request("GET", "/fapi/v1/ticker/24hr", {"symbol": symbol})
 
-    def klines(self, symbol: str, interval: str = "15m", limit: int = 200) -> list[list]:
+    def klines(
+        self,
+        symbol: str,
+        interval: str = "15m",
+        limit: int = 200,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+    ) -> list[list]:
         """Klines mentah Binance: [open_time, open, high, low, close, volume, ...]."""
-        return self._request(
-            "GET", "/fapi/v1/klines", {"symbol": symbol, "interval": interval, "limit": limit}
-        )
+        params: dict[str, Any] = {"symbol": symbol, "interval": interval, "limit": limit}
+        if start_time is not None:
+            params["startTime"] = start_time
+        if end_time is not None:
+            params["endTime"] = end_time
+        return self._request("GET", "/fapi/v1/klines", params)
+
+    def klines_paginated(
+        self, symbol: str, interval: str, start_time: int, end_time: int, page: int = 1500
+    ) -> list[list]:
+        """Ambil klines rentang panjang dengan paginasi startTime (≥10rb candle).
+
+        Berhenti saat halaman kosong/kurang dari ukuran halaman atau
+        melewati end_time. Duplikat pada batas halaman dibuang.
+        """
+        rows: list[list] = []
+        cursor = start_time
+        seen: set[int] = set()
+        while cursor <= end_time:
+            batch = self.klines(
+                symbol, interval=interval, limit=page, start_time=cursor, end_time=end_time
+            )
+            if not batch:
+                break
+            for row in batch:
+                t = int(row[0])
+                if t not in seen:
+                    seen.add(t)
+                    rows.append(row)
+            last = int(batch[-1][0])
+            if len(batch) < page or last <= cursor:
+                break
+            cursor = last + 1
+        rows.sort(key=lambda r: int(r[0]))
+        return rows
 
     def funding_rate(self, symbol: str) -> dict:
         data = self._request("GET", "/fapi/v1/premiumIndex", {"symbol": symbol})

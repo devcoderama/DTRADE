@@ -168,3 +168,39 @@ Perilaku yang sengaja berubah & test-nya disesuaikan: `test_database.py`
   (`FUNDING_GUARD_MINUTES`, bawaan mati; funding ekstrem di sekitar
   00/08/16 UTC ditolak), dan `BTC_FILTER` (bawaan mati; arah kuat BTC
   dari EMA 1h & 4h, cache 60 dtk).
+
+## Fase 4 — Backtest & Riset — SELESAI, 102 test hijau (93 → +9)
+
+- **4.1 Riwayat panjang + cache.** `BinanceFuturesClient.klines`
+  menerima start/end time dan `klines_paginated` mengambil ≥10.000
+  candle per halaman 1.500 tanpa duplikat. Modul baru
+  `core/history.py`: cache disk per simbol+interval di
+  `data/kline_cache/` — pemuatan ulang hanya mengambil ekor yang belum
+  tercache. `Backtester.run(..., days=N)` memakai jalur ini.
+- **4.2 Jendela indikator tetap.** Backtest kini menilai sinyal dari
+  300 candle terakhir saja (persis snapshot live) dan meneruskan
+  `interval` yang benar ke snapshot (sebelumnya jendela mengembang &
+  `change_1h_pct` salah untuk interval selain 15m). `SCORING_VERSION`
+  dan gerbang rezim/ADX tersedia sebagai opsi config (`use_gates`,
+  bawaan mati agar hasil lama tetap dapat dibandingkan). **Paritas
+  model keluar dari Fase 3.5 kini dikerjakan**: break-even, trailing
+  ATR, dan TP parsial tersedia di `BacktestConfig` (bawaan mati,
+  pemicu R sama seperti PositionManager live; penyesuaian SL berlaku
+  mulai candle berikutnya).
+- **4.3 Model biaya realistis.** Slippage per pengisian (bawaan 5 bps,
+  selalu merugikan), funding per periode 8 jam selama posisi ditahan
+  (suku konstan yang dapat diatur; LONG membayar saat positif), dan
+  gap-through-stop: candle yang membuka melewati SL/TP diisi pada
+  harga pembukaannya, bukan harga level.
+- **4.4 Sharpe/Sortino berbasis waktu.** Kurva ekuitas kini dicatat
+  SETIAP candle (mark-to-market), dan Sharpe/Sortino di-annualisasi
+  dengan akar jumlah bar per tahun dari interval — bukan lagi
+  akar jumlah trade.
+- **4.5 Riset** (`core/research.py` + CLI `research`): walk-forward
+  expanding-window (parameter min_score × versi skor dipilih dari
+  train saja, dinilai di test), baseline entri acak 20 seed dengan
+  aturan keluar & biaya yang sama, dan laporan Markdown di `reports/`
+  yang WAJIB memuat peringatan ketidakpastian — tanpa klaim profit.
+  `reports/` masuk .gitignore (artefak hasil, bukan kode).
+- Catatan: suite test kini ~80 detik karena uji walk-forward/riset
+  menjalankan banyak backtest penuh; itu harga kejujuran statistiknya.

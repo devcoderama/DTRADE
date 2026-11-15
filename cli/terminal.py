@@ -437,6 +437,26 @@ def cmd_reconcile(app: App, args) -> int:
     return 0
 
 
+def cmd_research(app: App, args) -> int:
+    from core.backtest import BacktestConfig
+    from core.history import load_history
+    from core.research import run_research
+
+    interval = args.interval or app.settings.default_interval
+    klines = load_history(app.binance, args.symbol.upper(), interval, days=args.days)
+    if len(klines) < 500:
+        _print(f"[red]Data terlalu pendek untuk riset: {len(klines)} candle.[/red]")
+        return 1
+    config = BacktestConfig(min_score=args.min_score, scoring_version=args.scoring)
+    md, path = run_research(args.symbol.upper(), interval, klines, config, folds=args.folds)
+    _print(f"[bold]Riset selesai[/bold] — laporan: [cyan]{path}[/cyan]")
+    for line in md.splitlines():
+        if line.startswith("- Trade:") or line.startswith("Total out-of-sample") or line.startswith("- PnL rata-rata"):
+            _print("  " + line)
+    _print("[yellow]Ingat: hasil historis bukan jaminan profit. Baca peringatan di laporan.[/yellow]")
+    return 0
+
+
 def cmd_ai_model(app: App, args) -> int:
     provider, model = load_ai_choice(app.settings)
     if args.provider or args.model:
@@ -579,6 +599,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("reconcile", help="Jalankan satu putaran rekonsiliasi posisi ↔ proteksi ↔ jurnal")
 
+    p = sub.add_parser("research", help="Riset walk-forward + baseline acak → laporan Markdown di reports/")
+    p.add_argument("symbol")
+    p.add_argument("--interval", default=None)
+    p.add_argument("--days", type=int, default=90, help="Rentang data historis (hari)")
+    p.add_argument("--folds", type=int, default=4)
+    p.add_argument("--min-score", type=int, default=40, dest="min_score")
+    p.add_argument("--scoring", type=int, default=1, choices=(1, 2), help="Versi skor teknikal")
+
     p = sub.add_parser("broadcast", help="Pindai semua simbol → AI → kirim sinyal terbaik + grafik ke Telegram")
     p.add_argument("--min-score", type=int, default=50, help="Ambang |skor teknikal| kandidat (bawaan 50)")
     p.add_argument("--max", type=int, default=3, help="Maks sinyal terkirim per putaran (bawaan 3)")
@@ -611,6 +639,7 @@ def main(argv: list[str] | None = None) -> int:
         "journal": cmd_journal,
         "performance": cmd_performance,
         "reconcile": cmd_reconcile,
+        "research": cmd_research,
         "broadcast": cmd_broadcast,
     }
     try:
