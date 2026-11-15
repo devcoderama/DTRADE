@@ -204,12 +204,22 @@ menampilkan status konfigurasi semua provider sebagai gantinya.
 Server web dilindungi berlapis (berlaku untuk semua endpoint `/api/*`):
 
 - **Autentikasi token** — isi `WEB_API_TOKEN` di `.env` untuk mewajibkan
-  token pada semua endpoint selain `/api/health`. Web UI akan meminta token
-  sekali lalu mengingatnya; token dikirim sebagai header `X-API-Token` atau
-  cookie sesi `HttpOnly` + `SameSite=Strict`. `WEB_VIEWER_TOKEN` memberi
-  akses baca-saja. **Tanpa token, siapa pun yang dapat mengakses alamat
-  server dapat mengeksekusi trade dari akun Anda** — server mencetak
-  peringatan ini setiap kali start.
+  token pada semua endpoint selain `/api/health` (Fase 6-B5: token terisi
+  wajib ≥ 24 karakter). Web UI akan meminta token sekali lalu mengingatnya;
+  token dikirim sebagai header `X-API-Token` atau cookie sesi `HttpOnly` +
+  `SameSite=Strict`. `WEB_VIEWER_TOKEN` memberi akses baca-saja. Keluar
+  sesi lewat `POST /api/auth/logout`. **Tanpa token, siapa pun yang dapat
+  mengakses alamat server dapat mengeksekusi trade dari akun Anda** —
+  server mencetak peringatan ini setiap kali start.
+- **Lapisan Fase 6** — validasi `Host` (nama domain publik tak dikenal
+  ditolak; IP literal & localhost diizinkan — anti DNS-rebinding),
+  pemeriksaan `Origin` untuk request POST ber-cookie (anti CSRF),
+  `Content-Type: application/json` wajib untuk request berbadan, token
+  WebSocket lewat `?token=` **dihapus** (gunakan cookie/header),
+  `X-Forwarded-For` hanya dipercaya dari IP di `TRUSTED_PROXIES`, dan
+  semua data runtime kini di bawah satu `DATA_DIR` (bawaan `data/`):
+  jurnal trade `trades.jsonl`, keputusan AI `ai_decisions.jsonl`,
+  `risk_state.json`, `execution_state.jsonl`.
 - **CORS tanpa wildcard** — hanya origin di `CORS_ORIGINS` yang diizinkan
   (bawaan: hanya same-origin).
 - **Rate limit** per IP (`RATE_LIMIT_PER_MINUTE`, bawaan 240/menit) dan

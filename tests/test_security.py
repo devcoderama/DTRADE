@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-os.environ["WEB_API_TOKEN"] = "token-utama-uji"
+os.environ["WEB_API_TOKEN"] = "token-utama-uji-yang-cukup-panjang"  # Fase 6-B5: token <24 char kini ditolak Settings
 os.environ["WEB_VIEWER_TOKEN"] = "token-viewer-uji"
 os.environ["BROADCAST_ENABLED"] = "false"
 
@@ -21,7 +21,7 @@ importlib.reload(webapp)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-client = TestClient(webapp.app)
+client = TestClient(webapp.app, base_url="http://127.0.0.1:8000")  # Fase 6-C1: Host harus literal IP/localhost
 
 
 def test_health_is_public():
@@ -35,7 +35,7 @@ def test_api_requires_token():
 
 
 def test_admin_token_full_access():
-    r = client.get("/api/config", headers={"X-API-Token": "token-utama-uji"})
+    r = client.get("/api/config", headers={"X-API-Token": "token-utama-uji-yang-cukup-panjang"})
     assert r.status_code == 200
     assert r.json()["web_auth_enabled"] is True
 
@@ -50,7 +50,7 @@ def test_viewer_cannot_write():
 def test_login_sets_cookie_and_rejects_wrong_token():
     bad = client.post("/api/auth/login", json={"token": "salah"})
     assert bad.status_code == 401
-    ok = client.post("/api/auth/login", json={"token": "token-utama-uji"})
+    ok = client.post("/api/auth/login", json={"token": "token-utama-uji-yang-cukup-panjang"})
     assert ok.status_code == 200 and ok.json()["role"] == "admin"
     assert "baf_token" in ok.headers.get("set-cookie", "")
 
@@ -115,6 +115,6 @@ def test_ws_requires_token_and_streams(monkeypatch):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/api/ws/klines/BTCUSDT") as ws:
             ws.receive_json()
-    with client.websocket_connect("/api/ws/klines/BTCUSDT?token=token-utama-uji") as ws:
+    with client.websocket_connect("/api/ws/klines/BTCUSDT", headers={"X-API-Token": os.environ["WEB_API_TOKEN"]}) as ws:
         payload = ws.receive_json()
         assert payload["symbol"] == "BTCUSDT" and payload["candle"]["close"] == 1.0

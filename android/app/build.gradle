@@ -37,7 +37,9 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            // Fase 6-C3: minify R8 aktif untuk rilis (aplikasi WebView
+            // murni tanpa refleksi — aturan bawaan cukup).
+            minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             if (keystorePropsFile.exists()) {
                 signingConfig signingConfigs.release

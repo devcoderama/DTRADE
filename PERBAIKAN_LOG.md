@@ -305,3 +305,205 @@ BTC_FILTER) semua BAWAAAN MATI.
    sudah aktif; manajemen keluar terakhir) sambil membandingkan metrik.
 5. Jangan mengaktifkan TRADING_MODE=live sebelum langkah 2–3 memberi
    bukti, dan rotasi kredensial apa pun yang pernah terekspos di chat.
+
+---
+
+# FASE 6 — Audit November 2026 (branch `fix/audit-nov-2026`)
+
+Program lanjutan atas permintaan pemilik repo: perbaikan bug hasil
+audit, dibuktikan dengan test otomatis DAN tes langsung di Binance
+Futures TESTNET (aturan keras khusus program ini: hanya testnet,
+order testnet kecil diizinkan untuk pengujian, branch + PR — bukan
+push langsung ke main). Baseline sebelum perubahan: **108 test hijau**.
+
+## Fase A — Kritis sebelum live — SELESAI (unit), 125 test hijau
+
+- **A1 Race Reconciler vs Executor.** Executor memakai RLock yang
+  diekspos (`executor.lock`); seluruh putaran Reconciler berjalan di
+  dalamnya dan membaca ulang posisi+algo di dalam lock — eksekusi
+  yang sedang memasang SL tidak bisa dinilai dari snapshot lama.
+  Masa tenggang `RECONCILER_GRACE_SEC=120`: simbol dengan transisi
+  eksekusi lebih muda dari itu dilewati. Write-ahead: executor
+  memanggil hook jurnal (`record_intent`) tepat sebelum order entri
+  dikirim — registry mengenali posisi + SL-nya sejak awal
+  (`open_registry` menerima state SUBMITTING dari entri intent).
+  Test: fake dengan latensi `place_algo_order` 0,6 dtk + run_once di
+  thread lain → posisi TIDAK ditutup; intent tercatat sebelum entri.
+- **A2 Notasi ilmiah.** Semua parameter float dinormalisasi di
+  `_request_once` SEBELUM penandatanganan dengan
+  `format(Decimal(str(x)), 'f')` — `1.23e-05` menjadi `0.0000123`.
+  Test menangkap parameter request untuk order & algo order mikro.
+- **A3 Jurnal dry-run.** `open_registry` mengabaikan entri
+  `dry_run=True`; langkah (c) reconciler tidak menulis apa pun dalam
+  mode dry-run. Test: jurnal dry-run + income akun → nol event close.
+- **A4 Secret di repr/log.** Semua field secret Settings kini
+  `field(repr=False)` (13 field). `RedactingFormatter` meredaksi
+  hasil format akhir termasuk traceback/exc_info. Test keduanya.
+- **A5 pending_recovery.** Marker close_position kini membawa
+  `client_order_id` korelasi `close-<simbol>-<ts>` sehingga
+  CLOSING↔CLOSED berpasangan; `mark_resolved()` menulis event
+  RESOLVED (status terminal baru); execution_state.jsonl dirotasi
+  pada 5 MB (satu cadangan `.1`). Test: close bersih tidak muncul di
+  pending_recovery; RESOLVED membersihkan entri macet.
+- **A6 DATA_DIR tunggal.** `load_settings` menghitung DATA_DIR
+  absolut (env `DATA_DIR` atau `<root>/data`); risk_state & jurnal
+  bawaan kini di bawahnya (CATATAN MIGRASI: jurnal berpindah dari
+  `logs/trades.jsonl` ke `data/trades.jsonl` — pindahkan berkas lama
+  Anda ke lokasi baru bila ingin riwayat menyatu). ai_settings &
+  cache klines mengikuti DATA_DIR. `assert_data_writable`: startup
+  LIVE menolak jalan bila DATA_DIR tidak bisa ditulis. Selfcheck
+  otomatis berjalan di startup web (hasilnya di log). Docker Compose
+  beralih ke named volume (bind mount menimpa izin uid 10001 —
+  instruksi chown didokumentasikan di compose).
+- **A7 Mode akun & versi endpoint.** Selfcheck memeriksa
+  `GET /fapi/v1/positionSide/dual`: Hedge Mode + live = GAGAL (web
+  startup juga menolak); ping tak bertanda tangan diganti validasi
+  panggilan bertanda tangan + selisih jam server. Migrasi v3 dengan
+  fallback: account/balance/positionRisk kini mencoba `/fapi/v3/*`
+  dulu (panduan migrasi resmi Binance Futures Connector: v2 account
+  & balance digantikan v3 sejak Des 2024, v2 positionRisk deprecated
+  Jan 2025), fallback ke v2 bila v3 gagal. Perilaku testnetnya
+  diverifikasi pada tahap E2E.
+
+### Fase B — selesai (uji 125 → 150)
+
+- **B1 Id algo unik + buffer BE.** `PositionManager._replace_sl` dan
+  pemasangan ulang SL oleh Reconciler kini memakai sufiks cap waktu
+  milidetik pada clientAlgoId — pemasangan ke-2 tidak lagi ditolak
+  bursa sebagai duplikat. Break-even memakai target entri ±
+  `BREAKEVEN_BUFFER_PCT` (baru, bawaan 0,1% ≈ 2× fee taker) agar
+  "break-even" tidak lagi keluar rugi sebesar fee.
+- **B2 Streak per trade.** `_consecutive_losses` mengelompokkan baris
+  REALIZED_PNL per trade (tradeId/tranId; cadangan simbol + ember
+  1 detik) dan menjumlahkan fill sebelum menghitung streak — satu
+  trade 3-fill = satu rugi.
+- **B3 Fail-closed live.** `_consecutive_losses` mengembalikan None
+  bila income tak terbaca; `evaluate` MENOLAK sinyal saat live (mode
+  dry-run hanya peringatan). `_open_risk` yang None saat live juga
+  menolak (sebelumnya pemeriksaan terlewati diam-diam).
+- **B4 Baseline oleh reconciler + kunci berkas.** `Reconciler`
+  menerima `risk` (web + CLI mengopernya) dan memanggil
+  `RiskManager.sync_daily_baselines()` tiap putaran — pergantian hari
+  UTC tercatat tepat waktu. Penulisan `risk_state.json` dan append
+  jurnal kini di bawah kunci berkas/thread agar proses web & CLI
+  tidak saling menimpa.
+- **B5 Validasi Settings.** ConfigError baru: RECONCILER_INTERVAL_SEC
+  < 5, PARTIAL_TP_FRACTION di luar (0,1), MAX_HOLD_HOURS < 0,
+  BREAKEVEN_TRIGGER_R/TRAILING_TRIGGER_R/TRAILING_ATR_MULT <= 0,
+  MAX_SYMBOL/TOTAL_EXPOSURE_PCT <= 0, RATE_LIMIT_PER_MINUTE < 0,
+  WEB_API_TOKEN terisi tapi < 24 karakter. Nilai non-kritis yang salah
+  format kini MEMICU PERINGATAN log (tidak lagi diam-diam bawaan).
+- **B6 Jurnal terpisah + cache.** `record_ai_decision` menulis ke
+  `ai_decisions.jsonl` di samping jurnal (bukan lagi trades.jsonl);
+  append di bawah threading.Lock; `all_entries()` di-cache per
+  (mtime, ukuran) dan invalidasi saat record.
+- **B7 Strategi.** (a) ATR None → sinyal arah diturunkan NEUTRAL
+  (level AI tidak lagi lolos tanpa validasi rentang ATR). (b)
+  `snapshot_light` limit 200 → 300 (selaras jalur analisis). (c) MTF
+  hanya mengambil klines (1 panggilan/TF) — tren/rezim/ADX dihitung
+  build_snapshot dari klines. (d) Gerbang ADX diperbaiki: entri
+  pengikut-tren ditolak bila rezim `sideways` ATAU adx14 < ADX_MIN
+  pada rezim apa pun (gerbang lama mustahil aktif karena "trending"
+  mensyaratkan ADX ≥ 25). (e) `classify_regime` menerima `interval`:
+  ambang atr_pct diskalakan √(menit/15) dibatasi 0,5–4×.
+- **B8 Refcount stream.** `MarketStream` menghitung pemakai per
+  (simbol, interval); unsubscribe hanya mencabut langganan saat
+  pemakai terakhir pergi — menutup satu tab UI tidak lagi
+  menghentikan tab lain pada simbol yang sama.
+
+**Uji lama yang diubah (aturan 7 — dengan alasan):**
+`test_security.py` (token uji diperpanjang ≥24 char mengikuti B5,
+termasuk token pada URL WS), `test_phase1.py::test_enforce_web_safety`
+(token fixture diperpanjang), `test_phase6_a.py::test_a4_*` (token
+fixture diperpanjang), `test_phase3.py::test_gate_adx_and_regime`
+(ekspektasi sideways dibalik sesuai B7d), `test_phase3.py::
+test_pm_breakeven_*` (target BE 100,0 → 100,1 sesuai buffer B1).
+
+### Fase C — selesai (uji 150 → 160; workflow CI terpisah di a14135c)
+
+- **C1 Hardening web.** Validasi Host di middleware (nama domain
+  publik tak dikenal → 400, anti DNS-rebinding; literal IP/localhost/
+  host CORS diizinkan agar akses LAN D TRADE & VPS tetap jalan);
+  pemeriksaan Origin untuk POST ber-cookie (asing → 403, anti CSRF);
+  Content-Type wajib application/json untuk request berbadan (→ 415);
+  endpoint baru `POST /api/auth/logout` menghapus cookie sesi;
+  `X-Forwarded-For` hanya dipercaya dari `TRUSTED_PROXIES` (baru,
+  bawaan kosong) untuk kunci rate-limit; dukungan `?token=` pada
+  WebSocket **dihapus** (cookie/header saja).
+- **C2 CI & lockfile.** Workflow: `permissions: contents: read`,
+  actions ter-pin SHA penuh (checkout v4 `11d5960…`, setup-python v5
+  `a26af69…`), instalasi dari `requirements.lock` (76 paket, pip
+  freeze), dan gerbang cakupan per berkas via
+  `scripts/check_coverage.py`. Ambang ditetapkan dari pengukuran
+  nyata (bukan tebakan): risk 78 (terukur 83,4), executor 78 (81,3 —
+  naik dari 77,6 berkat 4 uji executor baru), journal 70 (75,9),
+  strategy 60 (63,2), reconciler 65 (70,7), position_manager 60
+  (66,7), indicators 70 (93,7), market_stream 70 (81,0), settings 80
+  (90,2), web/app 50 (59,0).
+- **C3 Android.** `shouldOverrideUrlLoading`: WebView hanya boleh
+  bernavigasi ke host server yang dikonfigurasi (host lain diblokir);
+  `minifyEnabled true` untuk rilis. (Sumber saja — APK belum dibangun
+  ulang; perlu rebuild dengan keystore rilis yang sama agar berlaku.)
+- **C4 Dokumentasi.** Bagian ini + README (lapisan Fase 6, DATA_DIR,
+  logout, token ≥24) + `.env.example` (RECONCILER_GRACE_SEC,
+  BREAKEVEN_BUFFER_PCT, DATA_DIR, TRUSTED_PROXIES).
+
+**Uji lama yang diubah (aturan 7):** `test_security.py` — klien uji
+memakai base_url literal IP (validasi Host C1) dan uji WS memakai
+header X-API-Token menggantikan `?token=` yang dihapus.
+`test_phase6_c.py` membaca token/klien secara malas per uji karena
+`test_security` me-reload modul web.app saat impor (menangkapnya saat
+impor mengikat instance lama).
+
+### E2E Testnet — selesai (skrip: scripts/e2e_testnet.py + scripts/e2e_web_testnet.py)
+
+Semua skenario dijalankan terhadap Binance Futures TESTNET sungguhan
+(penjaga base URL di kedua skrip menolak non-testnet). Order kecil
+sungguhan, risiko 0,1%/trade. Laporan mentah tersanitasi ada di
+`reports/` lokal (tidak di-commit, sesuai aturan program).
+
+**CLI (8/8 LULUS):** (1) fungsi baca — selfcheck hijau, saldo, 528
+simbol, snapshot, analyze AI (BangunWeb deepseek-v4-flash), backtest
+7 hari, jurnal; (2) trade live BTCUSDT LONG → state PROTECTED, SL/TP
+algo terpasang, jurnal tercatat; (3) close_position bersih, tidak di
+pending_recovery; (4) simbol harga mikro JCTUSDT @0,0020950 entri &
+tutup tanpa error -1100 (A2 terbukti di bursa); (5) penolakan deviasi
+harga, kunci harian, dan streak rugi — ketiganya dengan alasan benar;
+(6) rekonsiliasi: SL yang dihapus dipasang ulang, algo yatim ETHUSDT
+dibatalkan, tutup eksternal tercatat + PnL; (7) smoke CLI watch 1
+putaran + konstruksi DashboardApp. Catatan jujur: riwayat income akun
+testnet memuat streak rugi lama (18 trade) sehingga RiskManager
+menolak SEMUA trade pada awalnya — proteksi bekerja benar; skenario
+trade memakai konfigurasi sah MAX_CONSECUTIVE_LOSSES=0 dan logika
+streak diverifikasi tersendiri di skenario 5. Kandidat mikro pertama
+(PTBUSDT) juga ditolak penjaga deviasi secara sah (harga mark vs pasar
+menyimpang 6,77% di buku testnet tak likuid).
+
+**Web (9 LULUS, 1 TIDAK TERVERIFIKASI):** W1 matriks auth lengkap
+(401/cookie/viewer 403/logout/batas login 429); W2 dashboard + WS
+klines live; W3 dua tab — menutup satu tab tidak memutus lainnya (B8);
+W4 XSS (respons selalu JSON, app.js esc()); W5 eksekusi & tutup via
+API; **W6 uji ras A1 empiris: 20 siklus buka→tutup dengan reconciler
+5 detik — 20/20 bersih, NOL RECOVERY_REQUIRED, nol posisi sehat
+ditutup reconciler**; W8 kemurnian jurnal dry-run (A3) di server web;
+W9 **workingType='MARK_PRICE' diterima testnet** — TODO(verify) di
+`core/binance_client.py` terjawab dan komentarnya diperbarui;
+W10 server live menolak start pada Hedge Mode dan akun dikembalikan
+ke One-way. **W7 TIDAK TERVERIFIKASI:** dalam tiga jendela pengamatan
+8 menit, harga BTC tidak pernah mencapai pemicu 0,3R sehingga geseran
+SL oleh PositionManager (BE/trailing) tidak teramati di pasar —
+bukan kegagalan kode; logikanya teruji di unit test Fase 3/B1.
+
+Kejadian selama E2E (dicatat apa adanya): jalan-ulang web ke-2
+terputus oleh penggantian VM runtime di tengah fase W7; posisi sisa
+LONG 0,0169 BTC ditemukan saat pemeriksaan pasca-putus dan ditutup
+bersih lewat executor; mode akun tidak sempat berubah. Ekspektasi
+skrip diperbaiki dua kali (batas login dapat aktif di percobaan ke-5
+karena login berhasil ikut terhitung; penolakan RiskManager pada uji
+ras dihitung sebagai skip-ulang, bukan kegagalan) — keduanya perbaikan
+skrip uji, bukan kode aplikasi.
+
+**Pembersihan akhir:** akun testnet datar terverifikasi (nol posisi,
+nol order biasa, nol algo order), mode One-way, `.env` lokal berisi
+kunci testnet DIHAPUS dari mesin agen. Saldo akhir 4.926,87 USDT
+(virtual testnet).

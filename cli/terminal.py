@@ -106,6 +106,7 @@ class App:
         self.engine = SignalEngine(settings, self.binance, self.ai)
         self.risk = RiskManager(settings, self.binance, self.symbols)
         self.executor = OrderExecutor(settings, self.binance, self.symbols, db=self.database)
+        self.executor.set_intent_hook(self.journal.record_intent)  # write-ahead (Fase 6-A1)
         self.service = TradingService(settings, self.risk, self.executor, self.binance)
 
 
@@ -431,7 +432,7 @@ def cmd_reconcile(app: App, args) -> int:
     from core.reconciler import Reconciler
 
     pm = PositionManager(app.settings, app.binance, app.executor, app.journal, app.symbols)
-    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal, position_manager=pm)
+    reconciler = Reconciler(app.settings, app.binance, app.executor, app.journal, position_manager=pm, risk=app.risk)
     summary = reconciler.run_once()
     _print(f"[bold]Rekonsiliasi selesai[/bold]: {summary}")
     return 0

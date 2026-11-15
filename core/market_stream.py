@@ -49,6 +49,7 @@ class MarketStream:
         # Pabrik WebSocketApp dapat disuntikkan untuk pengujian.
         self._ws_factory = ws_factory
         self._klines_subs: set[tuple[str, str]] = set()  # (symbol, interval)
+        self._refcounts: dict[tuple[str, str], int] = {}  # Fase 6-B8: pemakai per langganan
         self._mark_subs: set[str] = set()                # symbol
         self._listeners: list[Listener] = []
         self._candles: dict[tuple[str, str], dict] = {}
@@ -68,9 +69,13 @@ class MarketStream:
     def subscribe_kline(self, symbol: str, interval: str) -> None:
         symbol = symbol.upper()
         with self._lock:
-            if (symbol, interval) in self._klines_subs and symbol in self._mark_subs:
+            # Fase 6-B8: refcount per (simbol, interval) — banyak tab UI
+            # boleh berbagi satu langganan stream yang sama.
+            key = (symbol, interval)
+            self._refcounts[key] = self._refcounts.get(key, 0) + 1
+            if key in self._klines_subs and symbol in self._mark_subs:
                 return
-            self._klines_subs.add((symbol, interval))
+            self._klines_subs.add(key)
             self._mark_subs.add(symbol)
             self._dirty = True
         self._ensure_running()
@@ -79,7 +84,15 @@ class MarketStream:
     def unsubscribe_kline(self, symbol: str, interval: str) -> None:
         symbol = symbol.upper()
         with self._lock:
-            self._klines_subs.discard((symbol, interval))
+            # Fase 6-B8: langganan hanya dicabut saat pemakai TERAKHIR
+            # pergi — menutup satu tab tidak menghentikan tab lainnya.
+            key = (symbol, interval)
+            remaining = self._refcounts.get(key, 0) - 1
+            if remaining > 0:
+                self._refcounts[key] = remaining
+                return
+            self._refcounts.pop(key, None)
+            self._klines_subs.discard(key)
             if not any(s == symbol for s, _ in self._klines_subs):
                 self._mark_subs.discard(symbol)
             self._dirty = True

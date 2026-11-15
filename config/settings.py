@@ -12,7 +12,7 @@ dan tidak pernah dicetak ke log.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:  # python-dotenv bersifat opsional saat runtime bila env sudah diset OS
@@ -34,6 +34,16 @@ class ConfigError(ValueError):
     """Konfigurasi tidak valid — aplikasi harus menolak start, bukan menebak."""
 
 
+def _warn_bad_value(name: str, raw: str, default) -> None:
+    """Peringatan keras untuk env salah format (Fase 6-B5)."""
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Env %s=%r tidak valid — memakai nilai bawaan %s. Perbaiki .env Anda.",
+        name, raw, default,
+    )
+
+
 def _get_float(name: str, default: float, *, critical: bool = False) -> float:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
@@ -43,6 +53,7 @@ def _get_float(name: str, default: float, *, critical: bool = False) -> float:
     except ValueError:
         if critical:
             raise ConfigError(f"{name}: nilai {raw!r} bukan angka yang valid.")
+        _warn_bad_value(name, raw, default)  # Fase 6-B5: tidak diam-diam
         return default
 
 
@@ -55,6 +66,7 @@ def _get_int(name: str, default: int, *, critical: bool = False) -> int:
     except ValueError:
         if critical:
             raise ConfigError(f"{name}: nilai {raw!r} bukan bilangan bulat yang valid.")
+        _warn_bad_value(name, raw, default)  # Fase 6-B5: tidak diam-diam
         return default
 
 
@@ -63,41 +75,41 @@ class Settings:
     """Konfigurasi aplikasi yang immutable setelah dimuat."""
 
     # --- Binance Futures ---
-    binance_api_key: str = ""
-    binance_api_secret: str = ""
+    binance_api_key: str = field(default="", repr=False)
+    binance_api_secret: str = field(default="", repr=False)
     binance_testnet: bool = False
 
     # --- AI Router BangunWeb ---
-    bangunweb_api_key: str = ""
+    bangunweb_api_key: str = field(default="", repr=False)
     bangunweb_base_url: str = "https://router.bangunweb.com/v1"
     bangunweb_model: str = "bw-focus"
 
     # --- Multi-provider AI (dipilih lewat ai_provider) ---
     ai_provider: str = "bangunweb"  # bangunweb|openai|anthropic|deepseek|grok|nous|custom
-    openai_api_key: str = ""
+    openai_api_key: str = field(default="", repr=False)
     openai_model: str = "gpt-4o"
     openai_base_url: str = "https://api.openai.com/v1"
-    anthropic_api_key: str = ""
+    anthropic_api_key: str = field(default="", repr=False)
     anthropic_model: str = "claude-sonnet-4-5"
     anthropic_base_url: str = "https://api.anthropic.com"
-    deepseek_api_key: str = ""
+    deepseek_api_key: str = field(default="", repr=False)
     deepseek_model: str = "deepseek-chat"
     deepseek_base_url: str = "https://api.deepseek.com/v1"
-    xai_api_key: str = ""
+    xai_api_key: str = field(default="", repr=False)
     xai_model: str = "grok-4"
     xai_base_url: str = "https://api.x.ai/v1"
-    nous_api_key: str = ""
+    nous_api_key: str = field(default="", repr=False)
     nous_model: str = "Hermes-4-70B"
     nous_base_url: str = "https://inference-api.nousresearch.com/v1"
     ai_custom_base_url: str = ""
-    ai_custom_api_key: str = ""
+    ai_custom_api_key: str = field(default="", repr=False)
     ai_custom_model: str = ""
 
     # --- Jurnal perdagangan ---
     trade_journal_path: str = "logs/trades.jsonl"
 
     # --- Notifikasi Telegram ---
-    telegram_bot_token: str = ""
+    telegram_bot_token: str = field(default="", repr=False)
     telegram_chat_id: str = ""
     telegram_notifications: bool = True
 
@@ -129,6 +141,7 @@ class Settings:
     protection_working_type: str = "MARK_PRICE"  # pemicu SL/TP algo: MARK_PRICE | CONTRACT_PRICE
     reconciler_enabled: bool = True   # rekonsiliasi posisi berkala di web server
     reconciler_interval_sec: int = 60  # jeda antar putaran rekonsiliasi
+    reconciler_grace_sec: int = 120  # Fase 6-A1: masa tenggang — reconciler melewati simbol dgn transisi eksekusi terbaru
 
     # --- Fase 3: strategi sinyal (semua bisa dimatikan; bawaan konservatif) ---
     use_closed_candles_only: bool = True  # indikator hanya dari candle tertutup
@@ -140,6 +153,7 @@ class Settings:
     # Manajemen keluar (bawaan SEMUA mati):
     move_sl_to_be: bool = False           # geser SL ke break-even setelah profit 1R
     breakeven_trigger_r: float = 1.0
+    breakeven_buffer_pct: float = 0.1  # Fase 6-B1: buffer fee di atas harga entri untuk target BE
     trailing_stop_enabled: bool = False   # trailing stop ATR setelah trailing_trigger_r
     trailing_trigger_r: float = 1.5
     trailing_atr_mult: float = 1.0
@@ -155,6 +169,7 @@ class Settings:
     funding_extreme_pct: float = 0.1       # |funding| >= ini dianggap ekstrem
     btc_filter: bool = False               # altcoin mengikuti tren kuat BTC
     risk_state_path: str = "data/risk_state.json"  # baseline ekuitas harian/mingguan + kunci harian (persisten)
+    data_dir: str = ""  # Fase 6-A6: direktori state tunggal; kosong = <root proyek>/data (diisi load_settings)
     protection_retries: int = 3             # percobaan pasang SL/TP sebelum emergency close
     default_interval: str = "15m"
     quote_asset: str = "USDT"
@@ -163,15 +178,16 @@ class Settings:
     # Kosong = autentikasi NONAKTIF (hanya aman untuk akses lokal sendiri).
     # Isi WEB_API_TOKEN untuk mewajibkan token pada semua endpoint /api/*:
     # token utama = akses penuh (operator), WEB_VIEWER_TOKEN = hanya baca.
-    web_api_token: str = ""
-    web_viewer_token: str = ""
+    web_api_token: str = field(default="", repr=False)
+    web_viewer_token: str = field(default="", repr=False)
     # Daftar origin CORS yang diizinkan, pisah koma. Kosong = tanpa CORS
     # (hanya same-origin). JANGAN gunakan "*" bersamaan dengan token.
     cors_origins: str = ""
+    trusted_proxies: str = ""  # Fase 6-C1: daftar IP proksi tepercaya (koma) untuk X-Forwarded-For
     rate_limit_per_minute: int = 240  # batas request /api per IP per menit; 0 = nonaktif
     mtf_enabled: bool = True          # analisis multi-timeframe (1H/4H/1D) pada sinyal
     market_ws_enabled: bool = True    # WebSocket data pasar real-time untuk grafik Web UI
-    database_url: str = ""            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
+    database_url: str = field(default="", repr=False)            # Supabase/PostgreSQL (DATABASE_URL); kosong = JSONL saja
 
     # --- Web UI ---
     web_host: str = "127.0.0.1"  # aman secara default: hanya mesin ini sendiri
@@ -247,6 +263,27 @@ class Settings:
             errors.append(f"SCORING_VERSION harus 1 atau 2, kini {self.scoring_version}")
         if self.protection_working_type not in {"MARK_PRICE", "CONTRACT_PRICE"}:
             errors.append(f"PROTECTION_WORKING_TYPE tidak dikenal: {self.protection_working_type!r}")
+        # Fase 6-B5: validasi parameter yang sebelumnya lolos diam-diam.
+        if self.reconciler_interval_sec < 5:
+            errors.append(f"RECONCILER_INTERVAL_SEC harus >= 5, kini {self.reconciler_interval_sec}")
+        if not (0 < self.partial_tp_fraction < 1):
+            errors.append(f"PARTIAL_TP_FRACTION harus dalam (0, 1), kini {self.partial_tp_fraction}")
+        if self.max_hold_hours < 0:
+            errors.append(f"MAX_HOLD_HOURS harus >= 0, kini {self.max_hold_hours}")
+        if self.breakeven_trigger_r <= 0:
+            errors.append(f"BREAKEVEN_TRIGGER_R harus > 0, kini {self.breakeven_trigger_r}")
+        if self.trailing_trigger_r <= 0:
+            errors.append(f"TRAILING_TRIGGER_R harus > 0, kini {self.trailing_trigger_r}")
+        if self.trailing_atr_mult <= 0:
+            errors.append(f"TRAILING_ATR_MULT harus > 0, kini {self.trailing_atr_mult}")
+        if self.max_symbol_exposure_pct <= 0:
+            errors.append(f"MAX_SYMBOL_EXPOSURE_PCT harus > 0, kini {self.max_symbol_exposure_pct}")
+        if self.max_total_exposure_pct <= 0:
+            errors.append(f"MAX_TOTAL_EXPOSURE_PCT harus > 0, kini {self.max_total_exposure_pct}")
+        if self.rate_limit_per_minute < 0:
+            errors.append(f"RATE_LIMIT_PER_MINUTE harus >= 0, kini {self.rate_limit_per_minute}")
+        if self.web_api_token and len(self.web_api_token) < 24:
+            errors.append("WEB_API_TOKEN terlalu pendek — minimal 24 karakter bila diisi")
         if errors:
             raise ConfigError("Konfigurasi tidak valid — " + "; ".join(errors))
 
@@ -278,6 +315,10 @@ class Settings:
 
 def load_settings() -> Settings:
     """Bangun objek Settings dari environment saat ini."""
+    # Fase 6-A6: DATA_DIR tunggal & absolut agar state tidak bergantung CWD.
+    data_dir = os.environ.get("DATA_DIR", "").strip() or str(
+        Path(__file__).resolve().parent.parent / "data"
+    )
     return Settings(
         binance_api_key=os.environ.get("BINANCE_API_KEY", "").strip(),
         binance_api_secret=os.environ.get("BINANCE_API_SECRET", "").strip(),
@@ -306,7 +347,7 @@ def load_settings() -> Settings:
         ai_custom_base_url=os.environ.get("AI_CUSTOM_BASE_URL", "").strip().rstrip("/"),
         ai_custom_api_key=os.environ.get("AI_CUSTOM_API_KEY", "").strip(),
         ai_custom_model=os.environ.get("AI_CUSTOM_MODEL", "").strip(),
-        trade_journal_path=os.environ.get("TRADE_JOURNAL_PATH", "logs/trades.jsonl").strip(),
+        trade_journal_path=os.environ.get("TRADE_JOURNAL_PATH", "").strip() or f"{data_dir}/trades.jsonl",
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", "").strip(),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", "").strip(),
         telegram_notifications=_get_bool("TELEGRAM_NOTIFICATIONS", True),
@@ -338,6 +379,7 @@ def load_settings() -> Settings:
         regime_gate_enabled=_get_bool("REGIME_GATE_ENABLED", True),
         move_sl_to_be=_get_bool("MOVE_SL_TO_BE", False),
         breakeven_trigger_r=_get_float("BREAKEVEN_TRIGGER_R", 1.0),
+        breakeven_buffer_pct=_get_float("BREAKEVEN_BUFFER_PCT", 0.1),
         trailing_stop_enabled=_get_bool("TRAILING_STOP_ENABLED", False),
         trailing_trigger_r=_get_float("TRAILING_TRIGGER_R", 1.5),
         trailing_atr_mult=_get_float("TRAILING_ATR_MULT", 1.0),
@@ -351,11 +393,14 @@ def load_settings() -> Settings:
         funding_guard_minutes=_get_int("FUNDING_GUARD_MINUTES", 0),
         funding_extreme_pct=_get_float("FUNDING_EXTREME_PCT", 0.1),
         btc_filter=_get_bool("BTC_FILTER", False),
-        risk_state_path=os.environ.get("RISK_STATE_PATH", "data/risk_state.json").strip(),
+        risk_state_path=os.environ.get("RISK_STATE_PATH", "").strip() or f"{data_dir}/risk_state.json",
+        data_dir=data_dir,
+        reconciler_grace_sec=_get_int("RECONCILER_GRACE_SEC", 120),
         protection_retries=_get_int("PROTECTION_RETRIES", 3),
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
         web_viewer_token=os.environ.get("WEB_VIEWER_TOKEN", "").strip(),
         cors_origins=os.environ.get("CORS_ORIGINS", "").strip(),
+        trusted_proxies=os.environ.get("TRUSTED_PROXIES", "").strip(),
         rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
         mtf_enabled=_get_bool("MTF_ENABLED", True),
         market_ws_enabled=_get_bool("MARKET_WS_ENABLED", True),

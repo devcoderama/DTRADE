@@ -19,6 +19,7 @@ diganti di sini hanya provider + modelnya.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -29,7 +30,8 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
-STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "ai_settings.json"
+# Fase 6-A6: pilihan AI mengikuti DATA_DIR yang sama dengan state lain.
+STATE_PATH = Path(os.environ.get("DATA_DIR", "").strip() or Path(__file__).resolve().parent.parent / "data") / "ai_settings.json"
 
 # Provider → nama field model di Settings.
 MODEL_FIELDS = {

@@ -27,6 +27,37 @@ class CheckResult:
     detail: str
 
 
+def assert_data_writable(settings: Settings) -> None:
+    """Fase 6-A6: saat LIVE, DATA_DIR yang tidak bisa ditulis = startup GAGAL.
+
+    Kunci harian/baseline risiko yang tidak persisten berarti proteksi
+    bisa hilang diam-diam antar restart — itu tidak boleh terjadi pada
+    mode live. Mode dry-run tidak ditolak (hanya diperingatkan di
+    selfcheck) karena tidak ada dana yang dipertaruhkan.
+    """
+    if not settings.is_live:
+        return
+    data_dir = Path(settings.data_dir or "data")
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        probe = data_dir / ".write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        raise RuntimeError(
+            f"DATA_DIR {data_dir} tidak dapat ditulis ({exc}) — startup LIVE ditolak: "
+            "state risiko wajib persisten."
+        ) from exc
+
+
+def hedge_mode_active(binance) -> Optional[bool]:
+    """True bila akun berada di Hedge Mode; None bila tidak bisa dibaca."""
+    try:
+        return bool(binance.dual_side_position().get("dualSidePosition"))
+    except Exception:
+        return None
+
+
 def run_selfcheck(
     settings: Settings,
     binance=None,
@@ -72,9 +103,9 @@ def run_selfcheck(
             "BINANCE_API_KEY/SECRET kosong — fitur akun & trading tidak dapat berjalan.",
         ))
 
-    # 4) Direktori data & log dapat ditulis
+    # 4) Direktori data & log dapat ditulis (DATA_DIR tunggal, Fase 6-A6)
     writable_ok, writable_detail = True, "data/ dan logs/ dapat ditulis."
-    for d in (Path("data"), Path("logs")):
+    for d in (Path(settings.data_dir or "data"), Path("logs")):
         try:
             d.mkdir(parents=True, exist_ok=True)
             probe = d / ".selfcheck"
@@ -113,16 +144,46 @@ def run_selfcheck(
             if configured else "provider dipilih tetapi kuncinya kosong.",
         ))
 
-    # 7) Konektivitas Binance (hanya atas permintaan eksplisit)
+    # 7) Mode posisi akun (Fase 6-A7): Hedge Mode TIDAK didukung — kode
+    #    tidak pernah mengirim positionSide, jadi entri akan ditolak
+    #    bursa atau berperilaku tak terduga. Live + Hedge = GAGAL.
+    if allow_network and binance is not None and settings.has_binance_keys:
+        dual = hedge_mode_active(binance)
+        if dual is None:
+            checks.append(CheckResult("Mode posisi akun", None, "tidak terbaca (endpoint mode posisi gagal)."))
+        elif dual and settings.is_live:
+            checks.append(CheckResult(
+                "Mode posisi akun", False,
+                "Hedge Mode AKTIF — bot MENOLAK trading (positionSide tidak didukung); "
+                "ubah akun ke One-way Mode.",
+            ))
+        elif dual:
+            checks.append(CheckResult(
+                "Mode posisi akun", True,
+                "Hedge Mode aktif — akan DITOLAK saat mode live; ubah ke One-way Mode sebelum live.",
+            ))
+        else:
+            checks.append(CheckResult("Mode posisi akun", True, "One-way Mode — sesuai yang didukung bot."))
+    else:
+        checks.append(CheckResult("Mode posisi akun", None, "dilewati (tidak diminta / tanpa kunci)."))
+
+    # 8) Konektivitas Binance (hanya atas permintaan eksplisit).
+    #    Fase 6-A7: ping tak bertanda tangan diganti validasi kunci lewat
+    #    panggilan BERTANDA TANGAN + pengukuran selisih jam server.
     if allow_network and binance is not None and settings.has_binance_keys:
         try:
-            alive = bool(binance.ping())
+            import time as _time
+
+            server_ms = int(binance.server_time()["serverTime"])
+            drift_ms = abs(int(_time.time() * 1000) - server_ms)
+            binance.account()  # panggilan bertanda tangan: memvalidasi kunci & izin
             checks.append(CheckResult(
-                "Konektivitas Binance", alive,
-                "endpoint waktu bursa merespons." if alive else "ping bursa gagal.",
+                "Konektivitas Binance", True,
+                f"kunci valid (panggilan bertanda tangan OK); selisih jam server {drift_ms} ms"
+                + (" — di atas 1000 ms, sinkronkan jam mesin." if drift_ms > 1000 else "."),
             ))
         except Exception as exc:
-            checks.append(CheckResult("Konektivitas Binance", False, f"ping gagal: {exc}"))
+            checks.append(CheckResult("Konektivitas Binance", False, f"validasi kunci/jaringan gagal: {exc}"))
     else:
         checks.append(CheckResult(
             "Konektivitas Binance", None,

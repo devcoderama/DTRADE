@@ -70,6 +70,20 @@ class MainActivity : Activity() {
                 webView.visibility = View.VISIBLE
             }
 
+            // Fase 6-C3: daftar-izin host — WebView HANYA boleh bernavigasi
+            // ke host server yang dikonfigurasi pengguna. Tautan/redirect
+            // ke host lain diblokir agar halaman server yang terkompromi
+            // tidak dapat membawa WebView (beserta cookie sesi) ke situs
+            // asing.
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val target = request?.url ?: return false
+                val allowedHost = android.net.Uri.parse(serverUrl()).host
+                return target.host != allowedHost
+            }
+
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,

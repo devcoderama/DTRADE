@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import time
+from decimal import Decimal
 from typing import Any, Optional
 from urllib.parse import urlencode
 
@@ -102,6 +103,19 @@ class BinanceFuturesClient:
                 return self._request(method, path, params, signed, _retried_1021=True)
             raise
 
+    @staticmethod
+    def _plain_number(value: Any) -> Any:
+        """Serialisasi float TANPA notasi ilmiah (Fase 6-A2).
+
+        str(0.0000123) = '1.23e-05' ditolak Binance (-1100) pada koin
+        berharga mikro. Decimal + format 'f' menghasilkan string polos;
+        normalisasi terjadi SEBELUM penandatanganan agar tanda tangan
+        dihitung atas string yang persis dikirim.
+        """
+        if isinstance(value, float):
+            return format(Decimal(str(value)), "f")
+        return value
+
     def _request_once(
         self,
         method: str,
@@ -109,7 +123,7 @@ class BinanceFuturesClient:
         params: Optional[dict[str, Any]] = None,
         signed: bool = False,
     ) -> Any:
-        params = dict(params or {})
+        params = {k: self._plain_number(v) for k, v in dict(params or {}).items()}
         headers: dict[str, str] = {}
         if signed:
             if not self._settings.has_binance_keys:
@@ -143,6 +157,18 @@ class BinanceFuturesClient:
     # ------------------------------------------------------------------
     # Endpoint publik
     # ------------------------------------------------------------------
+    def server_time(self) -> dict:
+        """Waktu server Binance (GET /fapi/v1/time) — untuk ukur drift jam."""
+        return self._request("GET", "/fapi/v1/time")
+
+    def dual_side_position(self) -> dict:
+        """Mode posisi akun (GET /fapi/v1/positionSide/dual, bertanda tangan).
+
+        {"dualSidePosition": true} = Hedge Mode — TIDAK didukung kode ini
+        (tidak pernah mengirim positionSide), lihat Fase 6-A7.
+        """
+        return self._request("GET", "/fapi/v1/positionSide/dual", signed=True)
+
     def ping(self) -> bool:
         self._request("GET", "/fapi/v1/ping")
         return True
@@ -226,11 +252,26 @@ class BinanceFuturesClient:
     # ------------------------------------------------------------------
     # Endpoint bertanda tangan — akun & posisi
     # ------------------------------------------------------------------
+    def _request_v3_first(self, path_v3: str, path_v2: str, params=None):
+        """Fase 6-A7: utamakan endpoint v3, fallback ke v2 bila v3 gagal.
+
+        Bukti migrasi: panduan resmi Binance Futures Connector — sejak
+        Des 2024 /fapi/v2/account & /fapi/v2/balance digantikan
+        /fapi/v3/*, dan /fapi/v2/positionRisk deprecated (Jan 2025)
+        demi /fapi/v3/positionRisk. Fallback menjaga kompatibilitas
+        bila suatu lingkungan belum menyediakan v3; verifikasi perilaku
+        testnet tercatat di laporan E2E Fase 6.
+        """
+        try:
+            return self._request("GET", path_v3, params, signed=True)
+        except BinanceAPIError:
+            return self._request("GET", path_v2, params, signed=True)
+
     def account(self) -> dict:
-        return self._request("GET", "/fapi/v2/account", signed=True)
+        return self._request_v3_first("/fapi/v3/account", "/fapi/v2/account")
 
     def balances(self) -> list[dict]:
-        return self._request("GET", "/fapi/v2/balance", signed=True)
+        return self._request_v3_first("/fapi/v3/balance", "/fapi/v2/balance")
 
     def asset_balance(self, asset: str = "USDT") -> dict:
         for row in self.balances():
@@ -240,7 +281,7 @@ class BinanceFuturesClient:
 
     def positions(self, symbol: Optional[str] = None) -> list[dict]:
         params = {"symbol": symbol} if symbol else {}
-        rows = self._request("GET", "/fapi/v2/positionRisk", params, signed=True)
+        rows = self._request_v3_first("/fapi/v3/positionRisk", "/fapi/v2/positionRisk", params)
         return [r for r in rows if float(r.get("positionAmt", 0)) != 0.0]
 
     def open_orders(self, symbol: Optional[str] = None) -> list[dict]:
@@ -356,10 +397,10 @@ class BinanceFuturesClient:
             "type": order_type,
             "triggerPrice": trigger_price,
         }
-        # TODO(verify): nama parameter `workingType` (MARK_PRICE/CONTRACT_PRICE)
-        # mengikuti dokumentasi Algo Order API Binance; verifikasi ulang saat
-        # ada akses dokumentasi resmi — nilai tidak valid ditolak bursa dengan
-        # error parameter, bukan dieksekusi diam-diam.
+        # TERVERIFIKASI (Fase 6, E2E testnet 2026-11-16): nama parameter
+        # `workingType` dengan nilai MARK_PRICE diterima Binance Futures
+        # testnet — algo order SL terbaca kembali dengan
+        # workingType='MARK_PRICE' (skenario W9 scripts/e2e_web_testnet.py).
         if working_type:
             params["workingType"] = working_type
         if client_algo_id:

@@ -62,8 +62,10 @@ CLOSING = "CLOSING"
 CLOSED = "CLOSED"
 FAILED = "FAILED"
 RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
+RESOLVED = "RESOLVED"  # Fase 6-A5: RECOVERY_REQUIRED yang sudah ditangani manual
 
-TERMINAL_STATES = {PROTECTED, CLOSED, FAILED}
+TERMINAL_STATES = {PROTECTED, CLOSED, FAILED, RESOLVED}
+_STATE_ROTATE_BYTES = 5_000_000  # Fase 6-A5: rotasi execution_state.jsonl
 _BACKOFF_SEC = [0.5, 1.5, 3.0, 6.0]
 
 
@@ -94,8 +96,44 @@ class OrderExecutor:
         self._binance = binance
         self._symbols = symbols
         self._db = db  # cermin opsional ke Supabase/PostgreSQL (core.database)
-        self._lock = threading.Lock()
+        # RLock (Fase 6-A1): Reconciler memegang lock ini selama satu
+        # putaran keputusan, dan close_position yang ia panggil dari
+        # thread yang sama harus bisa masuk kembali.
+        self._lock = threading.RLock()
+        self._intent_hook = None  # write-ahead jurnal (Fase 6-A1)
         self._state_path = Path(settings.risk_state_path).with_name("execution_state.jsonl")
+
+    @property
+    def lock(self) -> threading.RLock:
+        """Lock eksekusi bersama — dipakai Reconciler agar tidak menilai
+        posisi di tengah eksekusi yang sedang berjalan (Fase 6-A1)."""
+        return self._lock
+
+    def set_intent_hook(self, hook) -> None:
+        """Pasang callback write-ahead: hook(decision, result) dipanggil
+        tepat sebelum order entri live dikirim."""
+        self._intent_hook = hook
+
+    def recent_activity(self, symbol: str) -> Optional[float]:
+        """Detik sejak transisi eksekusi terakhir untuk simbol (None bila
+        tidak ada catatan) — dasar masa tenggang Reconciler (Fase 6-A1)."""
+        last_ts = None
+        try:
+            lines = self._state_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        for line in lines:
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get("symbol") == symbol:
+                ts = rec.get("ts")
+                if isinstance(ts, (int, float)):
+                    last_ts = ts
+        if last_ts is None:
+            return None
+        return max(0.0, time.time() - last_ts / 1000.0)
 
     # ------------------------------------------------------------------
     # Pencatatan status persisten + pemulihan
@@ -114,6 +152,15 @@ class OrderExecutor:
         result.transitions.append(record)
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            # Rotasi sederhana (Fase 6-A5): file status tidak boleh tumbuh
+            # tanpa batas — satu berkas cadangan .1 dipertahankan.
+            try:
+                if self._state_path.stat().st_size > _STATE_ROTATE_BYTES:
+                    self._state_path.replace(
+                        self._state_path.with_name(self._state_path.name + ".1")
+                    )
+            except OSError:
+                pass
             with self._state_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(record) + "\n")
         except OSError as exc:
@@ -141,6 +188,22 @@ class OrderExecutor:
             key = rec.get("client_order_id") or f"{rec.get('symbol')}:{rec.get('ts')}"
             last[key] = rec
         return [r for r in last.values() if r.get("state") not in TERMINAL_STATES]
+
+    def mark_resolved(self, client_order_id: str, note: str = "") -> None:
+        """Tandai entri RECOVERY_REQUIRED sebagai SUDAH ditangani (Fase 6-A5).
+
+        Menulis event RESOLVED dengan client_order_id yang sama sehingga
+        pending_recovery() tidak lagi melaporkannya selamanya.
+        """
+        marker = ExecutionResult(symbol="", side="", dry_run=False,
+                                 client_order_id=client_order_id)
+        # Simbol diambil dari catatan terakhir id ini bila ada.
+        for rec in self.pending_recovery():
+            if rec.get("client_order_id") == client_order_id:
+                marker.symbol = rec.get("symbol", "")
+                marker.side = rec.get("side", "")
+                break
+        self._transition(marker, RESOLVED, note or "ditandai selesai secara manual")
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -306,6 +369,14 @@ class OrderExecutor:
             self._binance.change_leverage(decision.symbol, decision.leverage)
 
             self._transition(result, SUBMITTING)
+            # Write-ahead (Fase 6-A1): jurnal mencatat niat + SL/TP
+            # SEBELUM order entri dikirim — registry reconciler mengenali
+            # posisi ini sejak awal, bukan setelah submit selesai.
+            if self._intent_hook is not None:
+                try:
+                    self._intent_hook(decision, result)
+                except Exception as exc:  # hook tidak boleh menggagalkan eksekusi
+                    log.warning("Hook write-ahead jurnal gagal: %s", exc)
             try:
                 entry = self._binance.place_order(
                     symbol=decision.symbol,
@@ -453,7 +524,12 @@ class OrderExecutor:
                 log.info("[DRY-RUN] Tutup posisi %s qty=%s — tidak dikirim.", symbol, abs(amt))
                 return {"symbol": symbol, "closed": False, "dry_run": True, "quantity": abs(amt)}
 
-            marker = ExecutionResult(symbol=symbol, side="LONG" if amt > 0 else "SHORT", dry_run=False)
+            # Id korelasi (Fase 6-A5): tanpa ini, CLOSING tidak pernah
+            # berpasangan dengan CLOSED di pending_recovery().
+            marker = ExecutionResult(
+                symbol=symbol, side="LONG" if amt > 0 else "SHORT", dry_run=False,
+                client_order_id=f"close-{symbol.lower()}-{int(time.time() * 1000):x}"[:36],
+            )
             self._transition(marker, CLOSING)
             # URUTAN AMAN: tutup posisi DULU. SL/TP tidak dibatalkan sebelum
             # posisi terbukti nol — bila perintah tutup gagal, posisi tetap

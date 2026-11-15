@@ -10,5 +10,14 @@ services:
       # Hanya loopback host: akses dari luar lewat reverse proxy HTTPS / VPN.
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      # Fase 6-A6: NAMED VOLUME — kepemilikan file mengikuti image
+      # (appuser uid 10001). Bind mount ./data dari host menimpa izin itu
+      # dan pernah membuat state risiko gagal ditulis diam-diam; bila
+      # tetap ingin bind mount, jalankan dulu di host:
+      #   mkdir -p data logs && sudo chown -R 10001:10001 data logs
+      - baf_data:/app/data
+      - baf_logs:/app/logs
+
+volumes:
+  baf_data:
+  baf_logs:

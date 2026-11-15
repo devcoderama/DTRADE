@@ -156,7 +156,7 @@ def test_enforce_web_safety(monkeypatch):
     # loopback + dry-run tanpa token → boleh
     _run(Settings(trading_mode="dry_run", web_host="127.0.0.1", web_api_token=""))
     # dengan token → boleh di mana pun
-    _run(Settings(trading_mode="live", web_host="0.0.0.0", web_api_token="token-kuat"))
+    _run(Settings(trading_mode="live", web_host="0.0.0.0", web_api_token="token-uji-yang-cukup-panjang-xx"))
     # pengecualian eksplisit → boleh (dengan peringatan keras di log)
     _run(Settings(trading_mode="live", web_host="0.0.0.0", web_api_token="",
                   allow_insecure_web=True))
