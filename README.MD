@@ -64,7 +64,7 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 
 ![Web UI — Dasbor](screenshots/web-dashboard.png)
 
-**Web UI — Analisis BTCUSDT: skor teknikal, grafik candlestick + EMA20, dan hasil backtest dengan kurva ekuitas**
+**Web UI — Analisis BTCUSDT: workspace yang bisa diubah ukurannya (seret garis pemisah antar panel), grafik candlestick interaktif Lightweight Charts (EMA20 + EMA50 + volume, zoom & crosshair OHLCV), dan hasil backtest dengan kurva ekuitas**
 
 ![Web UI — Analisis, grafik candlestick, dan backtest](screenshots/web-analysis.png)
 

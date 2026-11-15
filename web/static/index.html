@@ -127,9 +127,12 @@
           <p>Memuat detail <b id="detail-loading-symbol"></b>…</p>
         </div>
 
-        <div class="analysis-layout">
-          <div class="an-left">
-            <h2 class="panel-title"><i class="fa-solid fa-chart-line title-ico"></i> Analisis Simbol</h2>
+        <div class="analysis-layout" id="analysis-layout">
+          <div class="an-left" id="an-left">
+            <div class="row space-between">
+              <h2 class="panel-title"><i class="fa-solid fa-chart-line title-ico"></i> Analisis Simbol</h2>
+              <button class="icon-btn" id="btn-hide-left" title="Sembunyikan panel analisis"><i class="fa-solid fa-chevron-left"></i></button>
+            </div>
             <div class="row">
               <span class="coin-badge"><i class="fa-solid fa-coins"></i></span>
               <input id="symbol-input" list="symbol-list" placeholder="cth: BTCUSDT" autocomplete="off">
@@ -139,17 +142,23 @@
             <div id="analysis" class="analysis-empty">Pilih simbol lalu klik Analisis untuk melihat snapshot teknikal dan penilaian AI.</div>
           </div>
 
-          <div class="an-center">
+          <div class="rz-handle rz-v" id="rz-left" title="Seret untuk mengubah lebar panel · klik ganda: ukuran bawaan"></div>
+
+          <div class="an-center" id="an-center">
             <div id="chart-block" class="chart-block" hidden>
               <div class="row space-between chart-head">
                 <h3 id="chart-title">Grafik Candlestick</h3>
-                <div class="tf-tabs" id="tf-tabs">
-                  <button class="tf-tab" data-interval="1m">1m</button>
-                  <button class="tf-tab" data-interval="5m">5m</button>
-                  <button class="tf-tab active" data-interval="15m">15m</button>
-                  <button class="tf-tab" data-interval="1h">1h</button>
-                  <button class="tf-tab" data-interval="4h">4h</button>
-                  <button class="tf-tab" data-interval="1d">1D</button>
+                <div class="chart-tools">
+                  <div class="tf-tabs" id="tf-tabs">
+                    <button class="tf-tab" data-interval="1m">1m</button>
+                    <button class="tf-tab" data-interval="5m">5m</button>
+                    <button class="tf-tab active" data-interval="15m">15m</button>
+                    <button class="tf-tab" data-interval="1h">1h</button>
+                    <button class="tf-tab" data-interval="4h">4h</button>
+                    <button class="tf-tab" data-interval="1d">1D</button>
+                  </div>
+                  <button class="icon-btn" id="btn-chart-max" title="Perbesar / kembalikan grafik"><i class="fa-solid fa-expand"></i></button>
+                  <button class="ghost small-btn" id="btn-reset-layout" title="Kembalikan tata letak panel ke ukuran bawaan"><i class="fa-solid fa-rotate-left"></i> Reset Layout</button>
                 </div>
                 <select id="chart-interval" class="visually-hidden" aria-hidden="true" tabindex="-1">
                   <option value="1m">1m</option>
@@ -160,8 +169,11 @@
                   <option value="1d">1d</option>
                 </select>
               </div>
-              <div class="chart-wrap"><canvas id="candle-chart"></canvas></div>
-              <p class="muted small-note">Garis oranye = EMA20 · batang di bagian bawah = volume · data langsung dari Binance Futures</p>
+              <div class="chart-wrap" id="chart-wrap">
+                <div id="candle-chart"></div>
+                <div id="chart-legend" class="chart-legend"></div>
+              </div>
+              <p class="muted small-note">EMA20 emas · EMA50 abu-abu · panel bawah = volume · roda mouse: zoom · seret grafik: geser waktu · data langsung dari Binance Futures</p>
             </div>
 
             <div id="backtest-block" class="chart-block" hidden>
@@ -175,9 +187,14 @@
             </div>
           </div>
 
-          <aside class="an-right">
+          <div class="rz-handle rz-v" id="rz-right" title="Seret untuk mengubah lebar panel · klik ganda: ukuran bawaan"></div>
+
+          <aside class="an-right" id="an-right">
             <div class="sentiment-card">
-              <h3><i class="fa-solid fa-chart-column title-ico"></i> Market Sentiment</h3>
+              <div class="row space-between">
+                <h3><i class="fa-solid fa-chart-column title-ico"></i> Market Sentiment</h3>
+                <button class="icon-btn" id="btn-hide-right" title="Sembunyikan panel sentimen"><i class="fa-solid fa-chevron-right"></i></button>
+              </div>
               <div class="gauge-wrap">
                 <svg class="gauge-svg" viewBox="0 0 120 68">
                   <defs>
@@ -202,13 +219,19 @@
               </div>
             </div>
           </aside>
+
+          <button class="panel-rail rail-left" id="rail-left" hidden title="Tampilkan panel analisis"><i class="fa-solid fa-chevron-right"></i><span>Analisis</span></button>
+          <button class="panel-rail rail-right" id="rail-right" hidden title="Tampilkan panel sentimen"><span>Sentimen</span><i class="fa-solid fa-chevron-left"></i></button>
+          <div class="rz-handle rz-h" id="rz-height" title="Seret untuk mengubah tinggi workspace · klik ganda: ukuran bawaan"></div>
         </div>
 
         <div class="signal-row" id="signal-row" hidden>
           <div class="signal-panel" id="signal-panel"></div>
+          <div class="rz-handle rz-v" id="rz-sig-1" title="Seret untuk mengubah lebar panel sinyal · klik ganda: ukuran bawaan"></div>
           <div class="gauge-card" id="gauge-macd"></div>
           <div class="gauge-card" id="gauge-rsi"></div>
           <div class="gauge-card" id="gauge-bb"></div>
+          <div class="rz-handle rz-v" id="rz-sig-2" title="Seret untuk mengubah lebar kartu eksekusi · klik ganda: ukuran bawaan"></div>
           <div class="execute-card" id="execute-card"></div>
         </div>
       </section>
@@ -283,6 +306,7 @@
 </nav>
 
 <div id="toast"></div>
+<script src="/static/vendor/lightweight-charts/lightweight-charts.standalone.production.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

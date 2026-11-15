@@ -222,9 +222,27 @@ select:focus { border-color: var(--accent); }
 .chart-wrap {
   position: relative; height: 330px; margin-top: 10px;
   background: #0d1117; border: 1px solid var(--line); border-radius: var(--radius-s);
+  overflow: hidden;
 }
-.chart-wrap canvas { width: 100%; height: 100%; display: block; }
+#candle-chart { width: 100%; height: 100%; }
+.equity-wrap canvas { width: 100%; height: 100%; display: block; }
 .equity-wrap { height: 180px; }
+.chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chart-legend {
+  position: absolute; top: 8px; left: 10px; z-index: 5; pointer-events: none;
+  font-size: 11px; color: var(--text); background: rgba(11, 14, 17, .72);
+  padding: 3px 9px; border-radius: 6px; max-width: calc(100% - 90px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  cursor: pointer; font-size: 12px;
+}
+.icon-btn:hover { color: var(--accent); border-color: var(--accent); }
+.small-btn { padding: 6px 10px; font-size: 12px; }
+.an-left .panel-title { margin: 0; }
 
 /* kartu sentimen */
 .sentiment-card {
@@ -243,7 +261,7 @@ select:focus { border-color: var(--accent); }
 .insight p { margin: 0; font-size: 13px; line-height: 1.6; color: #c3cad6; }
 
 /* baris sinyal + gauge + eksekusi */
-.signal-row { display: grid; grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(118px, .62fr)) minmax(190px, .95fr); gap: 12px; margin-top: 16px; }
+.signal-row { display: grid; grid-template-columns: minmax(0, 1.7fr) 6px repeat(3, minmax(118px, .62fr)) 6px minmax(190px, .95fr); gap: 12px; margin-top: 16px; }
 .signal-row[hidden] { display: none; }
 .signal-panel, .gauge-card, .execute-card {
   background: var(--panel-2); border: 1px solid var(--line-soft);
@@ -358,6 +376,64 @@ tbody tr:hover { background: rgba(23, 29, 38, .7); }
 .insight h4 i { color: var(--accent-2); }
 .disclaimer i { color: var(--accent); }
 
+/* ================= workspace analisis resizable (desktop) ================= */
+.rz-handle { display: none; }
+.panel-rail { display: none; }
+#chart-block[hidden] { display: none; }
+.chart-block.chart-fullscreen {
+  position: fixed; inset: 0; z-index: 300; background: var(--bg);
+  padding: 14px; display: flex; flex-direction: column;
+}
+.chart-block.chart-fullscreen .chart-wrap { flex: 1 1 auto; height: auto; }
+
+@media (min-width: 1241px) {
+  .analysis-layout {
+    grid-template-columns: 328px 6px minmax(0, 1fr) 6px 292px;
+    grid-template-rows: minmax(0, 1fr) 8px;
+    gap: 4px 6px; position: relative; align-items: stretch;
+  }
+  .an-left, .an-right { overflow-y: auto; min-height: 0; padding-right: 2px; }
+  /* penempatan kolom eksplisit: panel yang disembunyikan (display:none)
+     tidak boleh menggeser panel lain ke kolom yang salah */
+  .an-left { grid-column: 1; grid-row: 1; }
+  #rz-left { grid-column: 2; grid-row: 1; }
+  .an-center { grid-column: 3; grid-row: 1; }
+  #rz-right { grid-column: 4; grid-row: 1; }
+  .an-right { grid-column: 5; grid-row: 1; }
+  .an-center { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .an-center .chart-block { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .an-center .chart-wrap { flex: 1 1 auto; height: auto; min-height: 210px; }
+  .an-center #backtest-block { flex: 0 1 auto; overflow-y: auto; max-height: 46%; margin-top: 14px; }
+  .signal-row { gap: 8px; }
+
+  .rz-handle { display: block; position: relative; border-radius: 4px; touch-action: none; }
+  .rz-v { cursor: col-resize; }
+  .rz-h { cursor: row-resize; grid-column: 1 / -1; }
+  .rz-v::after {
+    content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 2px; height: 46px; border-radius: 2px; background: var(--line);
+    transition: background .15s;
+  }
+  .rz-h::after {
+    content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 46px; height: 2px; border-radius: 2px; background: var(--line);
+    transition: background .15s;
+  }
+  .rz-handle:hover::after, .rz-handle.dragging::after { background: var(--accent); }
+  .rz-handle.dragging { background: rgba(240, 185, 11, .08); }
+
+  .panel-rail:not([hidden]) {
+    display: inline-flex; align-items: center; gap: 7px;
+    position: absolute; top: 110px; z-index: 7;
+    writing-mode: vertical-rl; padding: 12px 5px;
+    background: var(--panel-2); color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; cursor: pointer;
+  }
+  .rail-left { left: 0; }
+  .rail-right { right: 0; }
+}
+
 /* ================= titik putus responsif ================= */
 @media (max-width: 1279px) {
   .sidebar {
@@ -372,6 +448,7 @@ tbody tr:hover { background: rgba(23, 29, 38, .7); }
   .analysis-layout { grid-template-columns: 300px minmax(0, 1fr); }
   .an-right { grid-column: 1 / -1; }
   .sentiment-card { display: grid; grid-template-columns: 230px 1fr; column-gap: 18px; align-items: center; }
+  .sentiment-card .row { grid-column: 1 / -1; }
   .sentiment-card h3 { grid-column: 1 / -1; }
   .sentiment-card .insight { border-top: none; padding-top: 0; margin-top: 0; }
   .signal-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -387,6 +464,7 @@ tbody tr:hover { background: rgba(23, 29, 38, .7); }
 }
 @media (max-width: 900px) {
   .spark { display: none; }
+  .chart-head { flex-wrap: wrap; }
   .analysis-layout { grid-template-columns: minmax(0, 1fr); }
   .an-right { grid-column: auto; }
   .sentiment-card { display: block; }

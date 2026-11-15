@@ -412,97 +412,94 @@ function emaSeries(values, period) {
   return out;
 }
 
+/* Grafik memakai TradingView Lightweight Charts (vendor lokal):
+   candlestick interaktif + EMA20/EMA50 + volume, crosshair dengan
+   legenda OHLCV, zoom roda mouse & geser timeline bawaan library.
+   Ukuran mengikuti container secara otomatis (autoSize). */
+let lwChart = null, lwCandles = null, lwEma20 = null, lwEma50 = null, lwVolume = null;
+let candleByTime = new Map();
+
+function fmtVol(v) {
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + "B";
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + "M";
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + "K";
+  return String(Math.round(v));
+}
+
+function ensureChart() {
+  if (lwChart) return lwChart;
+  if (typeof LightweightCharts === "undefined") return null;
+  lwChart = LightweightCharts.createChart($("candle-chart"), {
+    autoSize: true,
+    layout: { background: { color: "transparent" }, textColor: "#848e9c", fontSize: 11 },
+    grid: {
+      vertLines: { color: "rgba(37,43,53,.55)" },
+      horzLines: { color: "rgba(37,43,53,.55)" },
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: "#252b35" },
+    timeScale: { borderColor: "#252b35", timeVisible: true, secondsVisible: false },
+  });
+  lwCandles = lwChart.addCandlestickSeries({
+    upColor: "#0ecb81", downColor: "#f6465d",
+    wickUpColor: "#0ecb81", wickDownColor: "#f6465d", borderVisible: false,
+  });
+  lwEma20 = lwChart.addLineSeries({ color: "#f0b90b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  lwEma50 = lwChart.addLineSeries({ color: "#848e9c", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  lwVolume = lwChart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "" });
+  lwChart.priceScale("").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+  lwChart.priceScale("right").applyOptions({ scaleMargins: { top: 0.06, bottom: 0.2 } });
+  lwChart.subscribeCrosshairMove((param) => {
+    updateLegend(param && param.time ? candleByTime.get(param.time) : null);
+  });
+  return lwChart;
+}
+
+function updateLegend(c) {
+  const el = $("chart-legend");
+  if (!el) return;
+  if (!c && lastCandles.length) c = lastCandles[lastCandles.length - 1];
+  if (!c) { el.textContent = ""; return; }
+  const chg = c.open ? ((c.close - c.open) / c.open) * 100 : 0;
+  el.innerHTML =
+    "<b>" + (chartSymbol || "") + "</b> · " + $("chart-interval").value +
+    " &nbsp;O " + fmtPrice(c.open) + " &nbsp;H " + fmtPrice(c.high) +
+    " &nbsp;L " + fmtPrice(c.low) + " &nbsp;C " + fmtPrice(c.close) +
+    ' &nbsp;<span class="' + (chg >= 0 ? "pos" : "neg") + '">' + (chg >= 0 ? "+" : "") + chg.toFixed(2) + "%</span>" +
+    " &nbsp;Vol " + fmtVol(c.volume);
+}
+
 async function loadChart(symbol) {
   try {
     const interval = $("chart-interval").value;
-    const data = await api("/api/klines/" + encodeURIComponent(symbol) + "?interval=" + interval + "&limit=120");
+    const data = await api("/api/klines/" + encodeURIComponent(symbol) + "?interval=" + interval + "&limit=200");
     lastCandles = data.candles || [];
-    drawCandles();
+    renderChart();
   } catch (e) {
     toast("Gagal memuat grafik: " + e.message);
   }
 }
 
-function drawCandles() {
-  const canvas = $("candle-chart");
-  if (!canvas || !lastCandles.length) return;
-  const wrap = canvas.parentElement;
-  const dpr = window.devicePixelRatio || 1;
-  const W = wrap.clientWidth, H = wrap.clientHeight;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, W, H);
-
-  const candles = lastCandles;
-  const labelW = 64;                       // ruang label harga di kanan
-  const plotW = W - labelW;
-  const volH = Math.round(H * 0.16);       // area volume di bawah
-  const priceH = H - volH - 16;
-
-  let hi = -Infinity, lo = Infinity, vmax = 0;
-  for (const c of candles) {
-    hi = Math.max(hi, c.high); lo = Math.min(lo, c.low); vmax = Math.max(vmax, c.volume);
-  }
-  const pad = (hi - lo) * 0.06 || 1;
-  hi += pad; lo -= pad;
-  const y = (p) => 10 + priceH - ((p - lo) / (hi - lo)) * priceH;
-  const step = plotW / candles.length;
-  const bodyW = Math.max(1, Math.floor(step * 0.65));
-
-  // grid + label harga
-  ctx.strokeStyle = "rgba(132,142,156,.18)";
-  ctx.fillStyle = "#848e9c";
-  ctx.font = "10px sans-serif";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const p = lo + ((hi - lo) * i) / 4;
-    const yy = y(p);
-    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(plotW, yy); ctx.stroke();
-    ctx.fillText(fmtPrice(p), plotW + 6, yy + 3);
-  }
-
-  // volume
-  candles.forEach((c, i) => {
-    const x = i * step + step / 2;
-    const up = c.close >= c.open;
-    ctx.fillStyle = up ? "rgba(14,203,129,.45)" : "rgba(246,70,93,.45)";
-    const vh = vmax ? (c.volume / vmax) * volH : 0;
-    ctx.fillRect(x - bodyW / 2, H - vh, bodyW, vh);
-  });
-
-  // candle
-  candles.forEach((c, i) => {
-    const x = i * step + step / 2;
-    const up = c.close >= c.open;
-    ctx.strokeStyle = up ? "#0ecb81" : "#f6465d";
-    ctx.fillStyle = up ? "#0ecb81" : "#f6465d";
-    ctx.beginPath(); ctx.moveTo(x, y(c.high)); ctx.lineTo(x, y(c.low)); ctx.stroke();
-    const top = y(Math.max(c.open, c.close));
-    const bottom = y(Math.min(c.open, c.close));
-    ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bottom - top));
-  });
-
-  // garis EMA20
-  const ema = emaSeries(candles.map((c) => c.close), 20);
-  ctx.strokeStyle = "#f0b90b";
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ema.forEach((v, i) => {
-    const x = i * step + step / 2;
-    if (i === 0) ctx.moveTo(x, y(v)); else ctx.lineTo(x, y(v));
-  });
-  ctx.stroke();
-
-  // label harga terakhir
-  const last = candles[candles.length - 1];
-  ctx.fillStyle = last.close >= last.open ? "#0ecb81" : "#f6465d";
-  ctx.font = "bold 11px sans-serif";
-  ctx.fillText(fmtPrice(last.close), plotW + 6, y(last.close) + 3);
+function renderChart() {
+  if (!ensureChart() || !lastCandles.length) return;
+  const t = (ms) => Math.floor(ms / 1000);
+  const bars = lastCandles.map((c) => ({ time: t(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
+  candleByTime = new Map(lastCandles.map((c) => [t(c.time), c]));
+  lwCandles.setData(bars);
+  const closes = lastCandles.map((c) => c.close);
+  const toLine = (vals) => vals.map((v, i) => ({ time: bars[i].time, value: v }));
+  lwEma20.setData(toLine(emaSeries(closes, 20)));
+  lwEma50.setData(toLine(emaSeries(closes, 50)));
+  lwVolume.setData(lastCandles.map((c) => ({
+    time: t(c.time), value: c.volume,
+    color: c.close >= c.open ? "rgba(14,203,129,.5)" : "rgba(246,70,93,.5)",
+  })));
+  lwChart.timeScale().fitContent();
+  updateLegend(null);
 }
 
 $("chart-interval").addEventListener("change", () => { if (chartSymbol) loadChart(chartSymbol); });
-window.addEventListener("resize", () => { drawCandles(); drawEquity(); });
+window.addEventListener("resize", () => { drawEquity(); });
 
 /* ---------------- backtest ---------------- */
 let lastEquity = [];
@@ -643,6 +640,171 @@ $("top-search").addEventListener("keydown", (e) => {
   if (v) openDetail(v);
 });
 
+/* ---------------- workspace analisis yang bisa diubah ukurannya ----------------
+   Desktop (≥1241px): seret garis pemisah untuk mengatur lebar panel
+   analisis/sentimen, tinggi workspace, dan lebar panel sinyal/kartu
+   eksekusi. Klik ganda pada garis = ukuran bawaan. Panel bisa
+   disembunyikan (rel emas untuk menampilkan lagi), grafik bisa
+   dimaksimalkan, dan seluruh tata letak tersimpan di localStorage.
+   Mobile: tata letak bertumpuk seperti biasa; tombol maximize grafik
+   membuka grafik layar penuh. */
+const LAYOUT_KEY = "baf-layout-v1";
+const LAYOUT_DEFAULTS = { left: 328, right: 292, height: 620, sig: null, exec: null, hideLeft: false, hideRight: false, max: false };
+let layoutState = (() => {
+  try { return Object.assign({}, LAYOUT_DEFAULTS, JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}")); }
+  catch (e) { return Object.assign({}, LAYOUT_DEFAULTS); }
+})();
+let savedHideState = null;
+const desktopLayout = () => window.matchMedia("(min-width: 1241px)").matches;
+const clampNum = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function saveLayout() {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutState)); } catch (e) { /* abaikan */ }
+}
+
+function applyLayout() {
+  const L = $("analysis-layout");
+  if (!L) return;
+  const S = $("signal-row");
+  const desk = desktopLayout();
+  if (!desk) {
+    L.style.gridTemplateColumns = "";
+    L.style.height = "";
+    if (S) S.style.gridTemplateColumns = "";
+    $("an-left").style.display = "";
+    $("an-right").style.display = "";
+    $("rail-left").hidden = true;
+    $("rail-right").hidden = true;
+    return;
+  }
+  const hl = layoutState.hideLeft, hr = layoutState.hideRight;
+  L.style.gridTemplateColumns =
+    (hl ? "0px 0px" : layoutState.left + "px 6px") +
+    " minmax(0,1fr) " +
+    (hr ? "0px 0px" : "6px " + layoutState.right + "px");
+  L.style.height = layoutState.height + "px";
+  $("an-left").style.display = hl ? "none" : "";
+  $("an-right").style.display = hr ? "none" : "";
+  $("rz-left").style.display = hl ? "none" : "";
+  $("rz-right").style.display = hr ? "none" : "";
+  $("rail-left").hidden = !hl;
+  $("rail-right").hidden = !hr;
+  if (S && layoutState.sig && layoutState.exec) {
+    S.style.gridTemplateColumns = layoutState.sig + "px 6px repeat(3, minmax(110px, 1fr)) 6px " + layoutState.exec + "px";
+  }
+  const maxBtn = $("btn-chart-max");
+  if (maxBtn && desk) {
+    maxBtn.innerHTML = '<i class="fa-solid fa-' + (layoutState.max ? "compress" : "expand") + '"></i>';
+  }
+}
+
+function dragHandle(el, opts) {
+  if (!el) return;
+  el.addEventListener("pointerdown", (e) => {
+    if (!desktopLayout()) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("dragging");
+    const startX = e.clientX, startY = e.clientY;
+    const start = opts.start();
+    const move = (ev) => opts.move(ev.clientX - startX, ev.clientY - startY, start);
+    const up = () => {
+      el.classList.remove("dragging");
+      el.removeEventListener("pointermove", move);
+      saveLayout();
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up, { once: true });
+    el.addEventListener("pointercancel", up, { once: true });
+  });
+  el.addEventListener("dblclick", () => { opts.reset(); applyLayout(); saveLayout(); });
+}
+
+function toggleChartMax() {
+  const block = $("chart-block");
+  if (!desktopLayout()) {
+    const on = block.classList.toggle("chart-fullscreen");
+    $("btn-chart-max").innerHTML = '<i class="fa-solid fa-' + (on ? "compress" : "expand") + '"></i>';
+    return;
+  }
+  if (!layoutState.max) {
+    savedHideState = { l: layoutState.hideLeft, r: layoutState.hideRight };
+    layoutState.hideLeft = true;
+    layoutState.hideRight = true;
+    layoutState.max = true;
+  } else {
+    if (savedHideState) {
+      layoutState.hideLeft = savedHideState.l;
+      layoutState.hideRight = savedHideState.r;
+    }
+    layoutState.max = false;
+  }
+  applyLayout();
+  saveLayout();
+}
+
+function initLayout() {
+  dragHandle($("rz-left"), {
+    start: () => layoutState.left,
+    move: (dx, _dy, s) => {
+      const maxLeft = $("analysis-layout").clientWidth - (layoutState.hideRight ? 0 : layoutState.right) - 400;
+      layoutState.left = clampNum(s + dx, 232, Math.max(260, maxLeft));
+      applyLayout();
+    },
+    reset: () => { layoutState.left = LAYOUT_DEFAULTS.left; },
+  });
+  dragHandle($("rz-right"), {
+    start: () => layoutState.right,
+    move: (dx, _dy, s) => { layoutState.right = clampNum(s - dx, 224, 520); applyLayout(); },
+    reset: () => { layoutState.right = LAYOUT_DEFAULTS.right; },
+  });
+  dragHandle($("rz-height"), {
+    start: () => layoutState.height,
+    move: (_dx, dy, s) => { layoutState.height = clampNum(s + dy, 430, 1100); applyLayout(); },
+    reset: () => { layoutState.height = LAYOUT_DEFAULTS.height; },
+  });
+  dragHandle($("rz-sig-1"), {
+    start: () => $("signal-panel").offsetWidth,
+    move: (dx, _dy, s) => {
+      if (!layoutState.exec) layoutState.exec = $("execute-card").offsetWidth;
+      layoutState.sig = clampNum(s + dx, 250, 760);
+      applyLayout();
+    },
+    reset: () => { layoutState.sig = null; const S = $("signal-row"); if (S) S.style.gridTemplateColumns = ""; },
+  });
+  dragHandle($("rz-sig-2"), {
+    start: () => $("execute-card").offsetWidth,
+    move: (dx, _dy, s) => {
+      if (!layoutState.sig) layoutState.sig = $("signal-panel").offsetWidth;
+      layoutState.exec = clampNum(s - dx, 200, 520);
+      applyLayout();
+    },
+    reset: () => { layoutState.exec = null; const S = $("signal-row"); if (S) S.style.gridTemplateColumns = ""; },
+  });
+  $("btn-hide-left").addEventListener("click", () => { layoutState.hideLeft = true; layoutState.max = false; applyLayout(); saveLayout(); });
+  $("btn-hide-right").addEventListener("click", () => { layoutState.hideRight = true; layoutState.max = false; applyLayout(); saveLayout(); });
+  $("rail-left").addEventListener("click", () => { layoutState.hideLeft = false; layoutState.max = false; applyLayout(); saveLayout(); });
+  $("rail-right").addEventListener("click", () => { layoutState.hideRight = false; layoutState.max = false; applyLayout(); saveLayout(); });
+  $("btn-chart-max").addEventListener("click", toggleChartMax);
+  $("btn-reset-layout").addEventListener("click", () => {
+    layoutState = Object.assign({}, LAYOUT_DEFAULTS);
+    savedHideState = null;
+    const S = $("signal-row");
+    if (S) S.style.gridTemplateColumns = "";
+    $("chart-block").classList.remove("chart-fullscreen");
+    $("btn-chart-max").innerHTML = '<i class="fa-solid fa-expand"></i>';
+    applyLayout();
+    saveLayout();
+    toast("Tata letak dikembalikan ke ukuran bawaan.");
+  });
+  window.matchMedia("(min-width: 1241px)").addEventListener("change", () => {
+    $("chart-block").classList.remove("chart-fullscreen");
+    applyLayout();
+  });
+  applyLayout();
+}
+
+initLayout();
 loadConfig();
 loadAiPanel();
 loadSymbols();
