@@ -211,7 +211,7 @@
     <a href="#keamanan"><i class="fa-solid fa-shield-halved"></i>Keamanan</a>
     <a href="#lisensi"><i class="fa-solid fa-scale-balanced"></i>Lisensi</a>
     <a href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Repositori GitHub</a>
-    <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.4.0"><i class="fa-solid fa-box-open"></i>Release v1.4.0</a>
+    <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.5.0"><i class="fa-solid fa-box-open"></i>Release v1.5.0</a>
   </nav>
   <div class="side-foot">Dokumentasi binance-ai-future.<br>Bukan nasihat keuangan.</div>
 </aside>
@@ -230,7 +230,7 @@
     lolos <strong>manajemen risiko</strong> yang ketat.</p>
     <div class="cta">
       <a class="btn" href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Lihat di GitHub</a>
-      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.4.0"><i class="fa-brands fa-android"></i>Unduh D TRADE v1.4.0</a>
+      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.5.0"><i class="fa-brands fa-android"></i>Unduh D TRADE v1.5.0</a>
       <a class="btn ghost" href="#instalasi"><i class="fa-solid fa-rocket"></i>Mulai Cepat</a>
     </div>
     <div class="warn">
@@ -370,12 +370,12 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
   <h2><span class="no">07</span><i class="fa-brands fa-android"></i>D TRADE — Aplikasi Android</h2>
   <p>Aplikasi Android ringan (WebView) untuk membuka Web UI dari ponsel Anda di jaringan yang sama.
   Server backend tetap berjalan di komputer/VPS Anda; aplikasi hanya antarmuka.</p>
-  <p><span class="tag"><i class="fa-solid fa-tag"></i>v1.4.0</span><span class="tag"><i class="fa-solid fa-code-commit"></i>versionCode 5</span><span class="tag"><i class="fa-solid fa-mobile-screen"></i>minSdk 24</span><span class="tag"><i class="fa-solid fa-file-zipper"></i>59 KB</span></p>
+  <p><span class="tag"><i class="fa-solid fa-tag"></i>v1.5.0</span><span class="tag"><i class="fa-solid fa-code-commit"></i>versionCode 6</span><span class="tag"><i class="fa-solid fa-mobile-screen"></i>minSdk 24</span><span class="tag"><i class="fa-solid fa-file-zipper"></i>59 KB</span></p>
   <p>Unduh APK dari
-  <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.4.0">GitHub Release v1.4.0</a>,
+  <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.5.0">GitHub Release v1.5.0</a>,
   pasang, lalu atur alamat server lewat tombol menu melayang ⋮ (mis. <code>http://192.168.1.10:8000</code>).
   Backend harus dijalankan dengan <code>WEB_HOST=0.0.0.0</code> dan <code>WEB_API_TOKEN</code> terisi.</p>
-  <h3>Mode Mandiri (v1.2.0, grafik live di v1.3.0, Entry/TP/SL di v1.4.0)</h3>
+  <h3>Mode Mandiri (v1.2.0, grafik live di v1.3.0, Entry/TP/SL di v1.4.0, logo koin di v1.5.0)</h3>
   <p>Bila server tidak terjangkau, aplikasi otomatis beralih ke <strong>mode mandiri</strong>
   (atau pilih manual lewat menu <strong>Mode Mandiri</strong>): menampilkan <strong>sinyal
   teknikal</strong> dan <strong>grafik candlestick semua simbol USDT perpetual</strong> langsung
@@ -385,8 +385,10 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
   indikator LIVE, reconnect otomatis) dengan timeframe lengkap ala Binance:
   1m–1w. Bila sinyal LONG/SHORT, tampil <strong>rencana trade indikatif</strong>: Entry,
   Take Profit 2,5×ATR(14), dan Stop Loss 1,5×ATR(14) — sebagai panel angka sekaligus garis
-  level langsung di grafik. Sejak v1.3.0 tidak ada lagi bilah judul bawaan Android —
-  tampilannya penuh, menu aplikasi pindah ke tombol melayang ⋮ di kanan bawah.</p>
+  level langsung di grafik. Daftar simbolnya berlogo koin resmi dari CDN Binance seperti
+  aplikasi Binance (koin tanpa logo mendapat avatar huruf berwarna). Sejak v1.3.0 tidak
+  ada lagi bilah judul bawaan Android — tampilannya penuh, menu aplikasi pindah ke
+  tombol melayang ⋮ di kanan bawah.</p>
   <h3>Hardening v1.1.0</h3>
   <p>WebView hanya menavigasi ke host server yang dikonfigurasi (allowlist); cleartext ditolak
   kecuali localhost/10.0.2.2; <code>allowBackup=false</code>; akses file/konten WebView nonaktif;
