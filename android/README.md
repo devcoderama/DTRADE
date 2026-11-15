@@ -23,23 +23,38 @@ ponsel dengan nama **D TRADE**.
 > Bawaan alamat server adalah `http://10.0.2.2:8000` (localhost komputer
 > host dari emulator Android) — ganti sesuai alamat backend Anda.
 
-## Mode Mandiri (sejak v1.2.0)
+## Mode Mandiri (sejak v1.2.0; grafik live sejak v1.3.0)
 
 Bila server tidak terjangkau, aplikasi otomatis beralih ke **mode
-mandiri** (bisa juga dipilih manual lewat menu ⋮ → **Mode Mandiri**):
-halaman bawaan `assets/standalone.html` menampilkan **sinyal teknikal**
-dan **grafik candlestick semua simbol USDT perpetual Binance Futures**
-langsung dari API publik Binance — tanpa AI, tanpa eksekusi, tanpa kunci
-API. Skor −100…+100 dihitung di perangkat dari EMA20/50, MACD, RSI, dan
-Bollinger Bands; ketuk simbol untuk grafik (15m/1h/4h/1d) + rincian
-alasannya. Tersedia sakelar Mainnet/Testnet di kanan atas.
+mandiri** (bisa juga dipilih manual lewat tombol menu melayang →
+**Mode Mandiri**): halaman bawaan `assets/standalone.html` menampilkan
+**sinyal teknikal** dan **grafik candlestick semua simbol USDT
+perpetual Binance Futures** langsung dari API publik Binance — tanpa
+AI, tanpa eksekusi, tanpa kunci API. Skor −100…+100 dihitung di
+perangkat dari EMA20/50, MACD, RSI, dan Bollinger Bands; ketuk simbol
+untuk grafik + rincian alasannya. Tersedia sakelar Mainnet/Testnet di
+kanan atas.
+
+Grafik detailnya **live via WebSocket** Binance Futures
+(`wss://fstream.binance.com` / `wss://stream.binancefuture.com`,
+stream `kline_<interval>`): candle berjalan diperbarui tiap tick,
+skor dihitung ulang setiap candle ditutup, ada indikator titik
+**LIVE**, reconnect otomatis dengan backoff, dan REST menjadi cadangan
+bila WS putus. Pilihan timeframe lengkap ala Binance: 1m, 3m, 5m, 15m,
+30m, 1h, 2h, 4h, 6h, 12h, 1d, 3d, 1w (tab bisa digeser).
 
 Catatan teknis: halaman dimuat lewat `loadDataWithBaseURL` (base host
 semu `dtrade.local`, jadi `allowFileAccess` tetap `false`), dan panggilan
-datanya lewat jembatan `AndroidBridge` yang **hanya** mengizinkan GET
-https ke `fapi.binance.com` / `testnet.binancefuture.com`. Tombol
-"Hubungkan" di halaman mandiri (atau menu **Beranda Server**) kembali ke
-Web UI server.
+REST-nya lewat jembatan `AndroidBridge` yang **hanya** mengizinkan GET
+https ke `fapi.binance.com` / `testnet.binancefuture.com` (WebSocket
+dibuka langsung oleh halaman ke host Binance yang sama). Tombol
+"Hubungkan"/"Ubah" di halaman mandiri (atau menu **Beranda Server**)
+kembali ke Web UI server / membuka dialog alamat server.
+
+Sejak v1.3.0 aplikasi memakai tema **NoActionBar** — tidak ada lagi
+bilah judul bawaan Android; menu aplikasi (Beranda Server / Mode
+Mandiri / Muat Ulang / Alamat Server) hidup di **tombol melayang ⋮**
+di kanan bawah layar.
 
 ## Catatan Keamanan Jaringan (penting sejak pengerasan 2026-11-16)
 

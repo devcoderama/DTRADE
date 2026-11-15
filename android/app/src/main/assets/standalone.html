@@ -67,10 +67,18 @@
   .dhead .nm{font-size:1.15rem;font-weight:800}
   .dhead .pr{margin-left:auto;text-align:right}
   .dhead .pr .p{font-size:1.08rem;font-weight:800;font-variant-numeric:tabular-nums}
-  .tabs{display:flex;gap:7px;padding:10px 14px 2px}
+  .tabs{display:flex;gap:7px;padding:10px 14px 2px;overflow-x:auto;flex-wrap:nowrap;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
   .tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
-    border-radius:8px;padding:6px 13px;font-weight:700;font-size:.85rem;cursor:pointer}
+    border-radius:8px;padding:6px 13px;font-weight:700;font-size:.85rem;cursor:pointer;flex:none}
   .tabs button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
+  .livedot{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700;
+    color:var(--muted);margin-left:8px;vertical-align:middle}
+  .livedot .dot{width:8px;height:8px;border-radius:50%;background:#5b6672;flex:none}
+  .livedot.on{color:var(--green)}
+  .livedot.on .dot{background:var(--green);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .chartbox{margin:10px 12px 0;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:10px 6px 6px}
   canvas{width:100%;display:block}
@@ -109,7 +117,8 @@ tanpa AI, tanpa eksekusi order.</div>
 
 <div class="serverbar" id="serverBar">
   <div>Server: <b id="serverUrl">—</b></div>
-  <button id="btnServer">Hubungkan</button>
+  <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
+  <button id="btnServer" style="margin-left:0">Hubungkan</button>
 </div>
 
 <div id="listView">
@@ -132,6 +141,7 @@ tanpa AI, tanpa eksekusi order.</div>
     <div>
       <div class="nm" id="dSymbol">—</div>
       <div class="chg" id="dSub">—</div>
+      <span class="livedot" id="liveDot"><span class="dot"></span><span id="liveTxt">menghubungkan…</span></span>
     </div>
     <div class="pr">
       <div class="p" id="dPrice">—</div>
@@ -139,10 +149,19 @@ tanpa AI, tanpa eksekusi order.</div>
     </div>
   </div>
   <div class="tabs" id="tabs">
+    <button data-iv="1m">1m</button>
+    <button data-iv="3m">3m</button>
+    <button data-iv="5m">5m</button>
     <button data-iv="15m">15m</button>
+    <button data-iv="30m">30m</button>
     <button data-iv="1h" class="on">1h</button>
+    <button data-iv="2h">2h</button>
     <button data-iv="4h">4h</button>
+    <button data-iv="6h">6h</button>
+    <button data-iv="12h">12h</button>
     <button data-iv="1d">1d</button>
+    <button data-iv="3d">3d</button>
+    <button data-iv="1w">1w</button>
   </div>
   <div class="chartbox"><canvas id="chart" height="340"></canvas></div>
   <div class="verdict" id="verdict"></div>
@@ -444,62 +463,153 @@ function scheduleTickerRefresh() {
   }, 60000);
 }
 
-/* ================= Detail & grafik ================= */
+/* ================= Detail & grafik (LIVE via WebSocket) ================= */
 let currentSymbol = null, currentInterval = "1h", detailTimer = null;
+let detailKlines = [];
+let ws = null, wsOpen = false, wsRetry = 0, wsTimer = null, drawQueued = false;
+
+const WS_BASES = {
+  mainnet: "wss://fstream.binance.com",
+  testnet: "wss://stream.binancefuture.com"
+};
+function wsBase() { return params.get("ws") || WS_BASES[network]; }
+
+function setLive(on, label) {
+  $("liveDot").classList.toggle("on", on);
+  $("liveTxt").textContent = label;
+}
 
 async function openDetail(symbol) {
   currentSymbol = symbol;
   $("listView").classList.add("hidden");
   $("detailView").classList.add("open");
   window.scrollTo(0, 0);
-  await loadDetail();
+  await loadDetail(false, true);
   if (detailTimer) clearInterval(detailTimer);
-  detailTimer = setInterval(() => { if (!document.hidden) loadDetail(true); }, 30000);
+  // REST hanya cadangan: selama WebSocket tersambung, timer dilewati.
+  detailTimer = setInterval(() => {
+    if (!document.hidden && !wsOpen) loadDetail(true, false);
+  }, 30000);
 }
 function closeDetail() {
   currentSymbol = null;
   if (detailTimer) clearInterval(detailTimer);
+  stopWs();
   $("detailView").classList.remove("open");
   $("listView").classList.remove("hidden");
 }
-async function loadDetail(keepScroll) {
-  const s = symbols.find(x => x.symbol === currentSymbol);
+async function loadDetail(keepScroll, restartWs) {
   $("dSymbol").textContent = currentSymbol;
   $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
   try {
-    const kl = await api("/fapi/v1/klines?symbol=" + currentSymbol +
+    detailKlines = await api("/fapi/v1/klines?symbol=" + currentSymbol +
       "&interval=" + currentInterval + "&limit=" + KLINE_LIMIT);
-    const closes = kl.map(k => parseFloat(k[4]));
-    const o = scoreSymbol(closes);
-    if (s) { s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s); }
-    const last = closes[closes.length - 1], first = closes[0];
-    const chg = (last / first - 1) * 100;
-    $("dPrice").textContent = fmtPrice(last);
-    const dc = $("dChange");
-    dc.textContent = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "% (jendela grafik)";
-    dc.className = "chg " + (chg >= 0 ? "up" : "dn");
-    const v = $("verdict");
-    const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
-    v.innerHTML = '<div class="chip ' + cls + '" style="min-width:104px;font-size:.95rem">' +
-      o.side + '<small>skor teknikal</small></div>' +
-      '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
-      '<div class="lbl">dari rentang −100 … +100 · interval ' + currentInterval + '</div></div>';
-    const stats = [
-      ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
-      ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
-      ["EMA20", o.ema20 !== null && o.ema20 !== undefined ? fmtPrice(o.ema20) : "—"],
-      ["EMA50", o.ema50 !== null && o.ema50 !== undefined ? fmtPrice(o.ema50) : "—"],
-      ["Bollinger atas", o.boll ? fmtPrice(o.boll.upper) : "—"],
-      ["Bollinger bawah", o.boll ? fmtPrice(o.boll.lower) : "—"]
-    ];
-    $("stats").innerHTML = stats.map(x =>
-      '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
-    $("reasons").innerHTML = o.reasons.map(r => "<li>" + r + "</li>").join("");
-    drawChart(kl);
+    drawChart(detailKlines);
+    renderAnalysis();
+    if (restartWs) connectWs();
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (e) {
     $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + e.message + "</div>";
   }
+}
+function renderAnalysis() {
+  if (!detailKlines.length) return;
+  const s = symbols.find(x => x.symbol === currentSymbol);
+  const closes = detailKlines.map(k => parseFloat(k[4]));
+  const o = scoreSymbol(closes);
+  if (s) { s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s); }
+  updatePriceHeader();
+  const v = $("verdict");
+  const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+  v.innerHTML = '<div class="chip ' + cls + '" style="min-width:104px;font-size:.95rem">' +
+    o.side + '<small>skor teknikal</small></div>' +
+    '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
+    '<div class="lbl">dari rentang −100 … +100 · interval ' + currentInterval + '</div></div>';
+  const stats = [
+    ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
+    ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
+    ["EMA20", o.ema20 !== null && o.ema20 !== undefined ? fmtPrice(o.ema20) : "—"],
+    ["EMA50", o.ema50 !== null && o.ema50 !== undefined ? fmtPrice(o.ema50) : "—"],
+    ["Bollinger atas", o.boll ? fmtPrice(o.boll.upper) : "—"],
+    ["Bollinger bawah", o.boll ? fmtPrice(o.boll.lower) : "—"]
+  ];
+  $("stats").innerHTML = stats.map(x =>
+    '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
+  $("reasons").innerHTML = o.reasons.map(r => "<li>" + r + "</li>").join("");
+}
+function updatePriceHeader() {
+  if (!detailKlines.length) return;
+  const closes = detailKlines.map(k => parseFloat(k[4]));
+  const last = closes[closes.length - 1], first = closes[0];
+  const chg = (last / first - 1) * 100;
+  $("dPrice").textContent = fmtPrice(last);
+  const dc = $("dChange");
+  dc.textContent = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "% (jendela grafik)";
+  dc.className = "chg " + (chg >= 0 ? "up" : "dn");
+}
+
+/* ----- WebSocket kline: grafik bergerak live seperti di Binance ----- */
+function connectWs() {
+  stopWs();
+  if (!currentSymbol) return;
+  setLive(false, "menghubungkan…");
+  const url = wsBase() + "/ws/" + currentSymbol.toLowerCase() + "@kline_" + currentInterval;
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    scheduleWsRetry();
+    return;
+  }
+  ws.onopen = () => { wsOpen = true; wsRetry = 0; setLive(true, "LIVE"); };
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (msg && msg.k) onWsKline(msg.k);
+  };
+  ws.onclose = () => {
+    wsOpen = false;
+    if (currentSymbol) {
+      setLive(false, "menyambung ulang…");
+      scheduleWsRetry();
+    }
+  };
+  ws.onerror = () => { try { ws.close(); } catch (e) { /* abaikan */ } };
+}
+function stopWs() {
+  if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+  if (ws) {
+    ws.onclose = null;
+    try { ws.close(); } catch (e) { /* abaikan */ }
+    ws = null;
+  }
+  wsOpen = false;
+}
+function scheduleWsRetry() {
+  if (wsTimer || !currentSymbol) return;
+  const delay = Math.min(15000, 1000 * Math.pow(2, wsRetry++));
+  wsTimer = setTimeout(() => { wsTimer = null; connectWs(); }, delay);
+}
+function onWsKline(k) {
+  if (!detailKlines.length) return;
+  const candle = [k.t, k.o, k.h, k.l, k.c, k.v];
+  const lastK = detailKlines[detailKlines.length - 1];
+  if (lastK && lastK[0] === k.t) {
+    detailKlines[detailKlines.length - 1] = candle;
+  } else if (k.t > (lastK ? lastK[0] : 0)) {
+    detailKlines.push(candle);
+    if (detailKlines.length > KLINE_LIMIT) detailKlines.shift();
+  } else {
+    return;
+  }
+  if (!drawQueued) {
+    drawQueued = true;
+    requestAnimationFrame(() => {
+      drawQueued = false;
+      if (currentSymbol) drawChart(detailKlines);
+    });
+  }
+  updatePriceHeader();
+  if (k.x) renderAnalysis();   // candle ditutup → hitung ulang skor
 }
 
 function drawChart(kl) {
@@ -581,7 +691,7 @@ $("tabs").querySelectorAll("button").forEach(b => {
     $("tabs").querySelectorAll("button").forEach(x => x.classList.remove("on"));
     b.classList.add("on");
     currentInterval = b.dataset.iv;
-    loadDetail();
+    loadDetail(false, true);
   });
 });
 function setNetwork(n) {
@@ -601,6 +711,11 @@ if (network === "testnet") {
 if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
   $("serverUrl").textContent = window.AndroidBridge.getServerUrl();
   $("btnServer").addEventListener("click", () => window.AndroidBridge.openServer());
+  if (window.AndroidBridge.editServerUrl) {
+    $("btnEditServer").addEventListener("click", () => window.AndroidBridge.editServerUrl());
+  } else {
+    $("btnEditServer").classList.add("hidden");
+  }
 } else {
   $("serverBar").classList.add("hidden");
 }

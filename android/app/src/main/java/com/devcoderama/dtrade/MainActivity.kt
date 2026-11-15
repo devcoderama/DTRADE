@@ -5,8 +5,6 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -15,7 +13,9 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.EditText
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -52,12 +52,14 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        title = "D TRADE"
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
         webView = findViewById(R.id.webview)
         progressBar = findViewById(R.id.progress)
         errorView = findViewById(R.id.error_view)
+        // Sejak v1.3.0 tidak ada action bar (tema NoActionBar) — menu
+        // aplikasi hidup di tombol melayang ini (PopupMenu).
+        findViewById<Button>(R.id.fab_menu).setOnClickListener { showAppMenu(it) }
 
         with(webView.settings) {
             javaScriptEnabled = true
@@ -196,23 +198,24 @@ class MainActivity : Activity() {
             .show()
     }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_HOME, 0, "Beranda Server")
-        menu.add(0, MENU_STANDALONE, 0, "Mode Mandiri")
-        menu.add(0, MENU_RELOAD, 0, "Muat Ulang")
-        menu.add(0, MENU_URL, 0, "Alamat Server")
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            MENU_HOME -> loadHome()
-            MENU_STANDALONE -> loadStandalone()
-            MENU_RELOAD -> webView.reload()
-            MENU_URL -> showUrlDialog()
-            else -> return super.onOptionsItemSelected(item)
+    /** Menu aplikasi (pengganti menu action bar) pada tombol melayang. */
+    private fun showAppMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, MENU_HOME, 0, "Beranda Server")
+        popup.menu.add(0, MENU_STANDALONE, 0, "Mode Mandiri")
+        popup.menu.add(0, MENU_RELOAD, 0, "Muat Ulang")
+        popup.menu.add(0, MENU_URL, 0, "Alamat Server")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_HOME -> loadHome()
+                MENU_STANDALONE -> loadStandalone()
+                MENU_RELOAD -> webView.reload()
+                MENU_URL -> showUrlDialog()
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
         }
-        return true
+        popup.show()
     }
 
     @Deprecated("Deprecated in Java")
@@ -272,6 +275,12 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun openServer() {
             webView.post { loadHome() }
+        }
+
+        /** Buka dialog alamat server (tombol "Ubah" di halaman mandiri). */
+        @JavascriptInterface
+        fun editServerUrl() {
+            webView.post { showUrlDialog() }
         }
     }
 
