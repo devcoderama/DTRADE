@@ -40,7 +40,9 @@ binance-ai-future/
 │
 ├── cli/                     ← ANTARMUKA TERMINAL
 │   ├── __init__.py
-│   └── terminal.py          ← argparse CLI: balance, scan, analyze, trade, ...
+│   ├── terminal.py          ← argparse CLI: balance, scan, analyze, trade, ...
+│   ├── dashboard.py         ← dashboard interaktif Textual (overview, grafik, sinyal, metrik)
+│   └── term_chart.py        ← grafik candlestick terminal (plotext 5.x: candle + EMA + volume)
 │
 ├── web/                     ← ANTARMUKA WEB
 │   ├── __init__.py

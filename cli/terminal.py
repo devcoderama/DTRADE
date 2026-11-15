@@ -46,6 +46,32 @@ from utils.logger import get_logger
 
 log = get_logger(__name__)
 
+CLI_VERSION = "1.0.0"
+
+_LOGO_LINES = ("  ◆  ", "◆ ◆ ◆", "  ◆  ")
+
+
+def print_banner(app: "App") -> None:
+    """Kepala branding ala mockup CLI: logo, nama, versi, status, jam lokal."""
+    s = app.settings
+    net = "TESTNET" if s.binance_testnet else "MAINNET"
+    mode = "LIVE" if s.is_live else "DRY-RUN"
+    now = time.strftime("%H:%M:%S")
+    if HAS_RICH:
+        from rich.text import Text
+
+        logo = Text("\n".join(_LOGO_LINES), style="bold #f0b90b")
+        title = Text.from_markup(
+            f"binance-[bold #f0b90b]ai[/bold #f0b90b]-future  [dim]— cli v{CLI_VERSION}[/dim]\n"
+            f"[dim]Leveraging AI for Smarter Crypto Trading Decisions.[/dim]\n"
+            f"[#0ecb81]●[/] Live Market · {net} · {mode} · {now}"
+        )
+        from rich.columns import Columns
+
+        console.print(Columns([logo, title], padding=(0, 2)))
+    else:
+        print(f"binance-ai-future — cli v{CLI_VERSION} · {net} · {mode} · {now}")
+
 try:
     from rich.console import Console
     from rich.table import Table
@@ -82,7 +108,39 @@ class App:
 # ----------------------------------------------------------------------
 # Perintah-perintah
 # ----------------------------------------------------------------------
+def cmd_dashboard(app: App, args) -> int:
+    from cli.dashboard import run_dashboard
+
+    return run_dashboard(app, symbol=args.symbol, interval=args.interval)
+
+
+def cmd_chart(app: App, args) -> int:
+    from cli.term_chart import chart_available, render_chart
+
+    if not chart_available():
+        _print("[red]Grafik terminal membutuhkan paket 'plotext'.[/red] Pasang: pip install -r requirements.txt")
+        return 1
+    interval = args.interval or app.settings.default_interval
+    klines = app.binance.klines(args.symbol.upper(), interval, args.limit)
+    if not klines:
+        _print("Tidak ada data kline untuk simbol itu.")
+        return 1
+    print_banner(app)
+    last = klines[-1]
+    _print(f"[bold]{args.symbol.upper()}[/bold] {interval} — harga terakhir {fmt_price(float(last[4]))} "
+           f"(EMA20 oranye · EMA50 abu-abu · volume di panel bawah)")
+    if HAS_RICH:
+        from rich.text import Text
+
+        width = max(50, min(console.width - 2, 160))
+        console.print(Text.from_ansi(render_chart(klines, width=width, height=30)))
+    else:
+        print(render_chart(klines, width=100, height=30))
+    return 0
+
+
 def cmd_balance(app: App, _args) -> int:
+    print_banner(app)
     account = app.binance.account()
     usdt = app.binance.asset_balance(app.settings.quote_asset)
     _print(f"[bold]Akun Futures[/bold] ({'TESTNET' if app.settings.binance_testnet else 'MAINNET'})")
@@ -134,6 +192,7 @@ def cmd_scan(app: App, args) -> int:
 
 
 def cmd_analyze(app: App, args) -> int:
+    print_banner(app)
     signal = app.engine.analyze(args.symbol, interval=args.interval, use_ai=not args.no_ai)
     snap = signal.snapshot
     _print(f"[bold]{signal.symbol}[/bold] @ {fmt_price(signal.price)}  ({fmt_pct(snap['change_24h_pct'])} 24 jam)")
@@ -402,6 +461,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("balance", help="Saldo & ringkasan akun futures")
     sub.add_parser("symbols", help="Daftar semua simbol perpetual aktif")
 
+    p = sub.add_parser("dashboard", help="Dashboard terminal interaktif (Textual): overview, grafik, sinyal, metrik")
+    p.add_argument("--symbol", default="BTCUSDT", help="Simbol awal (bawaan BTCUSDT)")
+    p.add_argument("--interval", default=None, help="Interval awal (bawaan dari .env)")
+
+    p = sub.add_parser("chart", help="Grafik candlestick terminal (plotext) satu simbol")
+    p.add_argument("symbol")
+    p.add_argument("--interval", default=None)
+    p.add_argument("--limit", type=int, default=160, help="Jumlah candle (bawaan 160)")
+
     p_scan = sub.add_parser("scan", help="Pindai semua simbol & peringkatkan sinyal")
     p_scan.add_argument("--top", type=int, default=10)
     p_scan.add_argument("--interval", default=None)
@@ -465,6 +533,8 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "balance": cmd_balance,
         "symbols": cmd_symbols,
+        "dashboard": cmd_dashboard,
+        "chart": cmd_chart,
         "scan": cmd_scan,
         "analyze": cmd_analyze,
         "positions": cmd_positions,

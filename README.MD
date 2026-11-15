@@ -76,6 +76,14 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 
 ![CLI — analyze BTCUSDT](screenshots/cli-analyze.png)
 
+**Terminal CLI — `dashboard` interaktif (Textual): Market Overview, grafik candlestick + EMA, tabel backtest, metrik kunci**
+
+![CLI — dashboard interaktif](screenshots/cli-dashboard.png)
+
+**Terminal CLI — `chart BTCUSDT --interval 1h` (plotext: candlestick + EMA20/EMA50 + volume)**
+
+![CLI — chart BTCUSDT](screenshots/cli-chart.png)
+
 **Terminal CLI — `backtest BTCUSDT` (500 candle)**
 
 ![CLI — backtest BTCUSDT](screenshots/cli-backtest.png)
@@ -208,6 +216,8 @@ python run.py cli balance                 # saldo & ringkasan akun futures
 python run.py cli symbols                 # semua simbol perpetual USDT aktif
 python run.py cli scan --top 10           # pindai & peringkatkan sinyal
 python run.py cli analyze BTCUSDT         # analisis teknikal + AI satu simbol
+python run.py cli dashboard               # dashboard interaktif (Textual): overview, grafik, sinyal, metrik
+python run.py cli chart BTCUSDT --interval 1h   # grafik candlestick terminal (plotext)
 python run.py cli positions               # posisi terbuka saat ini
 python run.py cli trade BTCUSDT --side LONG   # eksekusi (dry-run kecuali live)
 python run.py cli close BTCUSDT           # tutup posisi satu simbol
