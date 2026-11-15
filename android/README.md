@@ -43,6 +43,14 @@ skor dihitung ulang setiap candle ditutup, ada indikator titik
 bila WS putus. Pilihan timeframe lengkap ala Binance: 1m, 3m, 5m, 15m,
 30m, 1h, 2h, 4h, 6h, 12h, 1d, 3d, 1w (tab bisa digeser).
 
+Sejak v1.4.0, detail simbol juga menampilkan **rencana trade
+indikatif** bila sinyal LONG/SHORT: **Entry** (harga penutupan
+terakhir), **Take Profit** 2,5×ATR(14), dan **Stop Loss** 1,5×ATR(14)
+— rumus yang sama dengan fallback ATR backend (R:R 1:1,67) — sebagai
+panel angka + garis putus-putus ENTRY/TP/SL langsung di grafik.
+Level dihitung ulang setiap candle ditutup; sinyal NETRAL tidak
+memunculkan rencana.
+
 Catatan teknis: halaman dimuat lewat `loadDataWithBaseURL` (base host
 semu `dtrade.local`, jadi `allowFileAccess` tetap `false`), dan panggilan
 REST-nya lewat jembatan `AndroidBridge` yang **hanya** mengizinkan GET

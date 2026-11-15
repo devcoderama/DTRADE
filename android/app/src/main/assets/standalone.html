@@ -166,6 +166,10 @@ tanpa AI, tanpa eksekusi order.</div>
   <div class="chartbox"><canvas id="chart" height="340"></canvas></div>
   <div class="verdict" id="verdict"></div>
   <div class="stats" id="stats"></div>
+  <div class="reasons" style="margin-bottom:0"><h4>Rencana trade — Entry · TP · SL</h4>
+    <div id="plan"></div>
+    <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
+  </div>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
 </div>
 
@@ -272,9 +276,25 @@ function bollLast(closes, period) {
   return { mid, upper, lower, pctB: upper === lower ? 0.5 : (last - lower) / (upper - lower) };
 }
 
+/* ATR(14) Wilder — untuk level Entry/TP/SL indikatif. */
+function atrWilder(highs, lows, closes, period) {
+  if (!highs || !lows || closes.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+  }
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) atr = (atr * (period - 1) + trs[i]) / period;
+  return atr;
+}
+
 /* Skor teknikal -100..+100 (semangat yang sama dengan backend:
    tren EMA + MACD, momentum RSI, posisi Bollinger, momentum harga). */
-function scoreSymbol(closes) {
+function scoreSymbol(closes, highs, lows) {
   const reasons = [];
   let score = 0;
   const last = closes[closes.length - 1];
@@ -318,7 +338,8 @@ function scoreSymbol(closes) {
   }
   score = Math.max(-100, Math.min(100, Math.round(score)));
   const side = score >= 25 ? "LONG" : score <= -25 ? "SHORT" : "NETRAL";
-  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, reasons };
+  const atr = atrWilder(highs, lows, closes, 14);
+  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, atr, reasons };
 }
 
 /* ================= Daftar simbol ================= */
@@ -389,7 +410,11 @@ async function computeSignals(run) {
       s.loading = true; paintRow(s);
       try {
         const kl = await api("/fapi/v1/klines?symbol=" + s.symbol + "&interval=1h&limit=" + KLINE_LIMIT);
-        s.scoreObj = scoreSymbol(kl.map(k => parseFloat(k[4])));
+        s.scoreObj = scoreSymbol(
+          kl.map(k => parseFloat(k[4])),
+          kl.map(k => parseFloat(k[2])),
+          kl.map(k => parseFloat(k[3]))
+        );
       } catch (e) { s.scoreObj = null; }
       s.loading = false; done++;
       paintRow(s);
@@ -466,6 +491,7 @@ function scheduleTickerRefresh() {
 /* ================= Detail & grafik (LIVE via WebSocket) ================= */
 let currentSymbol = null, currentInterval = "1h", detailTimer = null;
 let detailKlines = [];
+let tradePlan = null;   // {side, entry, tp, sl, atr} — dihitung ulang tiap candle ditutup
 let ws = null, wsOpen = false, wsRetry = 0, wsTimer = null, drawQueued = false;
 
 const WS_BASES = {
@@ -499,6 +525,7 @@ function closeDetail() {
   $("listView").classList.remove("hidden");
 }
 async function loadDetail(keepScroll, restartWs) {
+  tradePlan = null;
   $("dSymbol").textContent = currentSymbol;
   $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
   try {
@@ -516,7 +543,11 @@ function renderAnalysis() {
   if (!detailKlines.length) return;
   const s = symbols.find(x => x.symbol === currentSymbol);
   const closes = detailKlines.map(k => parseFloat(k[4]));
-  const o = scoreSymbol(closes);
+  const o = scoreSymbol(
+    closes,
+    detailKlines.map(k => parseFloat(k[2])),
+    detailKlines.map(k => parseFloat(k[3]))
+  );
   if (s) { s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s); }
   updatePriceHeader();
   const v = $("verdict");
@@ -536,6 +567,50 @@ function renderAnalysis() {
   $("stats").innerHTML = stats.map(x =>
     '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
   $("reasons").innerHTML = o.reasons.map(r => "<li>" + r + "</li>").join("");
+  buildPlan(o, closes[closes.length - 1]);
+  drawChart(detailKlines);
+}
+
+/* Rencana trade indikatif — rumus yang sama dengan fallback backend:
+   Entry = harga penutupan terakhir, SL 1,5×ATR(14), TP 2,5×ATR(14). */
+function buildPlan(o, lastClose) {
+  if ((o.side === "LONG" || o.side === "SHORT") && o.atr) {
+    const dir = o.side === "LONG" ? 1 : -1;
+    tradePlan = {
+      side: o.side, entry: lastClose,
+      sl: lastClose - dir * 1.5 * o.atr,
+      tp: lastClose + dir * 2.5 * o.atr,
+      atr: o.atr
+    };
+  } else {
+    tradePlan = null;
+  }
+  renderPlan();
+}
+function renderPlan() {
+  const el = $("plan"), note = $("planNote");
+  if (!tradePlan) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:.88rem">Sinyal NETRAL — ' +
+      "tidak ada rencana entry. Level muncul otomatis saat skor ≥ +25 (LONG) atau ≤ −25 (SHORT).</div>";
+    note.textContent = "";
+    return;
+  }
+  const p = tradePlan, dir = p.side === "LONG" ? 1 : -1;
+  const tpPct = dir * (p.tp / p.entry - 1) * 100;
+  const slPct = dir * (p.sl / p.entry - 1) * 100;
+  const tiles = [
+    ["ENTRY", fmtPrice(p.entry), "var(--gold)", "harga terakhir"],
+    ["TAKE PROFIT", fmtPrice(p.tp), "var(--green)", "+" + tpPct.toFixed(2) + "% dari entry"],
+    ["STOP LOSS", fmtPrice(p.sl), "var(--red)", slPct.toFixed(2) + "% dari entry"]
+  ];
+  el.innerHTML = '<div class="stats" style="margin:0;grid-template-columns:1fr 1fr 1fr">' +
+    tiles.map(t =>
+      '<div class="stat"><div class="k">' + t[0] + '</div>' +
+      '<div class="v" style="color:' + t[2] + '">' + t[1] + "</div>" +
+      '<div class="k" style="text-transform:none;letter-spacing:0">' + t[3] + "</div></div>"
+    ).join("") + "</div>";
+  note.textContent = "R:R 1 : 1,67 · ATR(14) " + fmtPrice(p.atr) +
+    " · SL 1,5×ATR · TP 2,5×ATR · diperbarui tiap candle ditutup — level indikatif, bukan saran keuangan.";
 }
 function updatePriceHeader() {
   if (!detailKlines.length) return;
@@ -626,6 +701,10 @@ function drawChart(kl) {
   const maxV = Math.max.apply(null, vols) || 1;
   let hi = -Infinity, lo = Infinity;
   kl.forEach(k => { hi = Math.max(hi, parseFloat(k[2])); lo = Math.min(lo, parseFloat(k[3])); });
+  if (tradePlan) {
+    hi = Math.max(hi, tradePlan.entry, tradePlan.tp, tradePlan.sl);
+    lo = Math.min(lo, tradePlan.entry, tradePlan.tp, tradePlan.sl);
+  }
   const pad = (hi - lo) * 0.07 || 1; hi += pad; lo -= pad;
   const priceH = H * 0.78, volTop = H * 0.84, volH = H * 0.14;
   const labelW = 56, cw = (W - labelW) / kl.length;
@@ -675,6 +754,27 @@ function drawChart(kl) {
   ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(0, y(last)); ctx.lineTo(W - labelW, y(last)); ctx.stroke();
   ctx.setLineDash([]);
+  // Level rencana trade: ENTRY / TP / SL
+  if (tradePlan) {
+    const levels = [
+      ["TP", tradePlan.tp, "#2ebd85"],
+      ["ENTRY", tradePlan.entry, "#e8ecf1"],
+      ["SL", tradePlan.sl, "#f6465d"]
+    ];
+    ctx.font = "bold 10px sans-serif";
+    for (const [name, val, color] of levels) {
+      const yy = y(val);
+      if (yy < 6 || yy > priceH - 2) continue;
+      ctx.strokeStyle = color;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - labelW, yy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.fillText(name, 6, yy - 4);
+      ctx.fillText(fmtPrice(val), W - labelW + 5, yy + 3);
+    }
+    ctx.font = "10px sans-serif";
+  }
   ctx.fillStyle = "#f0b90b";
   ctx.fillText("EMA20", 6, 14);
   ctx.fillStyle = "#4f8ff7";
