@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>binance-ai-future — Dokumentasi</title>
 <meta name="description" content="Sistem trading Binance USDⓈ-M Futures berbantuan AI: pemindaian semua simbol, analisis teknikal + AI multi-provider, manajemen risiko ketat, Web UI, CLI, broadcast sinyal Telegram, dan aplikasi Android D TRADE.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
   :root{
     --bg:#0b0e11; --panel:#12161c; --panel2:#171c24; --line:#232a33;
     --text:#e8ecf1; --muted:#9aa7b4; --gold:#f0b90b; --gold-dim:#c99400;
-    --green:#0ecb81; --red:#f6465d; --radius:14px;
+    --green:#0ecb81; --red:#f6465d; --radius:14px; --topbar-h:60px;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    line-height:1.65;font-size:16px}
+    line-height:1.65;font-size:16px;overflow-x:hidden}
   a{color:var(--gold);text-decoration:none}
   a:hover{text-decoration:underline}
   code{background:#1c232d;padding:.12em .4em;border-radius:6px;font-size:.88em;
@@ -24,42 +25,129 @@
     padding:14px 16px;overflow-x:auto;font-size:.86rem;line-height:1.55}
   pre code{background:none;padding:0}
   .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-  header.nav{position:sticky;top:0;z-index:10;background:rgba(11,14,17,.92);
-    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-  .nav-in{display:flex;align-items:center;gap:18px;padding:12px 0;flex-wrap:wrap}
-  .brand{font-weight:800;font-size:1.05rem;color:var(--text)}
+
+  /* ---------- Topbar / navbar (desktop) ---------- */
+  header.topbar{position:sticky;top:0;z-index:60;background:rgba(11,14,17,.92);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{display:flex;align-items:center;gap:18px;height:var(--topbar-h)}
+  .brand{font-weight:800;font-size:1.05rem;color:var(--text);white-space:nowrap}
+  .brand i{color:var(--gold);margin-right:7px}
   .brand span{color:var(--gold)}
-  .nav-links{margin-left:auto;display:flex;gap:16px;flex-wrap:wrap;font-size:.92rem}
-  .nav-links a{color:var(--muted)}
-  .nav-links a:hover{color:var(--gold);text-decoration:none}
-  .hero{padding:64px 0 40px;text-align:center;
-    background:radial-gradient(720px 300px at 50% -60px,rgba(240,185,11,.16),transparent 70%)}
-  .hero h1{font-size:2.6rem;margin:0 0 10px;letter-spacing:-.5px}
+  nav.mainnav{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
+  nav.mainnav a{color:var(--muted);padding:8px 11px;border-radius:8px;font-size:.93rem;
+    display:inline-flex;align-items:center;gap:7px}
+  nav.mainnav a i{font-size:.85rem;color:var(--gold);opacity:.85}
+  nav.mainnav a:hover{color:var(--text);background:var(--panel2);text-decoration:none}
+  .hamburger{display:none;background:none;border:1px solid var(--line);border-radius:9px;
+    color:var(--gold);font-size:1.05rem;width:42px;height:42px;cursor:pointer;flex:none}
+
+  /* ---------- Sidebar (mobile) ---------- */
+  .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;
+    pointer-events:none;transition:opacity .3s ease;z-index:70}
+  .backdrop.show{opacity:1;pointer-events:auto}
+  aside.sidebar{position:fixed;top:0;left:0;height:100dvh;width:282px;z-index:80;
+    background:var(--panel);border-right:1px solid var(--line);
+    transform:translateX(-105%);transition:transform .34s cubic-bezier(.22,.9,.3,1);
+    display:flex;flex-direction:column;padding:18px 0;overflow-y:auto}
+  aside.sidebar.open{transform:translateX(0);box-shadow:24px 0 60px rgba(0,0,0,.5)}
+  .sidebar .side-brand{font-weight:800;font-size:1.05rem;padding:2px 22px 14px;
+    border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+  .sidebar .side-brand i{color:var(--gold)}
+  .sidebar .side-brand span{color:var(--gold)}
+  .sidebar .side-close{margin-left:auto;background:none;border:none;color:var(--muted);
+    font-size:1.1rem;cursor:pointer;padding:4px}
+  .sidebar nav{display:flex;flex-direction:column;padding:12px 12px 4px;gap:2px}
+  .sidebar nav a{color:var(--text);padding:11px 12px;border-radius:10px;
+    display:flex;align-items:center;gap:12px;font-size:.97rem}
+  .sidebar nav a i{width:20px;text-align:center;color:var(--gold)}
+  .sidebar nav a:hover,.sidebar nav a:active{background:var(--panel2);text-decoration:none}
+  .sidebar .side-foot{margin-top:auto;padding:16px 22px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.82rem}
+  @media (max-width:1023px){
+    nav.mainnav{display:none}
+    .hamburger{display:inline-flex;align-items:center;justify-content:center}
+  }
+  @media (min-width:1024px){
+    aside.sidebar,.backdrop{display:none}
+  }
+
+  /* ---------- Hero + parallax ---------- */
+  .hero{position:relative;padding:86px 0 56px;text-align:center;overflow:hidden}
+  .hero-bg{position:absolute;inset:-22% 0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(760px 320px at 50% 0%,rgba(240,185,11,.17),transparent 70%),
+      radial-gradient(420px 240px at 12% 68%,rgba(14,203,129,.07),transparent 70%),
+      radial-gradient(420px 240px at 88% 62%,rgba(246,70,93,.06),transparent 70%)}
+  .hero-grid{position:absolute;inset:-30% -10%;z-index:0;pointer-events:none;opacity:.5;
+    background:
+      linear-gradient(rgba(240,185,11,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(240,185,11,.05) 1px,transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(70% 60% at 50% 40%,#000 30%,transparent 75%);
+            mask-image:radial-gradient(70% 60% at 50% 40%,#000 30%,transparent 75%)}
+  .orb{position:absolute;border-radius:50%;filter:blur(46px);z-index:0;pointer-events:none}
+  .orb.gold{width:300px;height:300px;background:rgba(240,185,11,.20);top:-70px;right:6%}
+  .orb.green{width:210px;height:210px;background:rgba(14,203,129,.13);bottom:-60px;left:4%}
+  .hero .wrap{position:relative;z-index:2}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(240,185,11,.09);
+    border:1px solid rgba(240,185,11,.35);color:var(--gold);border-radius:999px;
+    padding:5px 14px;font-size:.83rem;font-weight:600;margin-bottom:20px}
+  .hero h1{font-size:2.7rem;margin:0 0 12px;letter-spacing:-.5px;line-height:1.15}
   .hero h1 span{color:var(--gold)}
-  .hero p.lead{color:var(--muted);font-size:1.13rem;max-width:760px;margin:0 auto 26px}
+  .hero p.lead{color:var(--muted);font-size:1.13rem;max-width:780px;margin:0 auto 28px}
   .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-  .btn{display:inline-block;padding:11px 22px;border-radius:10px;font-weight:700;
-    border:1px solid var(--gold);color:#0b0e11;background:var(--gold)}
-  .btn:hover{background:var(--gold-dim);text-decoration:none}
+  .btn{display:inline-flex;align-items:center;gap:9px;padding:11px 22px;border-radius:10px;
+    font-weight:700;border:1px solid var(--gold);color:#0b0e11;background:var(--gold);
+    transition:transform .18s ease,background .18s ease}
+  .btn:hover{background:var(--gold-dim);text-decoration:none;transform:translateY(-2px)}
   .btn.ghost{background:transparent;color:var(--gold)}
-  .btn.ghost:hover{background:rgba(240,185,11,.08)}
-  .warn{max-width:860px;margin:34px auto 0;background:rgba(246,70,93,.07);
+  .btn.ghost:hover{background:rgba(240,185,11,.09)}
+  .warn{max-width:880px;margin:36px auto 0;background:rgba(246,70,93,.07);
     border:1px solid rgba(246,70,93,.4);border-radius:var(--radius);padding:14px 18px;
-    color:#f3c1c9;font-size:.95rem;text-align:left}
+    color:#f3c1c9;font-size:.95rem;text-align:left;position:relative;z-index:2}
   .warn strong{color:#ff8fa0}
-  section{padding:44px 0 8px}
-  h2{font-size:1.55rem;margin:0 0 8px;padding-bottom:10px;border-bottom:2px solid var(--line)}
-  h2 .no{color:var(--gold);margin-right:8px}
+
+  /* ---------- Parallax band ---------- */
+  .band{position:relative;height:300px;overflow:hidden;border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);margin-top:52px}
+  .band img{position:absolute;left:0;top:-28%;width:100%;height:156%;object-fit:cover;
+    object-position:center 30%;will-change:transform}
+  .band .veil{position:absolute;inset:0;background:linear-gradient(180deg,
+    rgba(11,14,17,.82),rgba(11,14,17,.45) 50%,rgba(11,14,17,.85))}
+  .band .band-text{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:0 20px;z-index:2}
+  .band .band-text .big{font-size:1.65rem;font-weight:800;letter-spacing:-.3px}
+  .band .band-text .big span{color:var(--gold)}
+  .band .band-text .small{color:var(--muted);margin-top:6px;font-size:.98rem}
+  @media (max-width:640px){ .band{height:230px} .band .band-text .big{font-size:1.25rem} }
+
+  /* ---------- Sections ---------- */
+  section{padding:46px 0 8px}
+  h2{font-size:1.55rem;margin:0 0 8px;padding-bottom:10px;border-bottom:2px solid var(--line);
+    display:flex;align-items:center;gap:11px}
+  h2 .no{color:var(--gold);font-size:1.05rem;font-weight:800}
+  h2 i{color:var(--gold);font-size:1.15rem}
   h3{font-size:1.08rem;margin:22px 0 6px}
   p.sub{color:var(--muted);margin:0 0 18px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-  .card h3{margin-top:0;color:var(--gold);font-size:1rem}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;transition:transform .25s ease,border-color .25s ease}
+  .card:hover{transform:translateY(-4px);border-color:rgba(240,185,11,.45)}
+  .card h3{margin-top:0;color:var(--text);font-size:1rem;display:flex;align-items:center;gap:10px}
+  .card h3 i{color:var(--gold);font-size:1.05rem;width:22px;text-align:center}
   .card p{margin:0;color:var(--muted);font-size:.94rem}
+
+  /* ---------- Screenshots: 2 kolom di desktop ---------- */
+  .shots{display:grid;grid-template-columns:1fr;gap:16px}
+  @media (min-width:900px){ .shots{grid-template-columns:1fr 1fr} }
   .shot{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-    padding:12px;margin:0 0 16px}
+    padding:12px;margin:0;transition:transform .25s ease,border-color .25s ease}
+  .shot:hover{transform:translateY(-3px);border-color:rgba(240,185,11,.4)}
   .shot img{width:100%;border-radius:8px;display:block}
-  .shot figcaption{color:var(--muted);font-size:.9rem;padding-top:10px}
+  .shot figcaption{color:var(--muted);font-size:.9rem;padding-top:10px;
+    display:flex;gap:8px;align-items:flex-start}
+  .shot figcaption i{color:var(--gold);margin-top:3px}
+
   table{width:100%;border-collapse:collapse;font-size:.94rem;margin:10px 0 6px}
   th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
   th{background:var(--panel2);color:var(--gold)}
@@ -69,44 +157,84 @@
     font-size:.85rem;color:#cfd8e0;white-space:pre}
   .tag{display:inline-block;background:var(--panel2);border:1px solid var(--line);
     border-radius:999px;padding:2px 11px;font-size:.8rem;color:var(--muted);margin:0 5px 6px 0}
-  .ok{color:var(--green)} .bad{color:var(--red)}
+  .tag i{color:var(--gold);margin-right:5px}
   footer{margin-top:56px;border-top:1px solid var(--line);padding:26px 0 40px;
     color:var(--muted);font-size:.9rem;text-align:center}
-  @media (max-width:640px){ .hero h1{font-size:1.9rem} .hero{padding:44px 0 28px} }
+  footer a i{margin-right:4px}
+
+  /* ---------- Animasi masuk (scroll reveal) ---------- */
+  .reveal{opacity:0;transform:translateY(26px);
+    transition:opacity .7s ease,transform .7s cubic-bezier(.22,.9,.3,1)}
+  .reveal.in{opacity:1;transform:none}
+  .reveal.d1{transition-delay:.06s}.reveal.d2{transition-delay:.12s}.reveal.d3{transition-delay:.18s}
+  @media (max-width:640px){ .hero h1{font-size:1.95rem} .hero{padding:58px 0 40px} }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto}
+    .reveal{opacity:1;transform:none;transition:none}
+    .btn,.card,.shot{transition:none}
+    aside.sidebar{transition:none}
+  }
 </style>
 </head>
 <body>
 
-<header class="nav">
-  <div class="wrap nav-in">
-    <div class="brand">binance-<span>ai</span>-future</div>
-    <nav class="nav-links">
-      <a href="#fitur">Fitur</a>
-      <a href="#instalasi">Instalasi</a>
-      <a href="#konfigurasi">Konfigurasi</a>
-      <a href="#webui">Web UI</a>
-      <a href="#cli">CLI</a>
-      <a href="#android">Android</a>
-      <a href="#keamanan">Keamanan</a>
-      <a href="https://github.com/devcoderama/binance-ai-future">GitHub</a>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <button class="hamburger" id="hamburger" aria-label="Buka menu"><i class="fa-solid fa-bars"></i></button>
+    <div class="brand"><i class="fa-solid fa-chart-line"></i>binance-<span>ai</span>-future</div>
+    <nav class="mainnav">
+      <a href="#fitur"><i class="fa-solid fa-wand-magic-sparkles"></i>Fitur</a>
+      <a href="#instalasi"><i class="fa-solid fa-download"></i>Instalasi</a>
+      <a href="#konfigurasi"><i class="fa-solid fa-gear"></i>Konfigurasi</a>
+      <a href="#webui"><i class="fa-solid fa-display"></i>Web UI</a>
+      <a href="#cli"><i class="fa-solid fa-terminal"></i>CLI</a>
+      <a href="#android"><i class="fa-brands fa-android"></i>Android</a>
+      <a href="#keamanan"><i class="fa-solid fa-shield-halved"></i>Keamanan</a>
+      <a href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>GitHub</a>
     </nav>
   </div>
 </header>
 
+<div class="backdrop" id="backdrop"></div>
+<aside class="sidebar" id="sidebar" aria-label="Menu samping">
+  <div class="side-brand"><i class="fa-solid fa-chart-line"></i>binance-<span>ai</span>-future
+    <button class="side-close" id="sideClose" aria-label="Tutup menu"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <nav>
+    <a href="#fitur"><i class="fa-solid fa-wand-magic-sparkles"></i>Fitur Utama</a>
+    <a href="#arsitektur"><i class="fa-solid fa-diagram-project"></i>Arsitektur</a>
+    <a href="#instalasi"><i class="fa-solid fa-download"></i>Instalasi</a>
+    <a href="#konfigurasi"><i class="fa-solid fa-gear"></i>Konfigurasi</a>
+    <a href="#webui"><i class="fa-solid fa-display"></i>Web UI</a>
+    <a href="#cli"><i class="fa-solid fa-terminal"></i>Terminal CLI</a>
+    <a href="#android"><i class="fa-brands fa-android"></i>D TRADE Android</a>
+    <a href="#keamanan"><i class="fa-solid fa-shield-halved"></i>Keamanan</a>
+    <a href="#lisensi"><i class="fa-solid fa-scale-balanced"></i>Lisensi</a>
+    <a href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Repositori GitHub</a>
+    <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.1.0"><i class="fa-solid fa-box-open"></i>Release v1.1.0</a>
+  </nav>
+  <div class="side-foot">Dokumentasi binance-ai-future.<br>Bukan nasihat keuangan.</div>
+</aside>
+
 <div class="hero">
+  <div class="hero-bg" data-parallax="0.25"></div>
+  <div class="hero-grid" data-parallax="0.12"></div>
+  <div class="orb gold" data-parallax="0.45"></div>
+  <div class="orb green" data-parallax="0.35"></div>
   <div class="wrap">
+    <div class="hero-badge"><i class="fa-solid fa-bolt"></i> Binance USDⓈ-M Futures · AI Multi-Provider</div>
     <h1>Trading Futures Berbantuan <span>AI</span></h1>
     <p class="lead">Sistem trading <strong>Binance USDⓈ-M Futures</strong> yang memindai
     <strong>semua simbol perpetual</strong>, menganalisisnya dengan indikator teknikal,
     meminta penilaian kedua dari AI multi-provider, lalu mengeksekusi order hanya setelah
     lolos <strong>manajemen risiko</strong> yang ketat.</p>
     <div class="cta">
-      <a class="btn" href="https://github.com/devcoderama/binance-ai-future">Lihat di GitHub</a>
-      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.1.0">Unduh D TRADE v1.1.0 (APK)</a>
-      <a class="btn ghost" href="#instalasi">Mulai Cepat</a>
+      <a class="btn" href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Lihat di GitHub</a>
+      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.1.0"><i class="fa-brands fa-android"></i>Unduh D TRADE v1.1.0</a>
+      <a class="btn ghost" href="#instalasi"><i class="fa-solid fa-rocket"></i>Mulai Cepat</a>
     </div>
     <div class="warn">
-      <strong>⚠️ Peringatan risiko.</strong> Trading futures berlevrage dapat menghilangkan
+      <strong><i class="fa-solid fa-triangle-exclamation"></i> Peringatan risiko.</strong> Trading futures berlevrage dapat menghilangkan
       seluruh modal Anda. Software ini adalah alat bantu analisis &amp; eksekusi — bukan
       nasihat keuangan dan bukan jaminan profit. Mode bawaan adalah <strong>dry-run</strong>
       (simulasi). Gunakan mode live hanya dengan dana yang siap Anda rugikan, dan selalu
@@ -115,29 +243,38 @@
   </div>
 </div>
 
+<div class="band" aria-hidden="true">
+  <img id="bandImg" src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-analysis.png" alt="">
+  <div class="veil"></div>
+  <div class="band-text">
+    <div class="big">Satu Core, <span>Dua Antarmuka</span></div>
+    <div class="small">Web UI &amp; Terminal CLI di atas mesin analisis dan risiko yang sama.</div>
+  </div>
+</div>
+
 <div class="wrap">
 
 <section id="fitur">
-  <h2><span class="no">01</span>Fitur Utama</h2>
+  <h2><span class="no">01</span><i class="fa-solid fa-wand-magic-sparkles"></i>Fitur Utama</h2>
   <p class="sub">Satu core trading, dua antarmuka (Web UI &amp; CLI), plus broadcast dan aplikasi Android.</p>
   <div class="grid">
-    <div class="card"><h3>Multi-simbol</h3><p>Daftar simbol dibaca langsung dari <code>exchangeInfo</code> Binance saat runtime — simbol baru otomatis ikut terpindai, tidak terpaku pada satu simbol.</p></div>
-    <div class="card"><h3>Analisis teknikal lengkap</h3><p>EMA, RSI, MACD, Bollinger Bands, ATR, ADX, VWAP, EMA200, klasifikasi regime pasar, dan konteks multi-timeframe (1h/4h/1d) dirangkum menjadi skor teknikal per simbol.</p></div>
-    <div class="card"><h3>AI multi-provider</h3><p>Snapshot pasar dinilai AI dan dikembalikan sebagai keputusan JSON terstruktur. Provider: <strong>BangunWeb</strong> (bawaan), OpenAI, Anthropic, DeepSeek, Grok (xAI), Nous Portal, atau gateway OpenAI-compatible lain — bisa diganti saat runtime dari Web UI / CLI tanpa restart.</p></div>
-    <div class="card"><h3>Manajemen risiko wajib</h3><p>Position sizing berbasis % risiko, validasi arah SL/TP, R/R minimum 1,5, batas eksposur, kunci rugi harian/mingguan, dan proteksi rentetan rugi. Tidak ada jalur eksekusi yang melewati modul ini.</p></div>
-    <div class="card"><h3>Eksekusi aman</h3><p>State machine persisten dengan idempotensi, verifikasi fill, SL/TP via Algo Order API, rekonsiliasi posisi, dan emergency close bila perlindungan gagal dipasang. Dry-run mensimulasikan semuanya tanpa menyentuh akun.</p></div>
-    <div class="card"><h3>Broadcast sinyal Telegram</h3><p>Pemindaian berkala: simbol dengan |skor teknikal| ≥ 50 dianalisis AI; hanya sinyal LONG/SHORT terkonfirmasi yang dikirim sebagai foto grafik + caption ke channel Telegram Anda.</p></div>
-    <div class="card"><h3>Backtest &amp; riset</h3><p>Mesin backtest deterministik (slippage, funding, gap-through-stop) dengan Sharpe/Sortino, plus riset walk-forward dan baseline acak lewat CLI <code>research</code>.</p></div>
-    <div class="card"><h3>Jurnal &amp; database</h3><p>Setiap eksekusi dan keputusan AI tercatat di jurnal JSONL; opsional dicerminkan ke PostgreSQL (Supabase) lewat <code>DATABASE_URL</code>.</p></div>
-    <div class="card"><h3>Cross-platform</h3><p>Python murni — berjalan di macOS, Windows, Linux. Untuk ponsel: Web UI responsif di browser, atau aplikasi Android <strong>D TRADE</strong>.</p></div>
+    <div class="card reveal"><h3><i class="fa-solid fa-globe"></i>Multi-simbol</h3><p>Daftar simbol dibaca langsung dari <code>exchangeInfo</code> Binance saat runtime — simbol baru otomatis ikut terpindai, tidak terpaku pada satu simbol.</p></div>
+    <div class="card reveal d1"><h3><i class="fa-solid fa-chart-line"></i>Analisis teknikal lengkap</h3><p>EMA, RSI, MACD, Bollinger Bands, ATR, ADX, VWAP, EMA200, klasifikasi regime pasar, dan konteks multi-timeframe (1h/4h/1d) dirangkum menjadi skor teknikal per simbol.</p></div>
+    <div class="card reveal d2"><h3><i class="fa-solid fa-robot"></i>AI multi-provider</h3><p>Snapshot pasar dinilai AI dan dikembalikan sebagai keputusan JSON terstruktur. Provider: <strong>BangunWeb</strong> (bawaan), OpenAI, Anthropic, DeepSeek, Grok (xAI), Nous Portal, atau gateway OpenAI-compatible lain — bisa diganti saat runtime dari Web UI / CLI tanpa restart.</p></div>
+    <div class="card reveal"><h3><i class="fa-solid fa-shield-halved"></i>Manajemen risiko wajib</h3><p>Position sizing berbasis % risiko, validasi arah SL/TP, R/R minimum 1,5, batas eksposur, kunci rugi harian/mingguan, dan proteksi rentetan rugi. Tidak ada jalur eksekusi yang melewati modul ini.</p></div>
+    <div class="card reveal d1"><h3><i class="fa-solid fa-bolt"></i>Eksekusi aman</h3><p>State machine persisten dengan idempotensi, verifikasi fill, SL/TP via Algo Order API, rekonsiliasi posisi, dan emergency close bila perlindungan gagal dipasang. Dry-run mensimulasikan semuanya tanpa menyentuh akun.</p></div>
+    <div class="card reveal d2"><h3><i class="fa-brands fa-telegram"></i>Broadcast sinyal Telegram</h3><p>Pemindaian berkala: simbol dengan |skor teknikal| ≥ 50 dianalisis AI; hanya sinyal LONG/SHORT terkonfirmasi yang dikirim sebagai foto grafik + caption ke channel Telegram Anda.</p></div>
+    <div class="card reveal"><h3><i class="fa-solid fa-flask"></i>Backtest &amp; riset</h3><p>Mesin backtest deterministik (slippage, funding, gap-through-stop) dengan Sharpe/Sortino, plus riset walk-forward dan baseline acak lewat CLI <code>research</code>.</p></div>
+    <div class="card reveal d1"><h3><i class="fa-solid fa-book"></i>Jurnal &amp; database</h3><p>Setiap eksekusi dan keputusan AI tercatat di jurnal JSONL; opsional dicerminkan ke PostgreSQL (Supabase) lewat <code>DATABASE_URL</code>.</p></div>
+    <div class="card reveal d2"><h3><i class="fa-solid fa-laptop-code"></i>Cross-platform</h3><p>Python murni — berjalan di macOS, Windows, Linux. Untuk ponsel: Web UI responsif di browser, atau aplikasi Android <strong>D TRADE</strong>.</p></div>
   </div>
 </section>
 
 <section id="arsitektur">
-  <h2><span class="no">02</span>Arsitektur Singkat</h2>
+  <h2><span class="no">02</span><i class="fa-solid fa-diagram-project"></i>Arsitektur Singkat</h2>
   <p class="sub">Peta lengkap folder dan tanggung jawab tiap modul ada di
   <a href="https://github.com/devcoderama/binance-ai-future/blob/main/STRUKTUR.MD">STRUKTUR.MD</a>.</p>
-  <div class="flow">Binance REST/WS ─► binance_client ─► indicators ─► strategy ─► risk ─► executor
+  <div class="flow reveal">Binance REST/WS ─► binance_client ─► indicators ─► strategy ─► risk ─► executor
                                           ▲             │
                                      ai_providers (BangunWeb &amp; lainnya)
 
@@ -146,17 +283,17 @@ core/service.py (TradingService) adalah satu-satunya jalur masuk eksekusi.</div>
 </section>
 
 <section id="instalasi">
-  <h2><span class="no">03</span>Instalasi &amp; Mulai Cepat</h2>
+  <h2><span class="no">03</span><i class="fa-solid fa-download"></i>Instalasi &amp; Mulai Cepat</h2>
   <h3>Persyaratan</h3>
-  <p><span class="tag">Python 3.10+</span><span class="tag">Akun Binance — Futures USDⓈ-M aktif</span><span class="tag">API key berizin Futures</span><span class="tag">Kunci AI Router BangunWeb (bwr_live_…)</span></p>
+  <p><span class="tag"><i class="fa-brands fa-python"></i>Python 3.10+</span><span class="tag"><i class="fa-solid fa-coins"></i>Akun Binance — Futures USDⓈ-M aktif</span><span class="tag"><i class="fa-solid fa-key"></i>API key berizin Futures</span><span class="tag"><i class="fa-solid fa-robot"></i>Kunci AI Router BangunWeb (bwr_live_…)</span></p>
   <h3>macOS / Linux</h3>
-  <pre><code>git clone https://github.com/devcoderama/binance-ai-future.git
+  <pre class="reveal"><code>git clone https://github.com/devcoderama/binance-ai-future.git
 cd binance-ai-future
 python3 -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # lalu isi .env dengan kunci Anda</code></pre>
   <h3>Jalankan</h3>
-  <pre><code>python run.py web          # Web UI (bawaan: http://127.0.0.1:8000)
+  <pre class="reveal"><code>python run.py web          # Web UI (bawaan: http://127.0.0.1:8000)
 python run.py cli          # Terminal CLI interaktif
 python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pre>
   <p class="sub">Untuk Windows dan detail lain, lihat
@@ -164,10 +301,10 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
 </section>
 
 <section id="konfigurasi">
-  <h2><span class="no">04</span>Konfigurasi (.env)</h2>
+  <h2><span class="no">04</span><i class="fa-solid fa-gear"></i>Konfigurasi (.env)</h2>
   <p class="sub">Semua pengaturan lewat berkas <code>.env</code> (lihat <code>.env.example</code>).
   Yang terpenting:</p>
-  <table>
+  <table class="reveal">
     <tr><th>Variabel</th><th>Keterangan</th></tr>
     <tr><td><code>BINANCE_API_KEY</code> / <code>BINANCE_API_SECRET</code></td><td>Kunci API Binance Futures Anda.</td></tr>
     <tr><td><code>BINANCE_TESTNET</code></td><td><code>true</code> untuk testnet (disarankan selama pengujian).</td></tr>
@@ -181,27 +318,29 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
 </section>
 
 <section id="webui">
-  <h2><span class="no">05</span>Web UI</h2>
+  <h2><span class="no">05</span><i class="fa-solid fa-display"></i>Web UI</h2>
   <p class="sub">Dashboard responsif bergaya Binance: sidebar, kartu statistik, workspace analisis
   yang bisa diubah ukurannya (grafik Lightweight Charts dengan EMA20/50 + volume, gauge sentimen,
   panel sinyal), data live via WebSocket, dan halaman backtest dengan kurva ekuitas.</p>
-  <figure class="shot">
-    <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-dashboard.png" alt="Web UI — Dasbor">
-    <figcaption>Web UI — Dasbor (data Binance Futures Testnet, mode dry-run).</figcaption>
-  </figure>
-  <figure class="shot">
-    <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-analysis.png" alt="Web UI — Analisis">
-    <figcaption>Web UI — Workspace analisis: grafik candlestick interaktif, metrik, dan backtest.</figcaption>
-  </figure>
-  <figure class="shot">
-    <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-mobile.png" alt="Web UI — Mobile">
-    <figcaption>Web UI — Tampilan mobile dengan navigasi bawah.</figcaption>
-  </figure>
+  <div class="shots">
+    <figure class="shot reveal">
+      <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-dashboard.png" alt="Web UI — Dasbor" loading="lazy">
+      <figcaption><i class="fa-solid fa-gauge-high"></i>Web UI — Dasbor (data Binance Futures Testnet, mode dry-run).</figcaption>
+    </figure>
+    <figure class="shot reveal d1">
+      <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-analysis.png" alt="Web UI — Analisis" loading="lazy">
+      <figcaption><i class="fa-solid fa-chart-area"></i>Web UI — Workspace analisis: grafik candlestick interaktif, metrik, dan backtest.</figcaption>
+    </figure>
+    <figure class="shot reveal">
+      <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/web-mobile.png" alt="Web UI — Mobile" loading="lazy">
+      <figcaption><i class="fa-solid fa-mobile-screen"></i>Web UI — Tampilan mobile dengan navigasi bawah.</figcaption>
+    </figure>
+  </div>
 </section>
 
 <section id="cli">
-  <h2><span class="no">06</span>Terminal CLI</h2>
-  <table>
+  <h2><span class="no">06</span><i class="fa-solid fa-terminal"></i>Terminal CLI</h2>
+  <table class="reveal">
     <tr><th>Perintah</th><th>Fungsi</th></tr>
     <tr><td><code>analyze &lt;SIMBOL&gt;</code></td><td>Analisis teknikal + AI satu simbol.</td></tr>
     <tr><td><code>scan</code></td><td>Pindai semua simbol, urutkan menurut |skor|.</td></tr>
@@ -215,17 +354,23 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
     <tr><td><code>performance</code></td><td>Ringkasan kinerja dari jurnal perdagangan.</td></tr>
     <tr><td><code>selfcheck</code></td><td>Periksa konfigurasi, konektivitas bertanda tangan, dan mode posisi.</td></tr>
   </table>
-  <figure class="shot">
-    <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/cli-dashboard.png" alt="CLI — Dashboard interaktif">
-    <figcaption>CLI — Dashboard interaktif (Textual).</figcaption>
-  </figure>
+  <div class="shots">
+    <figure class="shot reveal">
+      <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/cli-dashboard.png" alt="CLI — Dashboard interaktif" loading="lazy">
+      <figcaption><i class="fa-solid fa-table-columns"></i>CLI — Dashboard interaktif (Textual).</figcaption>
+    </figure>
+    <figure class="shot reveal d1">
+      <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/cli-analyze.png" alt="CLI — analyze BTCUSDT" loading="lazy">
+      <figcaption><i class="fa-solid fa-magnifying-glass-chart"></i>CLI — <code>analyze BTCUSDT</code>: skor teknikal, penilaian AI, dan level SL/TP.</figcaption>
+    </figure>
+  </div>
 </section>
 
 <section id="android">
-  <h2><span class="no">07</span>D TRADE — Aplikasi Android</h2>
+  <h2><span class="no">07</span><i class="fa-brands fa-android"></i>D TRADE — Aplikasi Android</h2>
   <p>Aplikasi Android ringan (WebView) untuk membuka Web UI dari ponsel Anda di jaringan yang sama.
   Server backend tetap berjalan di komputer/VPS Anda; aplikasi hanya antarmuka.</p>
-  <p><span class="tag">v1.1.0</span><span class="tag">versionCode 2</span><span class="tag">minSdk 24</span><span class="tag">44 KB</span></p>
+  <p><span class="tag"><i class="fa-solid fa-tag"></i>v1.1.0</span><span class="tag"><i class="fa-solid fa-code-commit"></i>versionCode 2</span><span class="tag"><i class="fa-solid fa-mobile-screen"></i>minSdk 24</span><span class="tag"><i class="fa-solid fa-file-zipper"></i>44 KB</span></p>
   <p>Unduh APK dari
   <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.1.0">GitHub Release v1.1.0</a>,
   pasang, lalu atur alamat server lewat menu (mis. <code>http://192.168.1.10:8000</code>).
@@ -238,16 +383,16 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
 </section>
 
 <section id="keamanan">
-  <h2><span class="no">08</span>Keamanan &amp; Praktik Aman</h2>
+  <h2><span class="no">08</span><i class="fa-solid fa-shield-halved"></i>Keamanan &amp; Praktik Aman</h2>
   <div class="grid">
-    <div class="card"><h3>Web aman secara bawaan</h3><p>Token admin/viewer (<code>WEB_API_TOKEN</code>/<code>WEB_VIEWER_TOKEN</code>), validasi Host &amp; Origin, batas laju login, CORS terbatas, dan penolakan start live di host publik tanpa token.</p></div>
-    <div class="card"><h3>Rahasia tidak bocor</h3><p>Kunci API tidak pernah ditulis ke log (redaksi otomatis termasuk traceback); <code>.env</code> tidak ikut ke repo. Batasi API key Binance Anda per IP dan tanpa izin penarikan.</p></div>
-    <div class="card"><h3>Uji dulu, live kemudian</h3><p>Alur yang disarankan: dry-run → testnet → forward test beberapa minggu → live dengan risiko kecil. Fitur strategi lanjutan (gerbang MTF/regime, position manager) bawaan-nya nonaktif dan diaktifkan satu per satu.</p></div>
+    <div class="card reveal"><h3><i class="fa-solid fa-lock"></i>Web aman secara bawaan</h3><p>Token admin/viewer (<code>WEB_API_TOKEN</code>/<code>WEB_VIEWER_TOKEN</code>), validasi Host &amp; Origin, batas laju login, CORS terbatas, dan penolakan start live di host publik tanpa token.</p></div>
+    <div class="card reveal d1"><h3><i class="fa-solid fa-eye-slash"></i>Rahasia tidak bocor</h3><p>Kunci API tidak pernah ditulis ke log (redaksi otomatis termasuk traceback); <code>.env</code> tidak ikut ke repo. Batasi API key Binance Anda per IP dan tanpa izin penarikan.</p></div>
+    <div class="card reveal d2"><h3><i class="fa-solid fa-stairs"></i>Uji dulu, live kemudian</h3><p>Alur yang disarankan: dry-run → testnet → forward test beberapa minggu → live dengan risiko kecil. Fitur strategi lanjutan (gerbang MTF/regime, position manager) bawaan-nya nonaktif dan diaktifkan satu per satu.</p></div>
   </div>
 </section>
 
 <section id="lisensi">
-  <h2><span class="no">09</span>Lisensi &amp; Kontribusi</h2>
+  <h2><span class="no">09</span><i class="fa-solid fa-scale-balanced"></i>Lisensi &amp; Kontribusi</h2>
   <p>Dirilis di bawah <a href="https://github.com/devcoderama/binance-ai-future/blob/main/LICENSE">Lisensi MIT</a>
   © 2026 Ramadhan Wardiyana (devcoderama) dan kontributor. Isu dan pull request dipersilakan di
   <a href="https://github.com/devcoderama/binance-ai-future">repositori GitHub</a>.</p>
@@ -258,12 +403,88 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
 <footer>
   <div class="wrap">
     binance-ai-future — dokumentasi ·
-    <a href="https://github.com/devcoderama/binance-ai-future">GitHub</a> ·
-    <a href="https://github.com/devcoderama/binance-ai-future/releases">Releases</a> ·
-    <a href="https://bangunweb.com/ai/docs">BangunWeb AI</a><br>
+    <a href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>GitHub</a> ·
+    <a href="https://github.com/devcoderama/binance-ai-future/releases"><i class="fa-solid fa-box-open"></i>Releases</a> ·
+    <a href="https://bangunweb.com/ai/docs"><i class="fa-solid fa-robot"></i>BangunWeb AI</a><br>
     Bukan nasihat keuangan. Trading futures berisiko tinggi — gunakan dengan bijak.
   </div>
 </footer>
+
+<script>
+(function () {
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ----- Sidebar mobile ----- */
+  var sidebar = document.getElementById("sidebar");
+  var backdrop = document.getElementById("backdrop");
+  function openSide() {
+    sidebar.classList.add("open");
+    backdrop.classList.add("show");
+    document.body.style.overflow = "hidden";
+  }
+  function closeSide() {
+    sidebar.classList.remove("open");
+    backdrop.classList.remove("show");
+    document.body.style.overflow = "";
+  }
+  document.getElementById("hamburger").addEventListener("click", openSide);
+  document.getElementById("sideClose").addEventListener("click", closeSide);
+  backdrop.addEventListener("click", closeSide);
+  sidebar.querySelectorAll("a").forEach(function (a) {
+    a.addEventListener("click", closeSide);
+  });
+
+  /* ----- Scroll reveal ----- */
+  var revealEls = document.querySelectorAll(".reveal");
+  if (reduce || !("IntersectionObserver" in window)) {
+    revealEls.forEach(function (el) { el.classList.add("in"); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          e.target.classList.add("in");
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    revealEls.forEach(function (el) { io.observe(el); });
+  }
+
+  /* ----- Parallax ----- */
+  if (reduce) return;
+  var layers = Array.prototype.slice.call(document.querySelectorAll("[data-parallax]"));
+  var bandImg = document.getElementById("bandImg");
+  var band = bandImg ? bandImg.parentElement : null;
+  var ticking = false;
+  function update() {
+    ticking = false;
+    var vh = window.innerHeight;
+    layers.forEach(function (el) {
+      var r = el.parentElement.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) return;
+      var speed = parseFloat(el.getAttribute("data-parallax")) || 0.2;
+      var offset = (r.top + r.height / 2 - vh / 2) * speed;
+      el.style.transform = "translateY(" + offset.toFixed(1) + "px)";
+    });
+    if (band && bandImg) {
+      var b = band.getBoundingClientRect();
+      if (b.bottom > 0 && b.top < vh) {
+        var progress = (b.top + b.height / 2 - vh / 2) / vh; // -0.5 .. 0.5 sekitar tengah layar
+        bandImg.style.transform = "translateY(" + (progress * -46).toFixed(1) + "px)";
+      }
+    }
+  }
+  function onScroll() {
+    if (!ticking) {
+      ticking = true;
+      window.requestAnimationFrame(update);
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  update();
+})();
+</script>
 
 </body>
 </html>
