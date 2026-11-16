@@ -2,6 +2,7 @@ package com.devcoderama.dtrade
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -168,6 +169,77 @@ class MainActivity : Activity() {
         } else {
             webView.restoreState(savedInstanceState)
         }
+
+        // v1.9.0: cek pembaruan WAJIB setiap aplikasi dibuka.
+        checkForUpdate()
+    }
+
+    /**
+     * Cek rilis terbaru D TRADE di GitHub (API publik, tanpa kunci).
+     * Bila versi terbaru lebih tinggi dari yang terpasang, tampilkan
+     * dialog yang TIDAK bisa ditutup selain dengan mengunduh versi
+     * terbaru. Semua kegagalan (offline, API berubah, dsb.) diabaikan
+     * diam-diam — aplikasi tidak pernah terkunci hanya karena cek gagal.
+     */
+    private fun checkForUpdate() {
+        Thread {
+            try {
+                val conn = URL(
+                    "https://api.github.com/repos/devcoderama/binance-ai-future/releases/latest"
+                ).openConnection() as HttpURLConnection
+                conn.setRequestProperty("User-Agent", "D-Trade-Android")
+                conn.setRequestProperty("Accept", "application/vnd.github+json")
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                if (conn.responseCode != 200) return@Thread
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                val latest = json.optString("tag_name").removePrefix("v")
+                val page = json.optString("html_url")
+                @Suppress("DEPRECATION")
+                val current = packageManager.getPackageInfo(packageName, 0)
+                    .versionName ?: "0"
+                if (page.isNotEmpty() && isNewerVersion(latest, current)) {
+                    runOnUiThread { showUpdateDialog(latest, current, page) }
+                }
+            } catch (e: Exception) {
+                /* abaikan — jangan pernah mengunci pengguna karena cek gagal */
+            }
+        }.start()
+    }
+
+    /** Bandingkan versi semver sederhana "a.b.c" per komponen angka. */
+    private fun isNewerVersion(latest: String, current: String): Boolean {
+        val l = latest.split(".").map { it.toIntOrNull() ?: 0 }
+        val c = current.split(".").map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(l.size, c.size)) {
+            val lv = l.getOrElse(i) { 0 }
+            val cv = c.getOrElse(i) { 0 }
+            if (lv != cv) return lv > cv
+        }
+        return false
+    }
+
+    private fun showUpdateDialog(latest: String, current: String, page: String) {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle("Pembaruan Wajib Tersedia")
+            .setMessage(
+                "Versi terbaru D TRADE v$latest sudah tersedia " +
+                    "(versi terpasang: v$current).\n\n" +
+                    "Perbarui sekarang untuk melanjutkan menggunakan aplikasi."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Unduh Versi Terbaru") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(page)))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Tidak ada browser untuk membuka unduhan",
+                        Toast.LENGTH_LONG).show()
+                }
+                // Tampilkan lagi sepulang dari browser: pembaruan bersifat wajib.
+                showUpdateDialog(latest, current, page)
+            }
+            .show()
     }
 
     private fun serverUrl(): String {
@@ -268,8 +340,9 @@ class MainActivity : Activity() {
      * Jembatan JavaScript untuk halaman mode mandiri. Permukaan yang
      * diekspos sengaja sempit dan read-only:
      * - fetch(): GET https HANYA ke host API publik Binance, host RSS
-     *   berita crypto, dan endpoint terjemahan Google (daftar-izin di
-     *   bawah); hasil dikembalikan sebagai teks lewat __apiResolve.
+     *   berita, endpoint terjemahan Google, dan Yahoo Finance untuk data
+     *   saham (daftar-izin di bawah); hasil dikembalikan sebagai teks
+     *   lewat __apiResolve.
      * - getServerUrl(): alamat server yang dikonfigurasi (untuk label).
      * - openServer(): kembali memuat Web UI server.
      * - openExternal(): membuka tautan https (artikel berita) di browser
@@ -286,7 +359,7 @@ class MainActivity : Activity() {
                     val parsed = URL(url)
                     if (parsed.protocol != "https" ||
                         (parsed.host !in BINANCE_HOSTS && parsed.host !in NEWS_HOSTS &&
-                            parsed.host !in TRANSLATE_HOSTS)
+                            parsed.host !in TRANSLATE_HOSTS && parsed.host !in STOCK_HOSTS)
                     ) {
                         throw SecurityException("host tidak diizinkan")
                     }
@@ -374,11 +447,18 @@ class MainActivity : Activity() {
             "cryptopotato.com", "www.theblock.co", "u.today",
             "ambcrypto.com", "beincrypto.com", "bitcoinmagazine.com",
             "cryptoslate.com", "www.newsbtc.com",
-            "nftplazas.com", "nftnow.com"
+            "nftplazas.com", "nftnow.com",
+            "www.cnbcindonesia.com", "finance.detik.com", "www.idxchannel.com",
+            "news.google.com"
         )
 
         /** Endpoint terjemahan Google (EN→ID) untuk tab Berita (v1.7.0). */
         private val TRANSLATE_HOSTS = setOf("translate.googleapis.com")
+
+        /** Yahoo Finance — data harian saham IDX & global (v1.9.0). */
+        private val STOCK_HOSTS = setOf(
+            "query1.finance.yahoo.com", "query2.finance.yahoo.com"
+        )
 
         private const val MENU_HOME = 1
         private const val MENU_RELOAD = 2

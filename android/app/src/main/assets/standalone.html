@@ -137,6 +137,12 @@
   .rhero{width:100%;border-radius:12px;margin:6px 0 10px;display:block}
   .article p{line-height:1.68;color:#d7dee6;margin:0 0 14px;font-size:.97rem}
   .article h3{font-size:1.02rem;margin:18px 0 8px;color:var(--text)}
+  /* ===== Pemilih market (v1.9.0) ===== */
+  .mktseg{display:flex;gap:6px;padding:12px 14px 0}
+  .mktseg button{flex:1;padding:9px 4px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel);color:var(--muted);font-weight:700;font-size:.85rem;cursor:pointer}
+  .mktseg button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
+  .sigsub{padding:14px 14px 4px;font-weight:800;font-size:.9rem;color:var(--text)}
   .hidden{display:none !important}
 </style>
 <link rel="stylesheet" href="fa/css/all.min.css">
@@ -146,17 +152,18 @@
 <div class="top">
   <div class="row1">
     <div class="logo">D <span>TRADE</span> · Mandiri</div>
-    <div class="mode" role="group" aria-label="Jaringan Binance">
-      <button id="btnMainnet" class="on">Mainnet</button>
-      <button id="btnTestnet">Testnet</button>
-    </div>
     <button class="iconbtn" id="btnRefresh" aria-label="Muat ulang"><i class="fa-solid fa-rotate-right"></i></button>
   </div>
 </div>
 
 <div id="listView">
+  <div class="mktseg" id="mktSeg">
+    <button data-mkt="crypto" class="on">Crypto</button>
+    <button data-mkt="idx">Saham IDX</button>
+    <button data-mkt="global">Saham Global</button>
+  </div>
   <div class="controls">
-    <input id="q" type="search" placeholder="Cari simbol… (cth: BTC)" autocomplete="off">
+    <input id="q" type="search" placeholder="Cari… (cth: BTC, BBCA, AAPL)" autocomplete="off">
     <select id="sort">
       <option value="volume">Volume 24j</option>
       <option value="signal">Sinyal terkuat</option>
@@ -206,8 +213,12 @@
     <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
   </div>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
-  <div class="foot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
+  <div class="foot" id="dFoot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
   Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
+  <div class="reasons"><h4>Berita pendukung sinyal</h4>
+    <div id="relNews"><div class="status" style="padding:2px 0">Memuat berita terkait…</div></div>
+    <div class="lbl" style="font-size:.75rem;margin-top:6px">Berita terkait instrumen ini dari tab Berita — bahan pertimbangan tambahan untuk memperkuat analisa, bukan penentu sinyal.</div>
+  </div>
 </div>
 
 <div id="pickerView" class="hidden" style="position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column">
@@ -253,19 +264,29 @@
 
 <div id="moreView" class="hidden">
   <div style="height:12px"></div>
+  <div class="lbl" style="padding:0 14px 6px;font-size:.8rem;color:var(--muted)">Jaringan Binance (data crypto)</div>
+  <div style="padding:0 14px 12px">
+    <div class="mode" role="group" aria-label="Jaringan Binance">
+      <button id="btnMainnet" class="on">Mainnet</button>
+      <button id="btnTestnet">Testnet</button>
+    </div>
+  </div>
   <div class="info" style="margin:0 14px 10px">Mode mandiri: aplikasi tidak terhubung ke server binance-ai-future, jadi yang
-  ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita crypto</b> dari
-  API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
+  ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita</b> dari
+  API publik Binance, Yahoo Finance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
   <div class="serverbar" id="serverBar" style="margin:0 14px 10px">
     <div>Server: <b id="serverUrl">—</b></div>
     <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
     <button id="btnServer" style="margin-left:0">Hubungkan</button>
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.8.1</b> — mode mandiri. Berita dikumpulkan
-  langsung dari RSS publik 13 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
-  U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, NewsBTC, plus dua sumber khusus
-  NFT — NFT Plazas dan NFT Now. Ketuk berita untuk membacanya langsung di aplikasi, lengkap
+  <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.9.0</b> — mode mandiri multi-market: crypto futures
+  Binance, saham Bursa Indonesia (IDX), dan saham global (data harian Yahoo Finance). Berita dikumpulkan
+  langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
+  U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, NewsBTC, dua sumber khusus
+  NFT — NFT Plazas dan NFT Now — serta media pasar Indonesia: CNBC Indonesia, Detik Finance,
+  dan IDX Channel. Ketuk berita untuk membacanya langsung di aplikasi, lengkap
   dengan terjemahan Google ke Bahasa Indonesia.</div>
 </div>
 
@@ -457,6 +478,206 @@ const fmtPrice = p => {
 };
 const $ = id => document.getElementById(id);
 
+/* ================= Multi-market: saham IDX & global (v1.9.0) =================
+   Data harian dari Yahoo Finance chart API (tanpa kunci API): candle
+   dinormalisasi ke format kline Binance [t,o,h,l,c,v] agar seluruh
+   mesin skor/grafik/rencana yang sama bisa dipakai ulang. */
+function fmtMoney(v, cur) {
+  if (cur === "IDR") return "Rp" + Math.round(v).toLocaleString("id-ID");
+  if (cur === "USD") return "$" + v.toLocaleString("en-US",
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return fmtPrice(v);
+}
+let market = "crypto";               // crypto | idx | global
+let detailMarket = "crypto";         // market instrumen yang sedang dibuka
+let detailEntry = null;              // entri saham/indeks yang sedang dibuka
+function fmtActive(v) {
+  if (detailMarket === "stock" && detailEntry) {
+    if (detailEntry.index) return v.toLocaleString("id-ID", { maximumFractionDigits: 2 });
+    return fmtMoney(v, detailEntry.currency);
+  }
+  return fmtPrice(v);
+}
+const STOCK_DEFS = {
+  idx: [
+    { symbol: "^JKSE", ticker: "IHSG", name: "Indeks Harga Saham Gabungan", index: true, kw: ["ihsg", "indeks harga saham", "bei", "bursa efek indonesia"] },
+    { symbol: "BBCA.JK", ticker: "BBCA", name: "Bank Central Asia", kw: ["bank central asia", "bca"] },
+    { symbol: "BBRI.JK", ticker: "BBRI", name: "Bank Rakyat Indonesia", kw: ["bank rakyat", "bri"] },
+    { symbol: "BMRI.JK", ticker: "BMRI", name: "Bank Mandiri", kw: ["bank mandiri"] },
+    { symbol: "BBNI.JK", ticker: "BBNI", name: "Bank Negara Indonesia", kw: ["bni", "bank negara"] },
+    { symbol: "TLKM.JK", ticker: "TLKM", name: "Telkom Indonesia", kw: ["telkom"] },
+    { symbol: "GOTO.JK", ticker: "GOTO", name: "GoTo Gojek Tokopedia", kw: ["goto", "gojek", "tokopedia"] },
+    { symbol: "ASII.JK", ticker: "ASII", name: "Astra International", kw: ["astra"] },
+    { symbol: "UNVR.JK", ticker: "UNVR", name: "Unilever Indonesia", kw: ["unilever"] },
+    { symbol: "ICBP.JK", ticker: "ICBP", name: "Indofood CBP", kw: ["indofood"] },
+    { symbol: "INDF.JK", ticker: "INDF", name: "Indofood Sukses Makmur", kw: ["indofood"] },
+    { symbol: "KLBF.JK", ticker: "KLBF", name: "Kalbe Farma", kw: ["kalbe"] },
+    { symbol: "AMRT.JK", ticker: "AMRT", name: "Sumber Alfaria Trijaya", kw: ["alfamart"] },
+    { symbol: "ANTM.JK", ticker: "ANTM", name: "Aneka Tambang", kw: ["antam", "aneka tambang"] },
+    { symbol: "ADRO.JK", ticker: "ADRO", name: "Adaro Energy", kw: ["adaro"] },
+    { symbol: "PTBA.JK", ticker: "PTBA", name: "Bukit Asam", kw: ["bukit asam"] },
+    { symbol: "PGAS.JK", ticker: "PGAS", name: "Perusahaan Gas Negara", kw: ["perusahaan gas", "pgn"] },
+    { symbol: "INCO.JK", ticker: "INCO", name: "Vale Indonesia", kw: ["vale indonesia"] },
+    { symbol: "MEDC.JK", ticker: "MEDC", name: "Medco Energi", kw: ["medco"] },
+    { symbol: "AKRA.JK", ticker: "AKRA", name: "AKR Corporindo", kw: ["akr corporindo"] },
+    { symbol: "BRIS.JK", ticker: "BRIS", name: "Bank Syariah Indonesia", kw: ["bank syariah", "bsi"] },
+    { symbol: "ARTO.JK", ticker: "ARTO", name: "Bank Jago", kw: ["bank jago"] },
+    { symbol: "BUKA.JK", ticker: "BUKA", name: "Bukalapak", kw: ["bukalapak"] },
+    { symbol: "EMTK.JK", ticker: "EMTK", name: "Elang Mahkota Teknologi", kw: ["emtek", "elang mahkota"] },
+    { symbol: "EXCL.JK", ticker: "EXCL", name: "XLSmart Telecom", kw: ["xl axiata", "xlsmart"] },
+    { symbol: "ISAT.JK", ticker: "ISAT", name: "Indosat", kw: ["indosat"] },
+    { symbol: "TOWR.JK", ticker: "TOWR", name: "Sarana Menara Nusantara", kw: ["sarana menara"] },
+    { symbol: "MIKA.JK", ticker: "MIKA", name: "Mitra Keluarga Karyasehat", kw: ["mitra keluarga"] },
+    { symbol: "CPIN.JK", ticker: "CPIN", name: "Charoen Pokphand", kw: ["charoen"] },
+    { symbol: "SMGR.JK", ticker: "SMGR", name: "Semen Indonesia", kw: ["semen indonesia"] },
+    { symbol: "ITMG.JK", ticker: "ITMG", name: "Indo Tambangraya Megah", kw: ["indo tambangraya"] }
+  ],
+  global: [
+    { symbol: "^GSPC", ticker: "SPX", name: "S&P 500 Index", index: true, kw: ["s&p 500", "sp 500"] },
+    { symbol: "^IXIC", ticker: "IXIC", name: "Nasdaq Composite", index: true, kw: ["nasdaq"] },
+    { symbol: "^DJI", ticker: "DJI", name: "Dow Jones Industrial", index: true, kw: ["dow jones"] },
+    { symbol: "AAPL", ticker: "AAPL", name: "Apple", kw: ["apple"] },
+    { symbol: "MSFT", ticker: "MSFT", name: "Microsoft", kw: ["microsoft"] },
+    { symbol: "NVDA", ticker: "NVDA", name: "NVIDIA", kw: ["nvidia"] },
+    { symbol: "AMZN", ticker: "AMZN", name: "Amazon", kw: ["amazon"] },
+    { symbol: "GOOGL", ticker: "GOOGL", name: "Alphabet (Google)", kw: ["alphabet", "google"] },
+    { symbol: "META", ticker: "META", name: "Meta Platforms", kw: ["meta platforms", "facebook"] },
+    { symbol: "TSLA", ticker: "TSLA", name: "Tesla", kw: ["tesla"] },
+    { symbol: "AMD", ticker: "AMD", name: "Advanced Micro Devices", kw: ["amd"] },
+    { symbol: "NFLX", ticker: "NFLX", name: "Netflix", kw: ["netflix"] },
+    { symbol: "AVGO", ticker: "AVGO", name: "Broadcom", kw: ["broadcom"] },
+    { symbol: "JPM", ticker: "JPM", name: "JPMorgan Chase", kw: ["jpmorgan"] },
+    { symbol: "V", ticker: "V", name: "Visa", kw: ["visa"] },
+    { symbol: "MA", ticker: "MA", name: "Mastercard", kw: ["mastercard"] },
+    { symbol: "UNH", ticker: "UNH", name: "UnitedHealth", kw: ["unitedhealth"] },
+    { symbol: "LLY", ticker: "LLY", name: "Eli Lilly", kw: ["eli lilly", "lilly"] },
+    { symbol: "COST", ticker: "COST", name: "Costco", kw: ["costco"] },
+    { symbol: "HD", ticker: "HD", name: "Home Depot", kw: ["home depot"] },
+    { symbol: "XOM", ticker: "XOM", name: "Exxon Mobil", kw: ["exxon"] },
+    { symbol: "WMT", ticker: "WMT", name: "Walmart", kw: ["walmart"] },
+    { symbol: "PG", ticker: "PG", name: "Procter & Gamble", kw: ["procter"] },
+    { symbol: "JNJ", ticker: "JNJ", name: "Johnson & Johnson", kw: ["johnson & johnson"] },
+    { symbol: "ORCL", ticker: "ORCL", name: "Oracle", kw: ["oracle"] },
+    { symbol: "CRM", ticker: "CRM", name: "Salesforce", kw: ["salesforce"] },
+    { symbol: "ADBE", ticker: "ADBE", name: "Adobe", kw: ["adobe"] },
+    { symbol: "KO", ticker: "KO", name: "Coca-Cola", kw: ["coca-cola", "coca cola"] },
+    { symbol: "PEP", ticker: "PEP", name: "PepsiCo", kw: ["pepsico", "pepsi"] },
+    { symbol: "BAC", ticker: "BAC", name: "Bank of America", kw: ["bank of america"] },
+    { symbol: "SPY", ticker: "SPY", name: "SPDR S&P 500 ETF", kw: ["s&p 500 etf"] },
+    { symbol: "QQQ", ticker: "QQQ", name: "Invesco QQQ (Nasdaq-100 ETF)", kw: ["qqq", "nasdaq-100"] }
+  ]
+};
+const stockLists = { idx: [], global: [] };
+const stocksLoaded = { idx: false, global: false };
+async function fetchYahoo(def) {
+  const url = "https://query1.finance.yahoo.com/v8/finance/chart/" +
+    encodeURIComponent(def.symbol) + "?interval=1d&range=6mo";
+  const data = JSON.parse(await fetchText(url));
+  const r = (data.chart && data.chart.result || [])[0];
+  if (!r) throw new Error("data kosong");
+  const q = r.indicators.quote[0];
+  const candles = [];
+  for (let i = 0; i < r.timestamp.length; i++) {
+    const c = q.close[i];
+    if (c === null || c === undefined) continue;
+    candles.push([r.timestamp[i] * 1000, q.open[i], q.high[i], q.low[i], c,
+      q.volume ? (q.volume[i] || 0) : 0]);
+  }
+  return { candles, meta: r.meta || {} };
+}
+async function loadStocks(mkt, force) {
+  if (stocksLoaded[mkt] && !force) { renderStocks(); return; }
+  $("listErr").classList.add("hidden");
+  $("status").textContent = "Memuat saham " + (mkt === "idx" ? "IDX" : "global") +
+    " dari Yahoo Finance…";
+  $("list").innerHTML = "";
+  const entries = await Promise.all(STOCK_DEFS[mkt].map(async def => {
+    const e = Object.assign({}, def, {
+      market: mkt, currency: mkt === "idx" ? "IDR" : "USD",
+      price: 0, change: 0, volume: 0, scoreObj: null, loading: true, candles: null
+    });
+    try {
+      const { candles, meta } = await fetchYahoo(def);
+      e.candles = candles;
+      const closes = candles.map(c => parseFloat(c[4]));
+      e.price = meta.regularMarketPrice != null ? meta.regularMarketPrice :
+        closes[closes.length - 1];
+      e.change = meta.regularMarketChangePercent != null ? meta.regularMarketChangePercent :
+        (closes.length > 1 ? (closes[closes.length - 1] / closes[closes.length - 2] - 1) * 100 : 0);
+      e.volume = candles.length ? parseFloat(candles[candles.length - 1][5]) : 0;
+      e.scoreObj = scoreSymbol(closes,
+        candles.map(c => parseFloat(c[2])), candles.map(c => parseFloat(c[3])));
+    } catch (err) { /* entri tetap tampil tanpa skor */ }
+    e.loading = false;
+    return e;
+  }));
+  stockLists[mkt] = entries;
+  stocksLoaded[mkt] = true;
+  if (market === mkt) {
+    renderStocks();
+    const ok = entries.filter(e => e.scoreObj).length;
+    $("status").textContent = entries.length + " instrumen · sinyal 1d terhitung untuk " +
+      ok + " · " + new Date().toLocaleTimeString("id-ID") + " · data Yahoo Finance";
+  }
+  renderSignals();
+}
+function stockIconHtml(e, size) {
+  return '<div class="coin" style="width:' + size + "px;height:" + size + 'px">' +
+    '<div class="coinf" style="background:hsl(' + coinHue(e.ticker) + ',45%,30%);font-size:' +
+    Math.round(size * 0.44) + 'px">' + e.ticker.charAt(0) + "</div></div>";
+}
+function stockRowHtml(e) {
+  return stockIconHtml(e, 34) +
+    '<div class="nm">' + e.ticker + '<small>' + escHtml(e.name) + "</small></div>" +
+    '<div class="pr"><div class="p">' +
+    (e.index ? e.price.toLocaleString("id-ID", { maximumFractionDigits: 2 })
+             : fmtMoney(e.price, e.currency)) + '</div>' +
+    '<div class="chg ' + (e.change >= 0 ? "up" : "dn") + '">' +
+    (e.change >= 0 ? "+" : "") + e.change.toFixed(2) + '%</div></div>' + chipHtml(e);
+}
+function renderStocks() {
+  const list = $("list");
+  list.innerHTML = "";
+  const q = $("q").value.trim().toUpperCase();
+  let arr = stockLists[market].filter(e =>
+    !q || e.ticker.includes(q) || e.name.toUpperCase().includes(q));
+  const mode = $("sort").value;
+  if (mode === "signal") {
+    arr = arr.slice().sort((a, b) =>
+      Math.abs((b.scoreObj || { score: -1 }).score) - Math.abs((a.scoreObj || { score: -1 }).score));
+  } else if (mode === "change") {
+    arr = arr.slice().sort((a, b) => b.change - a.change);
+  } else {
+    arr = arr.slice().sort((a, b) => b.volume - a.volume);
+  }
+  arr.forEach(e => {
+    const d = document.createElement("div");
+    d.className = "sym"; d.dataset.symbol = e.symbol;
+    d.innerHTML = stockRowHtml(e);
+    d.addEventListener("click", () => openDetail(e.symbol, e.market));
+    list.appendChild(d);
+  });
+}
+function renderActiveList() {
+  if (market === "crypto") renderList(); else renderStocks();
+}
+$("mktSeg").querySelectorAll("button").forEach(b =>
+  b.addEventListener("click", () => {
+    market = b.dataset.mkt;
+    $("mktSeg").querySelectorAll("button").forEach(x =>
+      x.classList.toggle("on", x === b));
+    if (market === "crypto") {
+      renderList();
+      $("status").textContent = symbols.length + " simbol · ketuk Muat Ulang untuk data terbaru";
+    } else if (!stocksLoaded[market]) {
+      loadStocks(market);
+    } else {
+      renderStocks();
+      $("status").textContent = stockLists[market].length +
+        " instrumen · sinyal 1d · data Yahoo Finance";
+    }
+  }));
+
 async function loadList() {
   const myRun = ++signalAbort;
   $("listErr").classList.add("hidden");
@@ -641,23 +862,36 @@ function setLive(on, label) {
   $("liveTxt").textContent = label;
 }
 
-async function openDetail(symbol) {
+let lastMarket = "crypto";
+async function openDetail(symbol, mkt) {
   currentSymbol = symbol;
   lastSymbol = symbol;
+  lastMarket = mkt || "crypto";
+  detailMarket = lastMarket === "crypto" ? "crypto" : "stock";
+  detailEntry = detailMarket === "stock"
+    ? (stockLists[lastMarket] || []).find(e => e.symbol === symbol) || null
+    : null;
   Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
   $("readerView").classList.add("hidden");
   /* Navigasi bawah TETAP tampil di halaman detail (v1.7.0) — tab
      Analisis ditandai aktif selama grafik terbuka. */
   $("bottomNav").querySelectorAll("button").forEach(b =>
     b.classList.toggle("on", b.dataset.tab === "analisis"));
+  /* Saham: tanpa pemilih simbol Binance dan tanpa tab interval
+     (data harian saja); crypto: tampil seperti biasa. */
+  $("btnPick").style.display = detailMarket === "stock" ? "none" : "";
+  $("tabs").style.display = detailMarket === "stock" ? "none" : "";
+  if (detailMarket === "stock") setLive(false, "data harian");
   $("detailView").classList.add("open");
   window.scrollTo(0, 0);
   await loadDetail(false, true);
   if (detailTimer) clearInterval(detailTimer);
-  // REST hanya cadangan: selama WebSocket tersambung, timer dilewati.
+  // Crypto: REST hanya cadangan selama WebSocket tersambung.
+  // Saham: data harian — segarkan tiap 5 menit.
+  const iv = detailMarket === "stock" ? 300000 : 30000;
   detailTimer = setInterval(() => {
-    if (!document.hidden && !wsOpen) loadDetail(true, false);
-  }, 30000);
+    if (!document.hidden && (detailMarket === "stock" || !wsOpen)) loadDetail(true, false);
+  }, iv);
 }
 function teardownDetail() {
   currentSymbol = null;
@@ -671,15 +905,42 @@ function closeDetail() {
 }
 async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
+  if (detailMarket === "stock") {
+    const e = detailEntry;
+    $("dSymbol").textContent = e ? e.ticker : currentSymbol;
+    $("dCoin").innerHTML = e ? stockIconHtml(e, 38) : "";
+    $("dSub").textContent = (lastMarket === "idx" ? "Bursa Indonesia (IDX)" : "Saham Global") +
+      " · 1d · Yahoo Finance";
+    $("dFoot").textContent = "Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle harian terakhir. " +
+      "Sinyal teknikal murni — bukan saran keuangan. Data: Yahoo Finance (publik).";
+    try {
+      if (!e) throw new Error("instrumen tidak ditemukan");
+      const { candles, meta } = await fetchYahoo(e);
+      e.candles = candles;
+      if (meta && meta.regularMarketPrice != null) e.price = meta.regularMarketPrice;
+      if (meta && meta.regularMarketChangePercent != null) e.change = meta.regularMarketChangePercent;
+      detailKlines = candles.slice(-KLINE_LIMIT);
+      drawChart(detailKlines);
+      renderAnalysis();
+      renderRelatedNews();
+      if (!keepScroll) window.scrollTo(0, 0);
+    } catch (err) {
+      $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + err.message + "</div>";
+    }
+    return;
+  }
   $("dSymbol").textContent = currentSymbol;
   $("dCoin").innerHTML = coinHtml(
     symbols.find(x => x.symbol === currentSymbol) || { symbol: currentSymbol }, 38);
   $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
+  $("dFoot").textContent = "Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir. " +
+    "Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).";
   try {
     detailKlines = await api("/fapi/v1/klines?symbol=" + currentSymbol +
       "&interval=" + currentInterval + "&limit=" + KLINE_LIMIT);
     drawChart(detailKlines);
     renderAnalysis();
+    renderRelatedNews();
     if (restartWs) connectWs();
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (e) {
@@ -688,7 +949,8 @@ async function loadDetail(keepScroll, restartWs) {
 }
 function renderAnalysis() {
   if (!detailKlines.length) return;
-  const s = symbols.find(x => x.symbol === currentSymbol);
+  const s = detailMarket === "stock" ? detailEntry :
+    symbols.find(x => x.symbol === currentSymbol);
   const closes = detailKlines.map(k => parseFloat(k[4]));
   const o = scoreSymbol(
     closes,
@@ -702,14 +964,15 @@ function renderAnalysis() {
   v.innerHTML = '<div class="chip ' + cls + '" style="min-width:104px;font-size:.95rem">' +
     o.side + '<small>skor teknikal</small></div>' +
     '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
-    '<div class="lbl">dari rentang −100 … +100 · interval ' + currentInterval + '</div></div>';
+    '<div class="lbl">dari rentang −100 … +100 · interval ' +
+    (detailMarket === "stock" ? "1d" : currentInterval) + '</div></div>';
   const stats = [
     ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
     ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
-    ["EMA20", o.ema20 !== null && o.ema20 !== undefined ? fmtPrice(o.ema20) : "—"],
-    ["EMA50", o.ema50 !== null && o.ema50 !== undefined ? fmtPrice(o.ema50) : "—"],
-    ["Bollinger atas", o.boll ? fmtPrice(o.boll.upper) : "—"],
-    ["Bollinger bawah", o.boll ? fmtPrice(o.boll.lower) : "—"]
+    ["EMA20", o.ema20 !== null && o.ema20 !== undefined ? fmtActive(o.ema20) : "—"],
+    ["EMA50", o.ema50 !== null && o.ema50 !== undefined ? fmtActive(o.ema50) : "—"],
+    ["Bollinger atas", o.boll ? fmtActive(o.boll.upper) : "—"],
+    ["Bollinger bawah", o.boll ? fmtActive(o.boll.lower) : "—"]
   ];
   $("stats").innerHTML = stats.map(x =>
     '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
@@ -721,6 +984,11 @@ function renderAnalysis() {
 /* Rencana trade indikatif — rumus yang sama dengan fallback backend:
    Entry = harga penutupan terakhir, SL 1,5×ATR(14), TP 2,5×ATR(14). */
 function buildPlan(o, lastClose) {
+  if (detailEntry && detailEntry.index) {
+    tradePlan = null;
+    renderPlan();
+    return;
+  }
   if ((o.side === "LONG" || o.side === "SHORT") && o.atr) {
     const dir = o.side === "LONG" ? 1 : -1;
     tradePlan = {
@@ -737,6 +1005,13 @@ function buildPlan(o, lastClose) {
 function renderPlan() {
   const el = $("plan"), note = $("planNote");
   if (!tradePlan) {
+    if (detailEntry && detailEntry.index) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:.88rem">Indeks pasar — ' +
+        "bukan instrumen yang diperdagangkan langsung, jadi Entry/TP/SL tidak ditampilkan. " +
+        "Gunakan skornya sebagai gambaran arah pasar.</div>";
+      note.textContent = "";
+      return;
+    }
     el.innerHTML = '<div style="color:var(--muted);font-size:.88rem">Sinyal NETRAL — ' +
       "tidak ada rencana entry. Level muncul otomatis saat skor ≥ +25 (LONG) atau ≤ −25 (SHORT).</div>";
     note.textContent = "";
@@ -746,9 +1021,9 @@ function renderPlan() {
   const tpPct = dir * (p.tp / p.entry - 1) * 100;
   const slPct = dir * (p.sl / p.entry - 1) * 100;
   const tiles = [
-    ["ENTRY", fmtPrice(p.entry), "var(--gold)", "harga terakhir"],
-    ["TAKE PROFIT", fmtPrice(p.tp), "var(--green)", "+" + tpPct.toFixed(2) + "% dari entry"],
-    ["STOP LOSS", fmtPrice(p.sl), "var(--red)", slPct.toFixed(2) + "% dari entry"]
+    ["ENTRY", fmtActive(p.entry), "var(--gold)", "harga terakhir"],
+    ["TAKE PROFIT", fmtActive(p.tp), "var(--green)", "+" + tpPct.toFixed(2) + "% dari entry"],
+    ["STOP LOSS", fmtActive(p.sl), "var(--red)", slPct.toFixed(2) + "% dari entry"]
   ];
   el.innerHTML = '<div class="stats" style="margin:0;grid-template-columns:1fr 1fr 1fr">' +
     tiles.map(t =>
@@ -756,7 +1031,7 @@ function renderPlan() {
       '<div class="v" style="color:' + t[2] + '">' + t[1] + "</div>" +
       '<div class="k" style="text-transform:none;letter-spacing:0">' + t[3] + "</div></div>"
     ).join("") + "</div>";
-  note.textContent = "R:R 1 : 1,67 · ATR(14) " + fmtPrice(p.atr) +
+  note.textContent = "R:R 1 : 1,67 · ATR(14) " + fmtActive(p.atr) +
     " · SL 1,5×ATR · TP 2,5×ATR · diperbarui tiap candle ditutup — level indikatif, bukan saran keuangan.";
 }
 function updatePriceHeader() {
@@ -764,8 +1039,14 @@ function updatePriceHeader() {
   const closes = detailKlines.map(k => parseFloat(k[4]));
   const last = closes[closes.length - 1], first = closes[0];
   const chg = (last / first - 1) * 100;
-  $("dPrice").textContent = fmtPrice(last);
+  $("dPrice").textContent = fmtActive(last);
   const dc = $("dChange");
+  if (detailMarket === "stock" && detailEntry && typeof detailEntry.change === "number") {
+    dc.textContent = (detailEntry.change >= 0 ? "+" : "") +
+      detailEntry.change.toFixed(2) + "% (hari ini)";
+    dc.className = "chg " + (detailEntry.change >= 0 ? "up" : "dn");
+    return;
+  }
   dc.textContent = (chg >= 0 ? "+" : "") + chg.toFixed(2) + "% (jendela grafik)";
   dc.className = "chg " + (chg >= 0 ? "up" : "dn");
 }
@@ -929,9 +1210,12 @@ function drawChart(kl) {
 }
 
 /* ================= Peristiwa ================= */
-$("btnRefresh").addEventListener("click", () => { closeDetail(); loadList(); });
-$("q").addEventListener("input", renderList);
-$("sort").addEventListener("change", renderList);
+$("btnRefresh").addEventListener("click", () => {
+  closeDetail();
+  if (market === "crypto") loadList(); else loadStocks(market, true);
+});
+$("q").addEventListener("input", renderActiveList);
+$("sort").addEventListener("change", renderActiveList);
 $("btnBack").addEventListener("click", closeDetail);
 $("tabs").querySelectorAll("button").forEach(b => {
   b.addEventListener("click", () => {
@@ -986,7 +1270,7 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
     const t = b.dataset.tab;
     if (t === "analisis") {
-      if (!currentSymbol) openDetail(lastSymbol || "BTCUSDT");
+      if (!currentSymbol) openDetail(lastSymbol || "BTCUSDT", lastMarket);
       return;
     }
     /* Pindah tab dari halaman detail/pembaca: bersihkan dulu dengan
@@ -1004,10 +1288,19 @@ function renderSignals() {
   const arr = symbols
     .filter(s => s.scoreObj && s.scoreObj.side !== "NETRAL")
     .sort((a, b) => Math.abs(b.scoreObj.score) - Math.abs(a.scoreObj.score));
-  $("sigStatus").textContent = arr.length
-    ? arr.length + " sinyal LONG/SHORT (interval 1h) dari " +
-      Math.min(SIGNAL_LIMIT, symbols.length) + " simbol tervolume — diurutkan dari skor terkuat."
-    : "Belum ada sinyal LONG/SHORT. Sinyal masih dihitung, atau semua simbol teratas sedang NETRAL.";
+  const stockArr = ["idx", "global"].flatMap(m =>
+    stockLists[m].filter(e => e.scoreObj && e.scoreObj.side !== "NETRAL" && !e.index))
+    .sort((a, b) => Math.abs(b.scoreObj.score) - Math.abs(a.scoreObj.score));
+  $("sigStatus").textContent =
+    (arr.length
+      ? arr.length + " sinyal crypto LONG/SHORT (interval 1h)"
+      : "Belum ada sinyal crypto LONG/SHORT") +
+    (stockArr.length
+      ? " · " + stockArr.length + " sinyal saham LONG/SHORT (interval 1d)"
+      : stocksLoaded.idx || stocksLoaded.global
+        ? " · belum ada sinyal saham"
+        : " · saham dimuat saat tab Saham IDX/Global dibuka") +
+    " — diurutkan dari skor terkuat.";
   arr.forEach(s => {
     const d = document.createElement("div");
     d.className = "sym"; d.dataset.symbol = s.symbol;
@@ -1015,6 +1308,19 @@ function renderSignals() {
     d.addEventListener("click", () => openDetail(s.symbol));
     wrap.appendChild(d);
   });
+  if (stockArr.length) {
+    const h = document.createElement("div");
+    h.className = "sigsub";
+    h.textContent = "Saham — sinyal harian (1d)";
+    wrap.appendChild(h);
+    stockArr.forEach(e => {
+      const d = document.createElement("div");
+      d.className = "sym"; d.dataset.symbol = e.symbol;
+      d.innerHTML = stockRowHtml(e);
+      d.addEventListener("click", () => openDetail(e.symbol, e.market));
+      wrap.appendChild(d);
+    });
+  }
 }
 
 /* ================= Berita crypto — agregator RSS 11 sumber =================
@@ -1034,7 +1340,10 @@ const FEEDS = [
   { name: "CryptoSlate", url: "https://cryptoslate.com/feed/" },
   { name: "NewsBTC", url: "https://www.newsbtc.com/feed/" },
   { name: "NFT Plazas", url: "https://nftplazas.com/feed/", nft: true },
-  { name: "NFT Now", url: "https://nftnow.com/feed/", nft: true }
+  { name: "NFT Now", url: "https://nftnow.com/feed/", nft: true },
+  { name: "CNBC Indonesia", url: "https://www.cnbcindonesia.com/rss", quota: 8 },
+  { name: "Detik Finance", url: "https://finance.detik.com/rss", quota: 8 },
+  { name: "IDX Channel", url: "https://www.idxchannel.com/rss", quota: 8 }
 ];
 let newsItems = [], newsLoaded = false, newsLoading = false, newsFilter = "Semua";
 /* Status terjemahan Google EN→ID (v1.7.0): default aktif, disimpan di
@@ -1092,8 +1401,11 @@ function parseFeed(xmlText, source, feedNft) {
     const t = Date.parse(tx("pubDate") || tx("published") || tx("updated"));
     const title = tx("title");
     const desc = stripHtml(descRaw).slice(0, 180);
+    /* Google News mencantumkan penerbit asli di elemen <source> per item. */
+    const srcEl = it.querySelector("source");
+    const itemSource = srcEl && srcEl.textContent.trim() ? srcEl.textContent.trim() : source;
     out.push({
-      source: source,
+      source: itemSource,
       title: title,
       link: link,
       desc: desc,
@@ -1130,10 +1442,14 @@ async function loadNews(force) {
     .sort((a, b) => b.time - a.time);
   /* Jatah adil per sumber: tanpa ini, feed khusus yang terbitnya jarang
      (NFT Plazas/NFT Now) tersingkir dari 90 besar oleh sumber besar. */
+  const quotaOf = {};
+  FEEDS.forEach(f => { quotaOf[f.name] = f.quota || 5; });
   const bySrc = {};
   merged.forEach(n => { (bySrc[n.source] = bySrc[n.source] || []).push(n); });
   const guaranteed = [];
-  Object.values(bySrc).forEach(arr => { guaranteed.push.apply(guaranteed, arr.slice(0, 6)); });
+  Object.entries(bySrc).forEach(([src, arr]) => {
+    guaranteed.push.apply(guaranteed, arr.slice(0, quotaOf[src] || 5));
+  });
   const fill = merged
     .filter(n => !guaranteed.includes(n))
     .slice(0, Math.max(0, 90 - guaranteed.length));
@@ -1147,6 +1463,7 @@ async function loadNews(force) {
   renderChips();
   renderNews();
   if (translateOn) translateListTitles();
+  if (currentSymbol) renderRelatedNews();
 }
 function renderChips() {
   const wrap = $("srcChips");
@@ -1262,6 +1579,7 @@ async function translateListTitles() {
     } catch (e) { /* biarkan judul Inggris */ }
     if (currentTab === "berita" && translateOn) renderNews();
   }
+  if (currentSymbol) renderRelatedNews();
 }
 
 /* ================= Pemilih simbol di halaman detail (v1.7.0) ================= */
@@ -1285,6 +1603,7 @@ function renderPicker() {
     });
 }
 function openPicker() {
+  if (detailMarket === "stock") return;   // pemilih simbol khusus crypto
   $("pq").value = "";
   renderPicker();
   $("pickerView").classList.remove("hidden");
@@ -1307,7 +1626,7 @@ function openReader(item) {
   readerParasId = null;
   const my = ++readerToken;
   Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
-  $("detailView").classList.remove("open");
+  teardownDetail();
   $("readerView").classList.remove("hidden");
   $("readerMeta").textContent = item.source + " · " + relTime(item.time);
   $("btnTranslate").style.color = translateOn ? "var(--gold)" : "var(--muted)";
@@ -1412,11 +1731,108 @@ async function translateReader(item, hero, my) {
   }
 }
 
+/* ================= Berita pendukung di Analisis (v1.9.0) =================
+   Di bagian paling bawah halaman Analisis: berita dari tab Berita yang
+   menyebut instrumen yang sedang dibuka — bahan pertimbangan tambahan
+   untuk memperkuat analisa pengguna. */
+const CRYPTO_KW = {
+  BTC: ["bitcoin"], ETH: ["ethereum"], SOL: ["solana"], XRP: ["xrp", "ripple"],
+  DOGE: ["dogecoin"], BNB: ["bnb", "binance coin"], ADA: ["cardano"],
+  AVAX: ["avalanche"], LINK: ["chainlink"], DOT: ["polkadot"], LTC: ["litecoin"],
+  TRX: ["tron"], ATOM: ["cosmos"], UNI: ["uniswap"], PEPE: ["pepe coin"],
+  SHIB: ["shiba"], SUI: ["sui network"], ARB: ["arbitrum"], OP: ["optimism"],
+  INJ: ["injective"], WLD: ["worldcoin"], ZEC: ["zcash"], HYPE: ["hyperliquid"],
+  NEAR: ["near protocol"], FET: ["fetch.ai"], XLM: ["stellar"], HBAR: ["hedera"],
+  TAO: ["bittensor"], AAVE: ["aave"], ETC: ["ethereum classic"]
+};
+function relKeywords() {
+  if (detailMarket === "stock" && detailEntry) {
+    return (detailEntry.kw || []).concat([detailEntry.ticker.toLowerCase()]);
+  }
+  const base = (currentSymbol || "").replace(/USDT$/, "");
+  const kws = (CRYPTO_KW[base] || []).slice();
+  if (base.length >= 3) kws.push(base.toLowerCase());
+  return kws;
+}
+const relCache = {};
+async function renderRelatedNews() {
+  const box = $("relNews");
+  if (!box) return;
+  if (!newsLoaded) {
+    box.innerHTML = '<div class="status" style="padding:2px 0">Memuat berita terkait…</div>';
+    if (!newsLoading) loadNews();
+    return;
+  }
+  const kws = relKeywords();
+  let hits = newsItems.filter(n => {
+    const hay = (n.title + " " + (n.titleId || "") + " " + n.desc).toLowerCase();
+    return kws.some(kw => kw.length <= 3
+      ? new RegExp("\\b" + kw + "\\b").test(hay)
+      : hay.includes(kw));
+  }).slice(0, 5);
+  /* Saham: kumpulan umum sering tidak menyebut emiten tertentu — lengkapi
+     dengan pencarian berita tertarget (Google News) per instrumen. */
+  if (detailMarket === "stock" && detailEntry && hits.length < 3) {
+    const sym = detailEntry.symbol;
+    if (relCache[sym] === undefined) {
+      relCache[sym] = null;
+      box.innerHTML = '<div class="status" style="padding:2px 0">Mencari berita terkait ' +
+        escHtml(detailEntry.ticker) + "…</div>";
+      try {
+        const q = '"' + detailEntry.ticker + '" OR "' + detailEntry.name + '"';
+        const loc = lastMarket === "idx" ? "hl=id&gl=ID&ceid=ID:id" :
+          "hl=en-US&gl=US&ceid=US:en";
+        const items = parseFeed(await fetchText(
+          "https://news.google.com/rss/search?q=" + encodeURIComponent(q) + "&" + loc),
+          "Google News", false);
+        relCache[sym] = items;
+      } catch (e) { relCache[sym] = []; }
+      if (currentSymbol === sym) renderRelatedNews();
+      return;
+    }
+    if (Array.isArray(relCache[sym])) {
+      const extra = relCache[sym].filter(n => !hits.some(h => h.link === n.link));
+      /* Urutkan menurut relevansi pasar: menyebut kode emiten di judul
+         paling utama, lalu konteks keuangan, lalu yang terbaru. */
+      const tk = detailEntry.ticker.toLowerCase();
+      const fin = /\bstock|shares|nasdaq|nyse|analyst|rating|earnings|forecast|saham|ihsg|bursa|investor|emiten\b/i;
+      const rel = n => (n.title.toLowerCase().includes(tk) ? 2 : 0) +
+        (fin.test(n.title + " " + n.desc) ? 1 : 0);
+      hits = extra.concat(hits)
+        .sort((a, b) => (rel(b) - rel(a)) || (b.time - a.time))
+        .slice(0, 5);
+    }
+  }
+  if (!hits.length) {
+    box.innerHTML = '<div class="status" style="padding:2px 0">Belum ada berita terkait ' +
+      escHtml(detailMarket === "stock" && detailEntry ? detailEntry.ticker :
+        (currentSymbol || "").replace("USDT", "")) +
+      " pada kumpulan berita terbaru.</div>";
+    return;
+  }
+  box.innerHTML = "";
+  hits.forEach(n => {
+    const d = document.createElement("div");
+    d.className = "newsitem";
+    d.innerHTML = '<div style="flex:1;min-width:0"><div class="tt">' +
+      escHtml(translateOn && n.titleId ? n.titleId : n.title) + '</div>' +
+      '<div class="mt"><span class="src">' + escHtml(n.source) + "</span><span>" +
+      relTime(n.time) + "</span></div></div>";
+    d.addEventListener("click", () => openReader(n));
+    box.appendChild(d);
+  });
+}
+
 /* ================= Tab Lainnya =================
    Sejak v1.8.0 banner info + bilah server HANYA tampil di tab ini
    (dipindah dari atas semua halaman); tombol Hubungkan/Ubah di bilah
    server diikat di blok peristiwa bilah server. */
-$("mReload").addEventListener("click", () => { showTab("pasar"); loadList(); });
+$("mReload").addEventListener("click", () => {
+  showTab("pasar");
+  if (market === "crypto") loadList(); else loadStocks(market, true);
+});
+$("mGithub").addEventListener("click", () =>
+  openNewsLink("https://github.com/devcoderama/binance-ai-future"));
 $("nq").addEventListener("input", renderNews);
 
 loadList();
