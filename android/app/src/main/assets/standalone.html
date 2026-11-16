@@ -278,6 +278,36 @@
   .cbub.typing{color:var(--muted);font-style:italic}
   /* Tampilan markdown ringan di balon AI (v1.31.0) */
   .ai-tag{font-size:.64rem;letter-spacing:.09em;color:var(--gold);font-weight:800;margin-bottom:6px}
+  /* Animasi AI berpikir (v1.31.10) */
+  .cbub.ai.typing{min-width:216px}
+  .think-candles{display:flex;gap:7px;align-items:flex-end;height:30px;margin:4px 0 10px}
+  .think-candles i{position:relative;width:7px;border-radius:2px;transform-origin:bottom;
+    animation:tcandle 1.15s ease-in-out infinite}
+  .think-candles i::before{content:"";position:absolute;left:50%;top:-6px;bottom:-6px;width:2px;
+    margin-left:-1px;background:inherit;opacity:.5;border-radius:2px}
+  .think-candles i:nth-child(1){height:20px;background:var(--up,#00C087);animation-delay:0s}
+  .think-candles i:nth-child(2){height:28px;background:var(--down,#F6465D);animation-delay:.15s}
+  .think-candles i:nth-child(3){height:16px;background:var(--gold);animation-delay:.3s}
+  .think-candles i:nth-child(4){height:26px;background:var(--up,#00C087);animation-delay:.45s}
+  .think-candles i:nth-child(5){height:19px;background:var(--down,#F6465D);animation-delay:.6s}
+  @keyframes tcandle{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1.12)}}
+  .think-row{display:flex;align-items:center;gap:2px;font-size:.88rem}
+  .tdots{display:inline-flex;gap:3px;margin-left:5px}
+  .tdots i{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:tdot 1.2s ease-in-out infinite}
+  .tdots i:nth-child(2){animation-delay:.18s}
+  .tdots i:nth-child(3){animation-delay:.36s}
+  @keyframes tdot{0%,100%{transform:translateY(0);opacity:.45}50%{transform:translateY(-4px);opacity:1}}
+  .think-bars{margin-top:11px;display:flex;flex-direction:column;gap:7px}
+  .think-bars i{display:block;height:9px;border-radius:5px;
+    background:linear-gradient(100deg,var(--panel2) 40%,rgba(240,185,11,.28) 50%,var(--panel2) 60%);
+    background-size:220% 100%;animation:tshimmer 1.5s linear infinite}
+  .think-bars i:nth-child(1){width:100%}
+  .think-bars i:nth-child(2){width:82%}
+  .think-bars i:nth-child(3){width:61%}
+  @keyframes tshimmer{0%{background-position:130% 0}100%{background-position:-90% 0}}
+  @media (prefers-reduced-motion: reduce){
+    .think-candles i,.tdots i,.think-bars i{animation:none}
+  }
   .md-p{margin:0 0 7px}
   .md-p:last-child{margin-bottom:0}
   .md-h{font-weight:800;color:#fff;font-size:.96rem;margin:11px 0 5px}
@@ -3867,9 +3897,24 @@ async function sendChat(content, display) {
   saveChat();
   const typing = document.createElement("div");
   typing.className = "cbub ai typing";
-  typing.textContent = "AI sedang berpikir…";
+  // Animasi berpikir (v1.31.10): candle menari + teks status berganti +
+  // titik memantul + garis shimmer, agar menunggu jawaban tidak membosankan.
+  typing.innerHTML =
+    '<div class="ai-tag"><i class="fa-solid fa-robot"></i> D TRADE AI</div>' +
+    '<div class="think-candles"><i></i><i></i><i></i><i></i><i></i></div>' +
+    '<div class="think-row"><span class="think-text">Menganalisis pasar…</span>' +
+    '<span class="tdots"><i></i><i></i><i></i></span></div>' +
+    '<div class="think-bars"><i></i><i></i><i></i></div>';
   $("chatList").appendChild(typing);
   $("chatList").scrollTop = $("chatList").scrollHeight;
+  const thinkPhrases = ["Menganalisis pasar…", "Membaca indikator teknikal…",
+    "Menimbang peluang & risiko…", "Menyusun jawaban terbaik…"];
+  let thinkIdx = 0;
+  const thinkTimer = setInterval(() => {
+    thinkIdx = (thinkIdx + 1) % thinkPhrases.length;
+    const t = typing.querySelector(".think-text");
+    if (t) t.textContent = thinkPhrases[thinkIdx];
+  }, 2200);
   try {
     const convo = [{ role: "system", content: AI_SYSTEM }].concat(
       chatMsgs.slice(-16).map(m => ({ role: m.role, content: m.content })));
@@ -3878,6 +3923,7 @@ async function sendChat(content, display) {
   } catch (e) {
     chatMsgs.push({ role: "assistant", content: "⚠️ " + cleanAiError(e.message) });
   }
+  clearInterval(thinkTimer);
   typing.remove();
   renderChat();
   saveChat();
