@@ -356,6 +356,18 @@ mengubah gaya analisa AI; perubahan berlaku pada analisis berikutnya
 `GET /api/config` → `ai_skill` dan di log startup
 ("AI skill dimuat dari AI_SKILL.md").
 
+### Lampiran Chat AI — gambar & dokumen (v1.31.15)
+
+Chat AI bisa menerima lampiran lewat ikon penjepit kertas. **Dokumen teks**
+(.txt/.md/.csv/.json/dll.) dibaca isinya oleh aplikasi dan **PDF** diekstrak
+teksnya di aplikasi memakai pdf.js yang terbundel lokal (`assets/pdfjs/`) —
+keduanya langsung bisa dianalisis model teks tanpa kunci apa pun. **Gambar**
+dikompresi otomatis (maks 1280px) dan dikirim ke model vision Pollinations
+generasi baru (`gen.pollinations.ai`); karena model gratis tanpa kunci saat
+ini hanya membaca teks, analisis gambar mewajibkan kunci API Pollinations
+milik pengguna sendiri (gratis dari enter.pollinations.ai, diisi di tab
+Lainnya aplikasi, tersimpan lokal di perangkat).
+
 ### AI Skill Mandiri — pengetahuan finance/trading untuk Chat AI aplikasi (`AI_SKILL_MANDIRI.md`)
 
 Chat AI di aplikasi Android (mode mandiri, AI web gratis) punya file skill
