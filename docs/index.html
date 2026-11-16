@@ -8,39 +8,85 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <style>
   :root{--bg:#0b0e11;--panel:#12161c;--panel2:#171c24;--line:#232a33;
-    --text:#e8ecf1;--muted:#9aa7b4;--gold:#f0b90b;--radius:14px}
+    --text:#e8ecf1;--muted:#9aa7b4;--gold:#f0b90b;--gold2:#f8d33a;--radius:14px}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-    line-height:1.6;font-size:16px}
+    line-height:1.6;font-size:16px;overflow-x:hidden}
   a{color:var(--gold);text-decoration:none}
   a:hover{text-decoration:underline}
   code{background:#1c232d;padding:.1em .4em;border-radius:6px;font-size:.88em;
     font-family:ui-monospace,Menlo,Consolas,monospace}
   .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-  header.top{position:sticky;top:0;z-index:50;background:rgba(11,14,17,.92);
-    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  section{scroll-margin-top:74px}
+
+  /* ---------- Navbar (desktop) ---------- */
+  header.top{position:sticky;top:0;z-index:60;background:rgba(11,14,17,.85);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line)}
   .top-in{display:flex;align-items:center;gap:16px;height:58px}
   .brand{font-weight:800;color:var(--text);white-space:nowrap}
   .brand i,.brand span{color:var(--gold)}
-  nav{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap}
-  nav a{color:var(--muted);padding:7px 10px;border-radius:8px;font-size:.92rem}
-  nav a:hover{color:var(--text);background:var(--panel2);text-decoration:none}
-  .hero{padding:52px 0 8px;text-align:center}
-  .hero h1{font-size:2.4rem;margin:0 0 10px;line-height:1.15}
-  .hero h1 span{color:var(--gold)}
-  .hero p{color:var(--muted);max-width:640px;margin:0 auto 20px}
-  .tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
-  .tag{border:1px solid var(--line);background:var(--panel);border-radius:999px;
+  nav.mainnav{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap}
+  nav.mainnav a{color:var(--muted);padding:7px 11px;border-radius:8px;font-size:.92rem;
+    transition:color .25s,background .25s}
+  nav.mainnav a:hover{color:var(--text);background:var(--panel2);text-decoration:none}
+  nav.mainnav a.act{color:#111;background:var(--gold);font-weight:700}
+
+  /* ---------- Bottom Navigation Bar (mobile) ---------- */
+  .bottomnav{display:none}
+  @media(max-width:820px){
+    nav.mainnav{display:none}
+    body{padding-bottom:72px}
+    section{scroll-margin-top:14px}
+    .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+      background:rgba(11,14,17,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+      border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+    .bottomnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+      color:var(--muted);font-size:.66rem;padding:5px 0 3px;border-radius:10px}
+    .bottomnav a i{font-size:1.12rem}
+    .bottomnav a:hover{text-decoration:none}
+    .bottomnav a.act{color:var(--gold)}
+  }
+
+  /* ---------- Hero + parallax ---------- */
+  .hero{position:relative;overflow:hidden;padding:74px 0 64px;text-align:center;
+    border-bottom:1px solid var(--line)}
+  .plx{position:absolute;inset:-22% 0;pointer-events:none;will-change:transform}
+  .plx.grid{background:
+      linear-gradient(rgba(240,185,11,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(240,185,11,.05) 1px,transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(ellipse 90% 80% at 50% 40%,#000 30%,transparent 75%);
+            mask-image:radial-gradient(ellipse 90% 80% at 50% 40%,#000 30%,transparent 75%)}
+  .orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5}
+  .o1{width:420px;height:420px;left:-90px;top:-40px;background:radial-gradient(circle,#f0b90b,transparent 65%)}
+  .o2{width:340px;height:340px;right:-70px;top:30px;background:radial-gradient(circle,#b8860b,transparent 65%);opacity:.38}
+  .o3{width:260px;height:260px;left:44%;bottom:-120px;background:radial-gradient(circle,#f8d33a,transparent 65%);opacity:.25}
+  .ring{position:absolute;left:50%;top:44%;width:560px;height:560px;margin:-280px 0 0 -280px;
+    border:1px solid rgba(240,185,11,.14);border-radius:50%;
+    animation:spin 70s linear infinite}
+  .ring::before{content:"";position:absolute;inset:52px;border:1px dashed rgba(240,185,11,.10);border-radius:50%}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hero-in{position:relative;will-change:transform}
+  .hero h1{font-size:2.6rem;margin:0 0 12px;line-height:1.13;letter-spacing:-.5px}
+  .hero h1 span{background:linear-gradient(92deg,var(--gold),var(--gold2));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:var(--muted);max-width:640px;margin:0 auto 22px}
+  .tags{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+  .tag{border:1px solid var(--line);background:rgba(18,22,28,.75);border-radius:999px;
     padding:4px 13px;font-size:.85rem;color:var(--muted)}
   .tag i{color:var(--gold);margin-right:6px}
   .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
   .btn{display:inline-flex;align-items:center;gap:9px;background:var(--gold);color:#111;
-    font-weight:700;padding:12px 22px;border-radius:11px}
-  .btn:hover{text-decoration:none;filter:brightness(1.07)}
-  .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
-  section{padding:38px 0 6px}
+    font-weight:700;padding:12px 22px;border-radius:11px;
+    box-shadow:0 8px 28px rgba(240,185,11,.28);transition:transform .25s,filter .25s}
+  .btn:hover{text-decoration:none;filter:brightness(1.07);transform:translateY(-2px)}
+  .btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line);box-shadow:none}
+
+  /* ---------- Konten ---------- */
+  section.blk{padding:40px 0 6px}
   h2{font-size:1.45rem;margin:0 0 6px}
   h2 i{color:var(--gold);margin-right:10px}
   .sub{color:var(--muted);margin:0 0 20px;max-width:760px}
@@ -48,12 +94,14 @@
   .grid.phone{grid-template-columns:repeat(3,1fr)}
   figure{margin:0;background:var(--panel);border:1px solid var(--line);
     border-radius:var(--radius);overflow:hidden}
-  figure img{width:100%;display:block;background:#000}
+  .pf{overflow:hidden;background:#000}
+  .pf img{width:100%;display:block;transform:scale(1.13);will-change:transform}
   figcaption{padding:13px 16px 15px;font-size:.93rem;color:var(--muted)}
   figcaption b{color:var(--text);display:block;font-size:1rem;margin-bottom:3px}
   .note{background:var(--panel2);border:1px solid var(--gold);border-radius:var(--radius);
     padding:16px 18px;font-size:.95rem}
   .note b{color:var(--gold)}
+  figure .note{border:none;border-radius:0;height:100%}
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
   .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
   .step b{display:block;margin-bottom:4px}
@@ -61,25 +109,42 @@
   .step p{margin:0;color:var(--muted);font-size:.93rem}
   footer{border-top:1px solid var(--line);margin-top:44px;padding:22px 0 34px;
     color:var(--muted);font-size:.9rem;text-align:center}
+
+  /* ---------- Reveal saat scroll ---------- */
+  .rv{opacity:0;transform:translateY(28px);
+    transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1)}
+  .rv.in{opacity:1;transform:none}
+
   @media(max-width:820px){
     .grid,.grid.phone,.steps{grid-template-columns:1fr}
-    .hero h1{font-size:1.8rem}
-    nav a{padding:7px 6px;font-size:.85rem}
+    .hero{padding:54px 0 46px}
+    .hero h1{font-size:1.85rem}
+    .ring{width:380px;height:380px;margin:-190px 0 0 -190px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .rv{opacity:1;transform:none;transition:none}
+    .ring{animation:none}
+    .pf img{transform:none}
   }
 </style>
 </head>
 <body>
 <header class="top"><div class="wrap top-in">
-  <a class="brand" href="#"><i class="fa-solid fa-gem"></i>binance-<span>ai</span>-future</a>
-  <nav>
-    <a href="#cli">CLI</a><a href="#web">Web UI</a>
-    <a href="#terhubung">Android Terhubung</a><a href="#mandiri">Android Mandiri</a>
-    <a href="#mulai">Mulai Cepat</a>
+  <a class="brand" href="#top"><i class="fa-solid fa-gem"></i>binance-<span>ai</span>-future</a>
+  <nav class="mainnav">
+    <a href="#cli" data-sec="cli">CLI</a><a href="#web" data-sec="web">Web UI</a>
+    <a href="#terhubung" data-sec="terhubung">Android Terhubung</a>
+    <a href="#mandiri" data-sec="mandiri">Android Mandiri</a>
+    <a href="#mulai" data-sec="mulai">Mulai Cepat</a>
   </nav>
 </div></header>
 
-<div class="wrap">
-  <div class="hero">
+<div class="hero" id="top">
+  <div class="plx grid" data-sp="0.12"></div>
+  <div class="plx" data-sp="0.28"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+  <div class="plx" data-sp="0.06"><div class="ring"></div></div>
+  <div class="wrap hero-in" data-sp="-0.10">
     <h1>Trading Futures Berbantuan <span>AI</span></h1>
     <p>Satu sistem analisis Binance USDⓈ-M Futures — skor teknikal 12 indikator yang
        dikonfirmasi AI — dalam tiga wajah: terminal CLI, Web UI, dan aplikasi Android.</p>
@@ -93,20 +158,22 @@
       <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Repo GitHub</a>
     </div>
   </div>
+</div>
 
-  <section id="cli">
+<div class="wrap">
+  <section class="blk" id="cli">
     <h2><i class="fa-solid fa-terminal"></i>Terminal CLI</h2>
     <p class="sub">Untuk yang hidup di terminal: dashboard interaktif dan perintah langsung,
        jalan di mesin yang sama dengan server.</p>
     <div class="grid">
-      <figure>
-        <img src="img/cli-dashboard.jpg" alt="Dashboard CLI binance-ai-future" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/cli-dashboard.jpg" alt="Dashboard CLI binance-ai-future" loading="lazy"></div>
         <figcaption><b>Dashboard interaktif</b>
           Tampilan Textual yang menyegarkan otomatis: ringkasan pasar, grafik candlestick
           terminal, hasil backtest, dan status TESTNET · DRY-RUN yang selalu terlihat.</figcaption>
       </figure>
-      <figure>
-        <img src="img/cli-analyze.jpg" alt="Hasil perintah analyze di CLI" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/cli-analyze.jpg" alt="Hasil perintah analyze di CLI" loading="lazy"></div>
         <figcaption><b>Perintah <code>analyze</code></b>
           Satu perintah menampilkan skor teknikal −100…+100, arah sinyal, level SL/TP
           dari ATR, dan alasan di balik skor — sebelum AI memberi konfirmasi atau veto.</figcaption>
@@ -114,32 +181,32 @@
     </div>
   </section>
 
-  <section id="web">
+  <section class="blk" id="web">
     <h2><i class="fa-solid fa-display"></i>Web UI Server</h2>
     <p class="sub">Antarmuka lengkap dari server <code>python run.py web</code> — dipakai dari
        browser desktop maupun dari dalam aplikasi Android saat terhubung.</p>
     <div class="grid">
-      <figure>
-        <img src="img/web-dashboard.jpg" alt="Dashboard dan Pasar Web UI" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/web-dashboard.jpg" alt="Dashboard dan Pasar Web UI" loading="lazy"></div>
         <figcaption><b>Dashboard &amp; Pasar</b>
           Kartu saldo, PnL, dan provider AI aktif, plus tabel 528 simbol USDT perpetual
           dengan harga live dan chip sinyal 1 jam. Klik ★ untuk favorit, klik baris untuk analisis.</figcaption>
       </figure>
-      <figure>
-        <img src="img/web-analisis.jpg" alt="Ruang kerja Analysis Web UI" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/web-analisis.jpg" alt="Ruang kerja Analysis Web UI" loading="lazy"></div>
         <figcaption><b>Ruang kerja Analysis</b>
           Grafik candlestick dengan panel yang bisa digeser &amp; diubah ukurannya, skor teknikal
           + alasan, gauge sentimen, Multi-Timeframe, indikator MACD/RSI/Bollinger, backtest,
           dan kartu Eksekusi yang mengikuti mode server (dry-run/testnet).</figcaption>
       </figure>
-      <figure>
-        <img src="img/web-berita.jpg" alt="Berita, pemindai, dan panel provider AI" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/web-berita.jpg" alt="Berita, pemindai, dan panel provider AI" loading="lazy"></div>
         <figcaption><b>Berita, Pemindai &amp; Provider AI</b>
           Berita crypto dari 11 sumber RSS, pemindai semua simbol yang hasilnya bisa disiarkan
           ke Telegram, dan panel ganti provider/model AI yang berlaku langsung tanpa restart.</figcaption>
       </figure>
-      <figure>
-        <div class="note" style="border:none;border-radius:0;height:100%">
+      <figure class="rv">
+        <div class="note">
           <b>Kenapa perlu server?</b><br>
           Di sinilah AI, eksekusi order, manajemen risiko, dan siaran sinyal Telegram berjalan.
           Kunci API hanya tersimpan di berkas <code>.env</code> server — tidak pernah di HP
@@ -149,25 +216,25 @@
     </div>
   </section>
 
-  <section id="terhubung">
+  <section class="blk" id="terhubung">
     <h2><i class="fa-brands fa-android"></i>Android — Terhubung ke Server</h2>
     <p class="sub">D TRADE membuka Web UI server di dalam aplikasi: semua fitur server
        (AI, saldo, eksekusi sesuai mode server) tampil di HP.</p>
     <div class="grid phone">
-      <figure>
-        <img src="img/app-server-dashboard.jpg" alt="Web UI server di aplikasi Android" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-server-dashboard.jpg" alt="Web UI server di aplikasi Android" loading="lazy"></div>
         <figcaption><b>Beranda server di HP</b>
           Hero, kartu saldo/PnL/provider AI, dan tabel Pasar — persis Web UI desktop,
           dioptimalkan untuk layar sentuh dengan navigasi bawah.</figcaption>
       </figure>
-      <figure>
-        <img src="img/app-server-analisis.jpg" alt="Analisis server di aplikasi Android" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-server-analisis.jpg" alt="Analisis server di aplikasi Android" loading="lazy"></div>
         <figcaption><b>Analisis di HP</b>
           RSI, skor teknikal, grafik TradingView, dan Multi-Timeframe dari server.
           Perhitungan &amp; eksekusi terjadi di server; HP hanya menampilkan.</figcaption>
       </figure>
-      <figure>
-        <div class="note" style="border:none;border-radius:0;height:100%">
+      <figure class="rv">
+        <div class="note">
           <b>Cara menghubungkan</b><br>
           1. Jalankan server binance-ai-future.<br>
           2. Di D TRADE, buka tab <b>Lainnya</b>.<br>
@@ -179,45 +246,45 @@
     </div>
   </section>
 
-  <section id="mandiri">
+  <section class="blk" id="mandiri">
     <h2><i class="fa-solid fa-mobile-screen"></i>Android — Mode Mandiri (Tanpa Server)</h2>
     <p class="sub">Tanpa server pun D TRADE penuh: sinyal teknikal murni dihitung di HP dari
        API publik — tanpa AI, tanpa kunci API, tanpa eksekusi order.</p>
     <div class="grid phone">
-      <figure>
-        <img src="img/app-pasar.jpg" alt="Pasar multi-market mode Mandiri" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-pasar.jpg" alt="Pasar multi-market mode Mandiri" loading="lazy"></div>
         <figcaption><b>Pasar multi-market</b>
           528 crypto Futures + Spot Binance, 99 saham IDX, dan 60 saham global — dengan chip
           sinyal, favorit ★, dan cache agar daftar tampil seketika saat dibuka.</figcaption>
       </figure>
-      <figure>
-        <img src="img/app-analisis.jpg" alt="Analisis teknikal mode Mandiri" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-analisis.jpg" alt="Analisis teknikal mode Mandiri" loading="lazy"></div>
         <figcaption><b>Analisis 12 indikator</b>
           Skor dari EMA, MACD, ADX, Supertrend, RSI, Stochastic, Bollinger, ROC, VWAP, pola
           candle &amp; support/resistance; grafik live, Multi-Timeframe, rencana Entry·TP·SL,
           dan tombol Bagikan analisis sebagai gambar + teks.</figcaption>
       </figure>
-      <figure>
-        <img src="img/app-chart-fs.jpg" alt="Grafik layar penuh dengan alat gambar" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-chart-fs.jpg" alt="Grafik layar penuh dengan alat gambar" loading="lazy"></div>
         <figcaption><b>Grafik layar penuh + alat gambar</b>
           Perbesar grafik (portrait/landscape), geser mengikuti jari ke riwayat, dan gambar
           ala TradingView — tren, garis horizontal, kotak, bebas — yang bisa digeser, diubah,
           dihapus satu per satu, dan tersimpan per simbol.</figcaption>
       </figure>
-      <figure>
-        <img src="img/app-berita.jpg" alt="Berita di mode Mandiri" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-berita.jpg" alt="Berita di mode Mandiri" loading="lazy"></div>
         <figcaption><b>Berita 16 sumber</b>
           Berita crypto &amp; pasar dari 16 RSS termasuk media Indonesia; bisa dicari, difilter
           per sumber, dan dibaca di dalam aplikasi dengan terjemahan otomatis ke Bahasa Indonesia.</figcaption>
       </figure>
-      <figure>
-        <img src="img/app-lainnya.jpg" alt="Tab Lainnya: jaringan, server, dan donasi" loading="lazy">
+      <figure class="rv">
+        <div class="pf"><img src="img/app-lainnya.jpg" alt="Tab Lainnya: jaringan, server, dan donasi" loading="lazy"></div>
         <figcaption><b>Pengaturan &amp; pintu mode terhubung</b>
           Ganti jaringan Mainnet/Testnet, atur URL server untuk mode terhubung, dan dukung
           pengembangan lewat QRIS. Aplikasi gratis, tanpa iklan, tanpa kunci apa pun tersimpan.</figcaption>
       </figure>
-      <figure>
-        <div class="note" style="border:none;border-radius:0;height:100%">
+      <figure class="rv">
+        <div class="note">
           <b>Mandiri vs Terhubung?</b><br>
           Mandiri = analisis teknikal cepat di mana saja, cukup internet.<br>
           Terhubung = tambahan AI, saldo &amp; posisi akun, eksekusi (sesuai mode server),
@@ -228,15 +295,15 @@
     </div>
   </section>
 
-  <section id="mulai">
+  <section class="blk" id="mulai">
     <h2><i class="fa-solid fa-rocket"></i>Mulai Cepat</h2>
     <div class="steps">
-      <div class="step"><b><i class="fa-brands fa-android"></i>1. Android (paling cepat)</b>
+      <div class="step rv"><b><i class="fa-brands fa-android"></i>1. Android (paling cepat)</b>
         <p>Unduh APK rilis terbaru, pasang, langsung pakai mode Mandiri. Selesai.</p></div>
-      <div class="step"><b><i class="fa-solid fa-server"></i>2. Server (opsional)</b>
+      <div class="step rv"><b><i class="fa-solid fa-server"></i>2. Server (opsional)</b>
         <p><code>git clone</code> repo → salin <code>.env.example</code> ke <code>.env</code> →
            <code>python run.py web</code> — atau pakai image Docker GHCR.</p></div>
-      <div class="step"><b><i class="fa-solid fa-terminal"></i>3. CLI</b>
+      <div class="step rv"><b><i class="fa-solid fa-terminal"></i>3. CLI</b>
         <p><code>python run.py cli</code> untuk dashboard, atau perintah langsung:
            <code>analyze</code>, <code>scan</code>, <code>backtest</code>.</p></div>
     </div>
@@ -247,5 +314,74 @@
     © 2026 devcoderama · <a href="https://github.com/devcoderama/binance-ai-future">github.com/devcoderama/binance-ai-future</a>
   </footer>
 </div>
+
+<nav class="bottomnav">
+  <a href="#top" data-sec="top"><i class="fa-solid fa-house"></i>Beranda</a>
+  <a href="#cli" data-sec="cli"><i class="fa-solid fa-terminal"></i>CLI</a>
+  <a href="#web" data-sec="web"><i class="fa-solid fa-display"></i>Web UI</a>
+  <a href="#terhubung" data-sec="terhubung"><i class="fa-solid fa-plug"></i>Terhubung</a>
+  <a href="#mandiri" data-sec="mandiri"><i class="fa-solid fa-mobile-screen"></i>Mandiri</a>
+  <a href="#mulai" data-sec="mulai"><i class="fa-solid fa-rocket"></i>Mulai</a>
+</nav>
+
+<script>
+(function () {
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* Muncul bertahap saat elemen masuk layar */
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".rv").forEach(function (el, i) {
+    el.style.transitionDelay = (i % 3) * 70 + "ms";
+    io.observe(el);
+  });
+
+  /* Penanda menu aktif mengikuti posisi scroll (navbar + bottom bar) */
+  var links = document.querySelectorAll("[data-sec]");
+  var spy = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      var id = e.target.id || "top";
+      links.forEach(function (a) { a.classList.toggle("act", a.dataset.sec === id); });
+    });
+  }, { rootMargin: "-38% 0px -55% 0px" });
+  spy.observe(document.querySelector(".hero"));
+  document.querySelectorAll("section.blk").forEach(function (s) { spy.observe(s); });
+
+  if (reduce) return;
+
+  /* Parallax: lapisan hero bergerak beda kecepatan + gambar bergeser
+     halus di dalam bingkainya. Satu loop rAF, hanya yang terlihat. */
+  var layers = document.querySelectorAll(".plx, .hero-in");
+  var frames = document.querySelectorAll(".pf");
+  var hero = document.querySelector(".hero");
+  var ticking = false;
+  function update() {
+    ticking = false;
+    var sy = window.scrollY || 0;
+    var hh = hero.offsetHeight + 60;
+    if (sy < hh) {
+      layers.forEach(function (el) {
+        el.style.transform = "translate3d(0," + (sy * parseFloat(el.dataset.sp || 0)).toFixed(1) + "px,0)";
+      });
+    }
+    var vh = window.innerHeight;
+    frames.forEach(function (f) {
+      var r = f.getBoundingClientRect();
+      if (r.bottom < -60 || r.top > vh + 60) return;
+      var p = (r.top + r.height / 2 - vh / 2) / vh;   /* -0.5 .. 0.5 */
+      var img = f.firstElementChild;
+      if (img) img.style.transform = "scale(1.13) translateY(" + (-p * 22).toFixed(1) + "px)";
+    });
+  }
+  function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(update); } }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  update();
+})();
+</script>
 </body>
 </html>
