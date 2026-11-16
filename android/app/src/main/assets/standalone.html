@@ -271,6 +271,9 @@
     border-radius:999px;padding:4px 9px;font-size:.8rem;line-height:1;cursor:pointer}
   .md-copy:active{color:var(--gold);border-color:var(--gold)}
   .md-code pre{margin:0;padding:10px 12px;overflow-x:auto}
+  /* Kode saham yang bisa diketuk menuju analisis (v1.31.6) */
+  .tk-link{background:rgba(240,185,11,.13);border:1px solid rgba(240,185,11,.5);color:var(--gold);
+    border-radius:6px;padding:0 5px;font:inherit;font-weight:700;cursor:pointer}
   .cbub.ai .md-code code{display:block;background:transparent;border:none;border-radius:0;padding:0;
     font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.55;
     white-space:pre;color:#e6edf3}
@@ -3473,7 +3476,9 @@ const AI_SYSTEM = "Kamu adalah asisten AI di aplikasi D TRADE (aplikasi analisis
   "Jawablah dalam Bahasa Indonesia yang jelas dan ringkas, dengan paragraf pendek dan poin-poin seperlunya — " +
   "jangan memakai tabel. Kamu boleh membantu menjelaskan analisis teknikal, " +
   "indikator, dan konsep trading, serta menjawab pertanyaan umum. Kamu BUKAN penasihat keuangan: jangan pernah " +
-  "menjanjikan profit atau menyuruh membeli/menjual secara pasti; ingatkan risiko secara singkat bila relevan.";
+  "menjanjikan profit atau menyuruh membeli/menjual secara pasti; ingatkan risiko secara singkat bila relevan. " +
+  "Bila menyebut saham Indonesia, tulis KODE sahamnya dengan huruf kapital penuh (mis. GOTO, BBCA, TLKM) — " +
+  "di aplikasi kode itu bisa diketuk pengguna untuk membuka analisis sahamnya.";
 
 /* Renderer markdown ringan (v1.31.0): jawaban AI mentah berisi ###, **,
    --- dll. Diubah menjadi tampilan rapi bergaya chatbot sungguhan —
@@ -3537,6 +3542,52 @@ let chatBusy = false;
 function saveChat() {
   try { localStorage.setItem("dtrade-chat-v1", JSON.stringify(chatMsgs.slice(-40))); } catch (e) { /* abaikan */ }
 }
+/* Kode saham IDX yang disebut dalam jawaban AI menjadi tombol menuju
+   analisisnya (v1.31.6). Sumber kebenaran: daftar bawaan STOCK_DEFS.idx,
+   jadi kata kapital acak (RSI, EMA, dst.) tidak ikut tertaut. */
+let TICKER_IDX = null;
+function tickerIdxMap() {
+  if (!TICKER_IDX) {
+    TICKER_IDX = {};
+    (STOCK_DEFS.idx || []).forEach(e => { if (e.ticker) TICKER_IDX[e.ticker] = e.symbol; });
+  }
+  return TICKER_IDX;
+}
+function linkifyTickers(root) {
+  const map = tickerIdxMap();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      if (!/[A-Z]{4}/.test(n.nodeValue || "")) return NodeFilter.FILTER_REJECT;
+      const p = n.parentElement;
+      if (!p || p.closest("code, pre, button, .md-code")) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(n => {
+    const text = n.nodeValue;
+    const frag = document.createDocumentFragment();
+    let last = 0, changed = false;
+    text.replace(/\b([A-Z]{4})(\.JK)?\b/g, (m, code, jk, off) => {
+      if (!map[code]) return m;
+      changed = true;
+      frag.appendChild(document.createTextNode(text.slice(last, off)));
+      const b = document.createElement("button");
+      b.className = "tk-link";
+      b.dataset.ticker = code;
+      b.textContent = code;
+      frag.appendChild(b);
+      last = off + m.length;
+      return m;
+    });
+    if (changed) {
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      n.parentNode.replaceChild(frag, n);
+    }
+  });
+}
+
 function renderChat() {
   const box = $("chatList");
   box.innerHTML = "";
@@ -3558,6 +3609,8 @@ function renderChat() {
       // Balon AI dirender dari markdown ringan (v1.31.0) + label AI.
       d.innerHTML = '<div class="ai-tag"><i class="fa-solid fa-robot"></i> D TRADE AI</div>' +
         '<div class="md">' + mdLite(m.content) + "</div>";
+      const mdEl = d.querySelector(".md");
+      if (mdEl) linkifyTickers(mdEl);
     }
     box.appendChild(d);
     if (m.role === "user") {
@@ -3698,6 +3751,13 @@ function chatAct(act, idx) {
   }
 }
 $("chatList").addEventListener("click", e => {
+  const tk = e.target.closest("button.tk-link");
+  if (tk) {
+    // Kode saham diketuk → buka analisis saham IDX itu (v1.31.6).
+    const sym = tickerIdxMap()[tk.dataset.ticker];
+    if (sym) openDetail(sym, "idx");
+    return;
+  }
   const cb = e.target.closest("button.md-copy");
   if (cb) {
     // Salin HANYA isi blok kode itu (v1.31.5).
