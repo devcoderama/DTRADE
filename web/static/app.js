@@ -33,17 +33,24 @@ async function api(path, options, _retried) {
   const resp = await fetch(path, options || {});
   const data = await resp.json().catch(() => ({}));
   if (resp.status === 401 && !_retried) {
-    // Server mewajibkan token (WEB_API_TOKEN): minta sekali → login → ulangi.
-    const entered = window.prompt("Server ini dilindungi token API. Masukkan WEB_API_TOKEN:");
-    if (entered) {
+    // Server terkunci: cara utama masuk adalah PIN aplikasi (dibuat server
+    // saat pertama kali berjalan, tampil di konsol server). Token API lama
+    // (WEB_API_TOKEN) tetap diterima sebagai alternatif.
+    const doLogin = async (body) => {
       const login = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: entered.trim() }),
+        body: JSON.stringify(body),
       }).catch(() => null);
-      if (login && login.ok) return api(path, options, true);
-      throw new Error("Token salah — login ditolak server.");
+      return !!(login && login.ok);
+    };
+    const pin = window.prompt("🔐 Masukkan PIN aplikasi DTRADE:");
+    if (pin && (await doLogin({ pin: pin.trim() }))) return api(path, options, true);
+    if (pin) {
+      const token = window.prompt("PIN ditolak. Alternatif: masukkan token API (WEB_API_TOKEN), atau kosongkan untuk batal:");
+      if (token && (await doLogin({ token: token.trim() }))) return api(path, options, true);
     }
+    throw new Error("Login gagal — PIN/token ditolak server.");
   }
   if (!resp.ok) throw new Error(data.detail || ("HTTP " + resp.status));
   return data;

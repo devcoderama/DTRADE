@@ -163,11 +163,33 @@ cp .env.example .env
 ### iOS
 
 iOS tidak menjalankan Python secara native. Jalankan proyek ini di
-komputer/VPS, isi `WEB_API_TOKEN` di `.env`, mulai Web UI dengan
-`WEB_HOST=0.0.0.0`, lalu buka `http://<ip-server>:8000` dari browser
-iPhone Anda dan masukkan token saat diminta. Untuk akses dari luar
-jaringan rumah, gunakan reverse proxy HTTPS (Caddy/nginx) atau VPN
+komputer/VPS, mulai Web UI dengan `WEB_HOST=0.0.0.0`, lalu buka
+`http://<ip-server>:8000` dari browser iPhone Anda dan masukkan PIN
+aplikasi saat diminta (lihat "PIN Aplikasi" di bawah). Untuk akses dari
+luar jaringan rumah, gunakan reverse proxy HTTPS (Caddy/nginx) atau VPN
 (Tailscale) — jangan mengekspos port 8000 langsung ke internet.
+
+## PIN Aplikasi
+
+Web UI dilindungi **PIN aplikasi** — cara utama masuk, menggantikan token
+API yang panjang:
+
+- Saat `python run.py web` **pertama kali** berjalan, server membuat PIN
+  6 digit acak dan menampilkannya **sekali** di konsol. Catat PIN itu.
+- Hash PIN (PBKDF2, bukan teks asli) tersimpan di database
+  `data/app.db` — **restart server tidak mengubah PIN** dan tidak perlu
+  membuat PIN baru.
+- Setiap membuka Web UI, masukkan PIN tersebut. Login menerbitkan sesi
+  7 hari; percobaan login dibatasi ketat (5×/menit per IP) agar PIN tidak
+  bisa ditebak paksa.
+- Lupa PIN? Jalankan `python run.py pin` untuk membuat PIN baru (PIN lama
+  dan semua sesi aktif langsung berhenti berlaku).
+- Ingin PIN tertentu? Isi `WEB_PIN` (4–8 digit) di `.env`.
+- `WEB_API_TOKEN` tetap didukung sebagai alternatif (header `X-API-Token`
+  / login token) untuk skrip dan pemantauan.
+- Di aplikasi Android D TRADE (≥ v1.29.0), mode server yang sudah pernah
+  masuk dapat dibuka dengan **sidik jari** bila perangkat mendukung —
+  aktif/nonaktifkan lewat dialog "Alamat Server".
 
 ## Konfigurasi `.env`
 

@@ -11,7 +11,9 @@ import java.security.MessageDigest
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.hardware.fingerprint.FingerprintManager
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -22,6 +24,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -58,6 +61,10 @@ class MainActivity : Activity() {
 
     /** Dialog pembaruan yang sedang tampil (untuk dibersihkan di onDestroy). */
     private var updateDialog: Dialog? = null
+
+    /** Dialog kunci sidik jari (v1.29.0) + sinyal pembatalannya. */
+    private var fpDialog: Dialog? = null
+    private var fpCancel: CancellationSignal? = null
 
     /** true bila verifikasi tanda tangan gagal — aplikasi diblokir total. */
     private var tampered = false
@@ -158,6 +165,15 @@ class MainActivity : Activity() {
                 webView.visibility = View.VISIBLE
             }
 
+            override fun onPageFinished(view: WebView?, url: String?) {
+                // v1.29.0: tandai bahwa perangkat ini pernah berhasil
+                // membuka Web UI server — prasyarat gerbang sidik jari
+                // pada pembukaan berikutnya.
+                if (!standaloneMode && url != null && url.startsWith(serverUrl())) {
+                    prefs.edit().putBoolean(KEY_SERVER_SESSION, true).apply()
+                }
+            }
+
             // Fase 6-C3: daftar-izin host — WebView HANYA boleh bernavigasi
             // ke host server yang dikonfigurasi pengguna, atau host semu
             // halaman mode mandiri (dtrade.local). Tautan/redirect ke host
@@ -240,7 +256,9 @@ class MainActivity : Activity() {
         errorView.setOnClickListener { showUrlDialog() }
 
         if (savedInstanceState == null) {
-            loadHome()
+            // v1.29.0: buka mode server lewat gerbang sidik jari bila
+            // perangkat mendukung & pengguna pernah masuk mode server.
+            maybeGateThenLoadHome()
         } else if (savedInstanceState.getBoolean(KEY_STANDALONE, false)) {
             // Halaman loadDataWithBaseURL tidak bisa dipulihkan oleh
             // restoreState — muat ulang mode mandiri secara eksplisit
@@ -543,11 +561,25 @@ class MainActivity : Activity() {
         val input = EditText(this)
         input.setText(prefs.getString(KEY_URL, DEFAULT_URL))
         input.hint = "cth: http://192.168.1.10:8000"
+        // v1.29.0: opsi kunci sidik jari untuk mode server.
+        val fpCheck = CheckBox(this)
+        fpCheck.text = "Kunci sidik jari saat membuka mode server"
+        fpCheck.isChecked = prefs.getBoolean(KEY_FP_LOCK, true)
+        if (!fingerprintAvailable()) {
+            fpCheck.isChecked = false
+            fpCheck.isEnabled = false
+            fpCheck.text = "Kunci sidik jari (perangkat tidak mendukung / belum ada sidik jari terdaftar)"
+        }
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.addView(input)
+        container.addView(fpCheck)
         AlertDialog.Builder(this)
             .setTitle("Alamat Server")
             .setMessage("Alamat Web UI DTRADE di komputer/VPS Anda (satu jaringan Wi-Fi untuk IP lokal).")
-            .setView(input)
+            .setView(container)
             .setPositiveButton("Simpan") { _, _ ->
+                prefs.edit().putBoolean(KEY_FP_LOCK, fpCheck.isChecked).apply()
                 val raw = input.text.toString().trim()
                 val probe = android.net.Uri.parse(
                     if (raw.startsWith("http")) raw else "http://$raw")
@@ -618,7 +650,118 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         updateDialog?.dismiss()
         updateDialog = null
+        fpCancel?.cancel()
+        fpDialog?.dismiss()
+        fpDialog = null
         super.onDestroy()
+    }
+
+    // ------------------------------------------------------------------
+    // v1.29.0: gerbang sidik jari untuk mode server.
+    //
+    // Alur: pengguna masuk mode server sekali dengan PIN aplikasi di
+    // Web UI (cookie sesi tersimpan di WebView). Pada pembukaan dingin
+    // berikutnya, bila (a) opsi kunci aktif, (b) perangkat punya sensor +
+    // sidik jari terdaftar, dan (c) mode server pernah berhasil dibuka,
+    // aplikasi meminta sidik jari SEBELUM memuat URL server. Gagal/batal
+    // selalu punya jalan keluar "Gunakan PIN" (memuat Web UI; PIN diminta
+    // server bila sesi berakhir) — gerbang ini lapisan keamanan lokal,
+    // bukan pengganti PIN server.
+    // ------------------------------------------------------------------
+
+    @Suppress("DEPRECATION")
+    private fun fingerprintManager(): FingerprintManager? = try {
+        getSystemService(FINGERPRINT_SERVICE) as? FingerprintManager
+    } catch (e: Exception) {
+        null
+    }
+
+    @Suppress("DEPRECATION")
+    private fun fingerprintAvailable(): Boolean = try {
+        val fm = fingerprintManager()
+        fm != null && fm.isHardwareDetected && fm.hasEnrolledFingerprints()
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun maybeGateThenLoadHome() {
+        val gate = prefs.getBoolean(KEY_FP_LOCK, true) &&
+            prefs.getBoolean(KEY_SERVER_SESSION, false) &&
+            fingerprintAvailable()
+        if (gate) showFingerprintLock() else loadHome()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showFingerprintLock() {
+        val fm = fingerprintManager()
+        if (fm == null) {
+            loadHome()
+            return
+        }
+        fpCancel?.cancel()
+        val signal = CancellationSignal()
+        fpCancel = signal
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("🔐 D TRADE Terkunci")
+            .setMessage("Sentuh sensor sidik jari untuk membuka mode server.")
+            .setCancelable(false)
+            .setPositiveButton("Gunakan PIN") { _, _ ->
+                signal.cancel()
+                loadHome()
+            }
+            .setNegativeButton("Keluar") { _, _ ->
+                signal.cancel()
+                finish()
+            }
+            .create()
+        fpDialog = dialog
+        dialog.show()
+        try {
+            fm.authenticate(
+                null, signal, 0,
+                object : FingerprintManager.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(
+                        result: FingerprintManager.AuthenticationResult?
+                    ) {
+                        fpDialog?.dismiss()
+                        loadHome()
+                    }
+
+                    override fun onAuthenticationFailed() {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Sidik jari tidak dikenal — coba lagi.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+
+                    override fun onAuthenticationError(
+                        errorCode: Int, errString: CharSequence?
+                    ) {
+                        if (errorCode == FingerprintManager.FINGERPRINT_ERROR_CANCELED) return
+                        fpDialog?.dismiss()
+                        showFingerprintFallback(errString?.toString())
+                    }
+                },
+                null
+            )
+        } catch (e: Exception) {
+            dialog.dismiss()
+            loadHome()
+        }
+    }
+
+    private fun showFingerprintFallback(reason: String?) {
+        AlertDialog.Builder(this)
+            .setTitle("Sidik jari tidak dapat dipakai")
+            .setMessage(
+                (reason ?: "Terjadi kesalahan pada sensor.") +
+                    "\n\nBuka mode server dengan PIN aplikasi sebagai gantinya?"
+            )
+            .setCancelable(false)
+            .setPositiveButton("Gunakan PIN") { _, _ -> loadHome() }
+            .setNegativeButton("Keluar") { _, _ -> finish() }
+            .show()
     }
 
     /**
@@ -882,6 +1025,12 @@ class MainActivity : Activity() {
         private const val PREFS = "dtrade"
         private const val KEY_URL = "server_url"
         private const val KEY_STANDALONE = "standalone_mode"
+
+        /** v1.29.0: kunci sidik jari mode server aktif (bawaan: ya). */
+        private const val KEY_FP_LOCK = "fp_lock"
+
+        /** v1.29.0: perangkat ini pernah berhasil membuka Web UI server. */
+        private const val KEY_SERVER_SESSION = "server_session_seen"
 
         /**
          * SHA-256 sertifikat penanda tangan rilis resmi D TRADE —

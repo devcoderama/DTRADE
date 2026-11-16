@@ -69,6 +69,13 @@ log = get_logger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 settings = load_settings()
+
+from web import pin_store
+
+# PIN aplikasi + sesi login PIN tinggal di <DATA_DIR>/app.db (persisten
+# lintas restart). Lihat web/pin_store.py.
+pin_store.configure(Path(settings.data_dir) / "app.db")
+
 binance = BinanceFuturesClient(settings)
 ai_client = build_ai_provider(settings)
 notifier = build_notifier(settings)
@@ -202,6 +209,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return "admin"
         if self._viewer_token and hmac.compare_digest(token, self._viewer_token):
             return "viewer"
+        # Sesi login PIN: cookie/header berisi ID sesi dari pin_store.
+        if token:
+            role = pin_store.session_role(token)
+            if role:
+                return role
         return None
 
     @staticmethod
@@ -270,10 +282,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Terlalu banyak request — coba lagi sebentar lagi."},
                 headers={"Retry-After": "30"},
             )
-        if self._api_token:
+        if self._api_token or pin_store.pin_exists_cached():
             role = self._role(request)
             if role is None:
-                return JSONResponse(status_code=401, content={"detail": "Token API diperlukan (header X-API-Token)."})
+                return JSONResponse(status_code=401, content={"detail": "Login diperlukan — masukkan PIN aplikasi atau token API."})
             if role == "viewer" and request.method not in {"GET", "HEAD", "OPTIONS"}:
                 return JSONResponse(status_code=403, content={"detail": "Token viewer hanya boleh membaca (GET)."})
         return await call_next(request)
@@ -343,10 +355,13 @@ def _auto_broadcast_loop() -> None:
 def enforce_web_safety() -> None:
     """Tolak konfigurasi web yang berbahaya. Dipanggil sebelum server naik.
 
-    Aturan: tanpa WEB_API_TOKEN, server hanya boleh (a) mode dry-run DAN
-    (b) terikat ke loopback. Pengecualian sadar-risiko: ALLOW_INSECURE_WEB=true.
+    Aturan: tanpa autentikasi apa pun (WEB_API_TOKEN maupun PIN aplikasi),
+    server hanya boleh (a) mode dry-run DAN (b) terikat ke loopback.
+    Pengecualian sadar-risiko: ALLOW_INSECURE_WEB=true. PIN aplikasi dibuat
+    otomatis di run() sebelum pemeriksaan ini, jadi PIN yang tersimpan di
+    database dihitung sebagai autentikasi aktif.
     """
-    if settings.web_api_token:
+    if settings.web_api_token or pin_store.pin_exists():
         return
     if settings.allow_insecure_web:
         log.warning(
@@ -358,19 +373,19 @@ def enforce_web_safety() -> None:
     loopback = settings.web_host in {"127.0.0.1", "::1", "localhost"}
     if settings.is_live:
         raise RuntimeError(
-            "MENOLAK START: TRADING_MODE=live tanpa WEB_API_TOKEN. Isi WEB_API_TOKEN "
-            "di .env (token acak panjang), atau set ALLOW_INSECURE_WEB=true bila Anda "
-            "sadar penuh risikonya."
+            "MENOLAK START: TRADING_MODE=live tanpa autentikasi. Isi WEB_API_TOKEN "
+            "di .env (token acak panjang) — PIN aplikasi dibuat otomatis saat start — "
+            "atau set ALLOW_INSECURE_WEB=true bila Anda sadar penuh risikonya."
         )
     if not loopback:
         raise RuntimeError(
             f"MENOLAK START: WEB_HOST={settings.web_host} (bukan loopback) tanpa "
-            "WEB_API_TOKEN — siapa pun di jaringan dapat mengeksekusi trade. Isi "
+            "autentikasi — siapa pun di jaringan dapat mengeksekusi trade. Isi "
             "WEB_API_TOKEN di .env, kembalikan WEB_HOST=127.0.0.1, atau set "
             "ALLOW_INSECURE_WEB=true bila Anda sadar penuh risikonya."
         )
     log.warning(
-        "Autentikasi API nonaktif (WEB_API_TOKEN kosong) — diizinkan hanya karena "
+        "Autentikasi API nonaktif (tanpa token & tanpa PIN) — diizinkan hanya karena "
         "mode dry-run + bind loopback (%s).", settings.web_host,
     )
 
@@ -502,7 +517,7 @@ async def ws_klines(websocket: WebSocket, symbol: str, interval: Optional[str] =
     """
     import asyncio
 
-    if settings.web_api_token:
+    if settings.web_api_token or pin_store.pin_exists():
         import hmac
 
         # Fase 6-C1: ?token= DIHAPUS — token di URL bocor lewat log &
@@ -512,9 +527,11 @@ async def ws_klines(websocket: WebSocket, symbol: str, interval: Optional[str] =
             or websocket.headers.get("x-api-token")
             or ""
         )
-        ok = hmac.compare_digest(token, settings.web_api_token) or (
+        ok = (
+            bool(settings.web_api_token) and hmac.compare_digest(token, settings.web_api_token)
+        ) or (
             bool(settings.web_viewer_token) and hmac.compare_digest(token, settings.web_viewer_token)
-        )
+        ) or bool(pin_store.session_role(token))
         if not ok:
             await websocket.close(code=4401)
             return
@@ -714,24 +731,44 @@ class TradeRequest(BaseModel):
 
 
 class AuthRequest(BaseModel):
-    token: str
+    token: str = ""
+    pin: Optional[str] = None
 
 
 @app.post("/api/auth/login")
 def auth_login(req: AuthRequest, request: Request) -> JSONResponse:
-    """Tukar token API menjadi cookie sesi (untuk Web UI di peramban)."""
+    """Login Web UI: PIN aplikasi (utama) atau token API (alternatif).
+
+    PIN yang benar diterbitkan ID sesi acak — cookie `baf_token` berisi ID
+    sesi itu, bukan PIN-nya. Token API tetap diterima persis seperti
+    sebelumnya (cookie berisi token itu sendiri). Percobaan login dibatasi
+    ketat per IP oleh SecurityMiddleware (5/menit).
+    """
     import hmac
 
-    if not settings.web_api_token:
+    is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+    if req.pin is not None:
+        if not pin_store.pin_exists():
+            raise HTTPException(status_code=401, detail="PIN belum diatur di server.")
+        if not pin_store.verify_pin(req.pin):
+            raise HTTPException(status_code=401, detail="PIN salah.")
+        session_id = pin_store.create_session("admin")
+        resp = JSONResponse({"ok": True, "role": "admin", "auth_enabled": True, "via": "pin"})
+        resp.set_cookie(
+            "baf_token", session_id, httponly=True, samesite="strict", secure=is_https,
+            path="/api", max_age=7 * 24 * 3600,
+        )
+        return resp
+
+    if not settings.web_api_token and not pin_store.pin_exists():
         return JSONResponse({"ok": True, "role": "admin", "auth_enabled": False})
-    if hmac.compare_digest(req.token, settings.web_api_token):
+    if settings.web_api_token and hmac.compare_digest(req.token, settings.web_api_token):
         role = "admin"
     elif settings.web_viewer_token and hmac.compare_digest(req.token, settings.web_viewer_token):
         role = "viewer"
     else:
         raise HTTPException(status_code=401, detail="Token salah.")
-    # Cookie Secure hanya pada HTTPS (langsung atau lewat reverse proxy).
-    is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     resp = JSONResponse({"ok": True, "role": role, "auth_enabled": True})
     resp.set_cookie(
         "baf_token", req.token, httponly=True, samesite="strict", secure=is_https,
@@ -741,8 +778,11 @@ def auth_login(req: AuthRequest, request: Request) -> JSONResponse:
 
 
 @app.post("/api/auth/logout")
-def auth_logout() -> JSONResponse:
-    """Akhiri sesi peramban: hapus cookie token (Fase 6-C1)."""
+def auth_logout(request: Request) -> JSONResponse:
+    """Akhiri sesi peramban: hapus cookie + cabut sesi PIN di server."""
+    session_id = request.cookies.get("baf_token") or ""
+    if session_id:
+        pin_store.delete_session(session_id)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie("baf_token", path="/api")
     return resp
@@ -940,6 +980,23 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 def run() -> None:
     import uvicorn
+
+    # PIN aplikasi: dibuat otomatis saat pertama kali server berjalan dan
+    # hash-nya tersimpan di database — restart TIDAK membuat PIN baru.
+    new_pin = pin_store.ensure_pin(settings.web_pin)
+    if new_pin:
+        print()
+        print("=" * 58)
+        print("  🔐 PIN APLIKASI DTRADE BARU DIBUAT")
+        print(f"  PIN Anda: {new_pin}")
+        print("  Catat PIN ini — hanya ditampilkan SEKALI di sini.")
+        print("  Membuka Web UI akan meminta PIN ini. PIN tersimpan")
+        print("  (dalam bentuk hash) di database, jadi restart server")
+        print("  tidak mengubahnya. Lupa PIN? Jalankan: python run.py pin")
+        print("=" * 58)
+        print()
+    elif pin_store.pin_exists():
+        log.info("PIN aplikasi aktif (tersimpan di database) — Web UI meminta PIN saat dibuka.")
 
     enforce_web_safety()  # gagal cepat dengan pesan jelas, sebelum port dibuka
     log.info(

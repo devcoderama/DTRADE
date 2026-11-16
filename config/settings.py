@@ -180,6 +180,11 @@ class Settings:
     # token utama = akses penuh (operator), WEB_VIEWER_TOKEN = hanya baca.
     web_api_token: str = field(default="", repr=False)
     web_viewer_token: str = field(default="", repr=False)
+    # PIN aplikasi (4–8 digit) untuk membuka Web UI — dibuat otomatis saat
+    # server pertama kali berjalan & hash-nya tersimpan di database
+    # (web/pin_store.py). WEB_PIN di .env memaksa PIN tertentu; kosong =
+    # PIN acak yang ditampilkan sekali di konsol saat pertama dibuat.
+    web_pin: str = field(default="", repr=False)
     # Daftar origin CORS yang diizinkan, pisah koma. Kosong = tanpa CORS
     # (hanya same-origin). JANGAN gunakan "*" bersamaan dengan token.
     cors_origins: str = ""
@@ -399,6 +404,7 @@ def load_settings() -> Settings:
         protection_retries=_get_int("PROTECTION_RETRIES", 3),
         web_api_token=os.environ.get("WEB_API_TOKEN", "").strip(),
         web_viewer_token=os.environ.get("WEB_VIEWER_TOKEN", "").strip(),
+        web_pin=os.environ.get("WEB_PIN", "").strip(),
         cors_origins=os.environ.get("CORS_ORIGINS", "").strip(),
         trusted_proxies=os.environ.get("TRUSTED_PROXIES", "").strip(),
         rate_limit_per_minute=_get_int("RATE_LIMIT_PER_MINUTE", 240),
