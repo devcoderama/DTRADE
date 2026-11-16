@@ -199,6 +199,9 @@
     background:var(--panel);color:var(--muted);font-weight:700;font-size:.85rem;cursor:pointer}
   .mktseg button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
   .hidden{display:none !important}
+  /* Ruang gulir di bawah konten tab agar teks terakhir tidak tertutup
+     navigasi bawah yang tetap (v1.24.0 — dilaporkan dari tab Lainnya). */
+  #listView, #newsView, #moreView, #readerView{padding-bottom:96px}
 </style>
 <link rel="stylesheet" href="fa/css/all.min.css">
 </head>
@@ -306,10 +309,11 @@
   <div class="list" id="pickList" style="overflow-y:auto;flex:1;padding-bottom:20px"></div>
 </div>
 
-<div id="qrisZoom" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px">
+<div id="qrisZoom" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:18px">
   <img src="img/qris-donasi.jpg" alt="QRIS donasi — Warung kang dyana (diperbesar)"
-    style="max-width:100%;max-height:86%;border-radius:12px;background:#fff">
-  <div style="color:#c3cad4;font-size:.85rem">Ketuk di mana saja untuk menutup</div>
+    style="max-width:100%;max-height:76%;border-radius:12px;background:#fff">
+  <button id="qrisDl" style="background:var(--gold);color:#0b0e11;border:none;border-radius:10px;padding:13px 24px;font-weight:800;font-size:.95rem;cursor:pointer"><i class="fa-solid fa-download"></i> Unduh Gambar QRIS</button>
+  <div style="color:#c3cad4;font-size:.85rem">Ketuk di luar gambar untuk menutup</div>
 </div>
 
 <div id="readerView" class="hidden">
@@ -380,7 +384,7 @@
   <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
   <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
   Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.23.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.24.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -2927,9 +2931,26 @@ function openPicker() {
   $("pickerView").classList.remove("hidden");
 }
 function closePicker() { $("pickerView").classList.add("hidden"); }
-/* QRIS donasi di tab Lainnya (v1.23.0): ketuk gambar untuk layar penuh. */
+/* QRIS donasi di tab Lainnya (v1.23.0): ketuk gambar untuk layar
+   penuh; v1.24.0: tombol unduh di tampilan besar (lewat jembatan
+   native tersimpan ke galeri; di browser biasa unduhan berkas). */
 $("qrisImg").addEventListener("click", () => $("qrisZoom").classList.remove("hidden"));
-$("qrisZoom").addEventListener("click", () => $("qrisZoom").classList.add("hidden"));
+$("qrisZoom").addEventListener("click", ev2 => {
+  if (ev2.target === $("qrisZoom")) $("qrisZoom").classList.add("hidden");
+});
+$("qrisDl").addEventListener("click", ev2 => {
+  ev2.stopPropagation();
+  if (window.AndroidBridge && window.AndroidBridge.downloadQris) {
+    window.AndroidBridge.downloadQris();
+  } else {
+    const a = document.createElement("a");
+    a.href = "img/qris-donasi.jpg";
+    a.download = "qris-donasi.jpg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+});
 $("btnPick").addEventListener("click", openPicker);
 $("dSymbol").addEventListener("click", openPicker);
 $("btnPickBack").addEventListener("click", closePicker);

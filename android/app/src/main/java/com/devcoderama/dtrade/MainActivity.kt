@@ -2,14 +2,18 @@ package com.devcoderama.dtrade
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import java.security.MessageDigest
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -19,6 +23,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -52,7 +57,7 @@ class MainActivity : Activity() {
     private var standaloneMode = false
 
     /** Dialog pembaruan yang sedang tampil (untuk dibersihkan di onDestroy). */
-    private var updateDialog: AlertDialog? = null
+    private var updateDialog: Dialog? = null
 
     /** true bila verifikasi tanda tangan gagal — aplikasi diblokir total. */
     private var tampered = false
@@ -300,27 +305,117 @@ class MainActivity : Activity() {
         return false
     }
 
+    /**
+     * Popup pembaruan bertema aplikasi (v1.24.0): dialog kustom
+     * gelap + aksen emas mengikuti tema D TRADE — bukan lagi
+     * AlertDialog bawaan Android. Sifatnya tetap sama: wajib
+     * (tidak bisa ditutup) dan tampil lagi sepulang dari browser
+     * sampai aplikasi benar-benar diperbarui.
+     */
     private fun showUpdateDialog(latest: String, current: String, page: String) {
         if (isFinishing) return
-        updateDialog = AlertDialog.Builder(this)
-            .setTitle("Pembaruan Wajib Tersedia")
-            .setMessage(
-                "Versi terbaru D TRADE v$latest sudah tersedia " +
-                    "(versi terpasang: v$current).\n\n" +
-                    "Perbarui sekarang untuk melanjutkan menggunakan aplikasi."
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
+        fun lp(top: Int) = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(top) }
+        fun label(text: String, sizeSp: Float, color: Int, bold: Boolean) =
+            TextView(this).apply {
+                this.text = text
+                textSize = sizeSp
+                setTextColor(color)
+                if (bold) setTypeface(
+                    typeface, android.graphics.Typeface.BOLD
+                )
+            }
+
+        val gold = Color.parseColor("#F0B90B")
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(22), dp(24), dp(24))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#151A21"))
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.parseColor("#2A3038"))
+            }
+        }
+        card.addView(label("D TRADE", 13f, gold, true))
+        card.addView(label("Pembaruan Tersedia", 21f, Color.WHITE, true), lp(4))
+        card.addView(
+            label(
+                "Versi terbaru D TRADE sudah tersedia. Perbarui sekarang " +
+                    "untuk melanjutkan menggunakan aplikasi.",
+                14.5f, Color.parseColor("#9AA7B4"), false
+            ),
+            lp(10)
+        )
+        /* Kotak versi: terpasang → terbaru (terbaru disorot emas). */
+        val verText = "v$current   →   v$latest"
+        val verSpan = android.text.SpannableString(verText).apply {
+            setSpan(
+                android.text.style.ForegroundColorSpan(gold),
+                verText.indexOf("v$latest"), verText.length, 0
             )
-            .setCancelable(false)
-            .setPositiveButton("Unduh Versi Terbaru") { _, _ ->
+            setSpan(
+                android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                verText.indexOf("v$latest"), verText.length, 0
+            )
+        }
+        card.addView(TextView(this).apply {
+            text = verSpan
+            textSize = 15f
+            setTextColor(Color.parseColor("#C3CAD4"))
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1C2129"))
+                cornerRadius = dp(10).toFloat()
+            }
+        }, lp(16))
+        val btn = Button(this).apply {
+            text = "Unduh Versi Terbaru"
+            textSize = 15f
+            isAllCaps = false
+            setTextColor(Color.parseColor("#0B0E11"))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            background = GradientDrawable().apply {
+                setColor(gold)
+                cornerRadius = dp(12).toFloat()
+            }
+            setOnClickListener {
+                updateDialog?.dismiss()
                 try {
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(page)))
+                    startActivity(
+                        Intent(Intent.ACTION_VIEW, android.net.Uri.parse(page))
+                    )
                 } catch (e: Exception) {
-                    Toast.makeText(this, "Tidak ada browser untuk membuka unduhan",
-                        Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@MainActivity, "Tidak ada browser untuk membuka unduhan",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
                 // Tampilkan lagi sepulang dari browser: pembaruan bersifat wajib.
                 showUpdateDialog(latest, current, page)
             }
-            .show()
+        }
+        card.addView(btn, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(52)
+        ).apply { topMargin = dp(20) })
+
+        val dlg = Dialog(this)
+        dlg.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        dlg.setContentView(card)
+        dlg.setCancelable(false)
+        dlg.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+        )
+        updateDialog = dlg
+        dlg.show()
+        dlg.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.88).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     /**
@@ -557,7 +652,9 @@ class MainActivity : Activity() {
      * - openServer(): kembali memuat Web UI server.
      * - openExternal(): membuka tautan https (artikel berita) di browser
      *   ponsel — WebView sendiri tetap terkunci ke host server.
-     * Tidak ada kredensial, tidak ada penulisan, tidak ada host lain.
+     * - downloadQris(): menyimpan gambar QRIS terbundel ke galeri
+     *   pengguna (satu-satunya penulisan, hanya atas ketukan pengguna).
+     * Tidak ada kredensial dan tidak ada host lain.
      */
     inner class ApiBridge {
         @JavascriptInterface
@@ -670,6 +767,77 @@ class MainActivity : Activity() {
                     ).show()
                 }
             }
+        }
+
+        /**
+         * Unduh gambar QRIS donasi (v1.24.0): menyalin berkas aset
+         * terbundel img/qris-donasi.jpg ke galeri pengguna agar bisa
+         * diunggah ke fitur scan aplikasi bank/e-wallet. Android 10+
+         * lewat MediaStore (tanpa izin); versi lama ke folder
+         * Pictures khusus aplikasi + pemindaian media. Hasilnya
+         * dilaporkan lewat Toast. Satu-satunya penulisan berkas di
+         * jembatan ini, dan hanya atas ketukan pengguna.
+         */
+        @JavascriptInterface
+        fun downloadQris() {
+            Thread {
+                val ok = try {
+                    val name = "qris-donasi.jpg"
+                    if (android.os.Build.VERSION.SDK_INT >= 29) {
+                        val values = android.content.ContentValues().apply {
+                            put(
+                                android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+                                name
+                            )
+                            put(
+                                android.provider.MediaStore.Images.Media.MIME_TYPE,
+                                "image/jpeg"
+                            )
+                            put(
+                                android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                                "Pictures/D TRADE"
+                            )
+                        }
+                        val uri = contentResolver.insert(
+                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            values
+                        )
+                        if (uri == null) {
+                            false
+                        } else {
+                            contentResolver.openOutputStream(uri)?.use { out ->
+                                assets.open("img/qris-donasi.jpg").use { input ->
+                                    input.copyTo(out)
+                                }
+                            }
+                            true
+                        }
+                    } else {
+                        val dir = getExternalFilesDir(
+                            android.os.Environment.DIRECTORY_PICTURES
+                        ) ?: filesDir
+                        val f = java.io.File(dir, name)
+                        assets.open("img/qris-donasi.jpg").use { input ->
+                            f.outputStream().use { input.copyTo(it) }
+                        }
+                        android.media.MediaScannerConnection.scanFile(
+                            this@MainActivity, arrayOf(f.absolutePath),
+                            arrayOf("image/jpeg"), null
+                        )
+                        true
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (ok) "Gambar QRIS tersimpan di galeri (Pictures/D TRADE)"
+                        else "Gagal menyimpan gambar QRIS",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }.start()
         }
 
         @JavascriptInterface
