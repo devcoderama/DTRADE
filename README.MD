@@ -58,7 +58,9 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 
 > Diambil dari data **Binance Futures Testnet** dalam mode **dry-run**
 > (tanpa kunci API, tanpa dana asli) — angka yang tampil adalah keluaran
-> nyata aplikasi.
+> nyata aplikasi. Khusus tangkapan Android di bawah: **mode mandiri**
+> dengan data pasar publik **Mainnet** dari ponsel (tanpa server,
+> tanpa akun/dana).
 
 **Web UI — Dasbor**
 
@@ -87,6 +89,14 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 **Terminal CLI — `backtest BTCUSDT` (500 candle)**
 
 ![CLI — backtest BTCUSDT](screenshots/cli-backtest.png)
+
+**Aplikasi Android D TRADE — Mode Mandiri (tanpa terhubung ke server binance-ai-future): daftar simbol berlogo koin + chip sinyal, grafik candlestick LIVE via WebSocket dengan garis ENTRY/TP/SL, dan panel rencana trade Entry/TP/SL berbasis ATR(14)**
+
+<p>
+<img src="screenshots/android-standalone-list.jpg" width="250" alt="D TRADE mode mandiri — daftar simbol berlogo koin dan chip sinyal">
+<img src="screenshots/android-standalone-chart.jpg" width="250" alt="D TRADE mode mandiri — grafik live ZECUSDT dengan garis ENTRY/TP/SL">
+<img src="screenshots/android-standalone-plan.jpg" width="250" alt="D TRADE mode mandiri — panel rencana trade Entry/TP/SL dan alasan sinyal">
+</p>
 
 ## Arsitektur Singkat
 
