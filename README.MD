@@ -340,6 +340,22 @@ berjalan memuatnya otomatis, jadi pergantian dari CLI pun langsung
 berlaku di Web UI. Ini memudahkan bila model yang dipakai mencapai
 limit — tinggal pindah model/provider yang kuncinya sudah ada di `.env`.
 
+### AI Skill — pengetahuan analisa untuk AI (`core/AI_SKILL.md`)
+
+Cara AI menilai pasar diatur oleh satu file markdown: **`core/AI_SKILL.md`**.
+File itu dimuat ke prompt sistem setiap analisis, untuk **semua provider**,
+dan berisi kerangka keputusan analis: membaca rezim pasar, tren & struktur
+EMA, ADX, RSI, MACD, Bollinger, VWAP, volume, funding rate & open interest
+futures, struktur harga dari 25 candle terakhir, konfluensi multi-timeframe,
+konteks BTC untuk altcoin, perilaku per rezim, **kalibrasi confidence**
+(60 = ambang konfirmasi), daftar veto (jebakan: funding ekstrem searah,
+harga teregang >2×ATR dari EMA20, breakout tanpa volume, dll), serta aturan
+entry/SL/TP berbasis ATR. Sunting file itu — tanpa menyentuh kode — untuk
+mengubah gaya analisa AI; perubahan berlaku pada analisis berikutnya
+(restart server agar file dibaca ulang). Status muatannya tampil di
+`GET /api/config` → `ai_skill` dan di log startup
+("AI skill dimuat dari AI_SKILL.md").
+
 ### Siaran sinyal ke Telegram (`broadcast`)
 
 Memindai semua simbol, menyaring sinyal teknikal terkuat

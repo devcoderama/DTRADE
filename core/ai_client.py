@@ -20,6 +20,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 import requests
@@ -97,7 +98,7 @@ class AIAnalysis:
     raw: dict = field(default_factory=dict)
 
 
-SYSTEM_PROMPT = """Anda adalah analis kuantitatif senior untuk pasar Binance USDⓈ-M Futures.
+_BASE_SYSTEM_PROMPT = """Anda adalah analis kuantitatif senior untuk pasar Binance USDⓈ-M Futures.
 Anda menerima snapshot teknikal satu simbol (harga, perubahan 24 jam, indikator EMA/RSI/MACD/
 Bollinger/ATR, funding rate). Tugas Anda: menilai snapshot itu secara disiplin dan skeptis.
 
@@ -110,6 +111,48 @@ Aturan:
 - stop_loss dan take_profit harus konsisten dengan ATR yang diberikan dan sisi sinyal.
 - Untuk NEUTRAL, entry/stop_loss/take_profit boleh null.
 - Jangan menjanjikan profit. Sebutkan risiko utama secara eksplisit."""
+
+
+# ---------------------------------------------------------------------------
+# AI SKILL (core/AI_SKILL.md) — pengetahuan analisa trading yang disuntikkan
+# ke prompt sistem SEMUA provider (permintaan pemilik, 2026-11-17). File
+# markdown itu adalah satu-satunya tempat pengetahuan ini hidup: sunting
+# file-nya untuk mengubah cara AI menilai pasar, tanpa menyentuh kode.
+# Bila file hilang/rusak, AI tetap bekerja dengan prompt dasar saja.
+# ---------------------------------------------------------------------------
+_AI_SKILL_PATH = Path(__file__).with_name("AI_SKILL.md")
+
+
+def _load_ai_skill() -> str:
+    try:
+        text = _AI_SKILL_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        log.warning("AI_SKILL.md tidak ditemukan di %s — AI memakai prompt dasar.", _AI_SKILL_PATH)
+        return ""
+    if text:
+        log.info("AI skill dimuat dari AI_SKILL.md (%d karakter).", len(text))
+    return text
+
+
+AI_SKILL_TEXT = _load_ai_skill()
+
+SYSTEM_PROMPT = (
+    _BASE_SYSTEM_PROMPT
+    + (
+        "\n\n# PENGETAHUAN ANALISA — AI SKILL\n\n" + AI_SKILL_TEXT
+        if AI_SKILL_TEXT
+        else ""
+    )
+)
+
+
+def ai_skill_info() -> dict:
+    """Status AI skill untuk ditampilkan di Web UI / diagnostik."""
+    return {
+        "loaded": bool(AI_SKILL_TEXT),
+        "chars": len(AI_SKILL_TEXT),
+        "path": str(_AI_SKILL_PATH),
+    }
 
 
 class BangunWebAIClient:

@@ -570,6 +570,9 @@ def config() -> dict:
     summary["ai_provider"] = provider
     summary["ai_model"] = model
     summary["ai_configured"] = bool(ai_client is not None and ai_client.is_configured())
+    from core.ai_client import ai_skill_info
+
+    summary["ai_skill"] = ai_skill_info()
     summary["database"] = database.health() if database is not None else {"configured": False, "ok": None}
     summary["market_stream"] = market_stream.health()
     return summary
