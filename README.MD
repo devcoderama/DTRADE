@@ -365,6 +365,25 @@ Proyek ini juga punya aplikasi Android resmi bernama **D TRADE**: WebView aman d
 - Docker: `docker compose up --build` (konfigurasi tetap dari `.env` Anda;
   folder `data/` dan `logs/` ter-mount sebagai volume).
 
+### Image resmi di GitHub Packages (GHCR)
+
+Image backend juga diterbitkan otomatis ke GitHub Container Registry —
+tanpa clone repo dan tanpa build sendiri:
+
+```bash
+docker pull ghcr.io/devcoderama/binance-ai-future:latest
+docker run -d --name binance-ai-future \
+  --env-file .env -p 127.0.0.1:8000:8000 \
+  -v baf_data:/app/data -v baf_logs:/app/logs \
+  ghcr.io/devcoderama/binance-ai-future:latest
+```
+
+Tag yang tersedia: `latest` (build terbaru dari `main`), `sha-<commit>`,
+dan nomor versi (mis. `1.5.0`) untuk image yang diterbitkan dari sebuah
+GitHub Release. Konfigurasi tetap dari `.env` Anda — secret **tidak**
+ikut di dalam image. Paketnya publik:
+<https://github.com/devcoderama?tab=packages&repo_name=binance-ai-future>
+
 ## Penafian
 
 Proyek ini adalah perangkat lunak sumber terbuka untuk tujuan edukasi dan
