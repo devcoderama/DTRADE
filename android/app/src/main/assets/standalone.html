@@ -89,6 +89,20 @@
   .mtfchip.short .sd{color:var(--red)}
   .mtfchip.neu .sd{color:#c3cad4}
   .mtfchip.act{border-color:var(--gold)}
+  /* ===== Digest perubahan sinyal favorit (v1.18.0) ===== */
+  .digest{margin:10px 14px 0;background:linear-gradient(180deg,rgba(240,185,11,.08),rgba(240,185,11,.02));
+    border:1px solid rgba(240,185,11,.45);border-radius:12px;padding:10px 12px}
+  .digest .dhead2{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:.86rem}
+  .digest .dsub{font-size:.72rem;color:var(--muted);margin:2px 0 4px}
+  .drow{display:flex;align-items:center;gap:7px;padding:5px 0;border-top:1px solid var(--line);
+    cursor:pointer;font-size:.82rem;flex-wrap:wrap}
+  .drow b{min-width:52px}
+  .dside{font-weight:800}
+  .dside.long{color:var(--green)}
+  .dside.short{color:var(--red)}
+  .dside.neu{color:#c3cad4}
+  .drow small{color:var(--muted);margin-left:auto}
+  .dmore{font-size:.75rem;color:var(--muted);padding-top:5px}
   .asfield{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:12px;color:var(--text);font-size:.95rem;margin:6px 0 14px}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
@@ -194,6 +208,11 @@
 </div>
 
 <div id="listView">
+  <div class="digest hidden" id="digestBox">
+    <div class="dhead2"><span><i class="fa-solid fa-bell"></i> Perubahan sinyal favorit</span><button class="iconbtn" id="digestClose" aria-label="Tutup ringkasan"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="dsub" id="digestWhen"></div>
+    <div id="digestList"></div>
+  </div>
   <div class="mktseg" id="mktSeg">
     <button data-mkt="crypto" class="on">Crypto</button>
     <button data-mkt="idx">Saham IDX</button>
@@ -339,7 +358,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.17.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.18.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1014,6 +1033,14 @@ async function loadStocks(mkt, force) {
     symbol: e.symbol, ticker: e.ticker, name: e.name, market: e.market,
     currency: e.currency, index: !!e.index, custom: !!e.custom, kw: e.kw || [],
     price: e.price, change: e.change, volume: e.volume, scoreObj: e.scoreObj })));
+  /* Digest perubahan favorit + snapshot sesi ini (v1.18.0). */
+  noteChanges(mkt, entries.map(e => ({
+    symbol: e.symbol, label: e.ticker, scoreObj: e.scoreObj })));
+  const freshS = {};
+  entries.forEach(e => {
+    if (e.scoreObj) freshS[mkt + ":" + e.symbol] = { s: e.scoreObj.side, v: e.scoreObj.score };
+  });
+  snapshotSave(freshS);
   if (market === mkt) {
     renderStocks();
     $("status").textContent = entries.length + " instrumen · sinyal 1d terhitung untuk " +
@@ -1261,6 +1288,14 @@ async function computeSignals(run) {
         cacheSave("dtrade-cache-crypto", symbols.map(s => ({
           symbol: s.symbol, base: s.base, price: s.price, change: s.change,
           volume: s.volume, scoreObj: s.scoreObj })));
+        /* Digest perubahan favorit + snapshot sesi ini (v1.18.0). */
+        noteChanges("crypto", symbols.map(s => ({
+          symbol: s.symbol, label: s.symbol.replace("USDT", ""), scoreObj: s.scoreObj })));
+        const freshC = {};
+        symbols.forEach(s => {
+          if (s.scoreObj) freshC["crypto:" + s.symbol] = { s: s.scoreObj.side, v: s.scoreObj.score };
+        });
+        snapshotSave(freshC);
         if ($("sort").value === "signal") renderList();
       }
     }
@@ -1425,6 +1460,80 @@ $("btnFav").addEventListener("click", () => {
 });
 const FAV_EMPTY_HTML = '<div class="favempty">Belum ada favorit di pasar ini.<br>' +
   "Ketuk ☆ pada baris daftar atau di halaman Analisis untuk menambahkan.</div>";
+
+/* ================= Digest perubahan sinyal favorit (v1.18.0) =================
+   Skor sesi terakhir disimpan sebagai snapshot. Saat skor segar sesi
+   ini selesai dihitung, favorit yang BERUBAH sisi (atau skornya
+   berayun ≥30) dirangkum dalam kartu di atas daftar Pasar — jawaban
+   instan untuk "apa yang berubah sejak terakhir kubuka?". */
+let prevSnap = { ts: 0, map: {} };
+try {
+  const p = JSON.parse(localStorage.getItem("dtrade-prev-scores") || "null");
+  if (p && p.map) prevSnap = p;
+} catch (e) { /* abaikan */ }
+const bootSnapMap = Object.assign({}, prevSnap.map);
+const digestBaseTs = prevSnap.ts;
+let digestChanges = [];
+let digestDismissed = false;
+function snapshotSave(fresh) {
+  Object.assign(prevSnap.map, fresh);
+  prevSnap.ts = Date.now();
+  try { localStorage.setItem("dtrade-prev-scores", JSON.stringify(prevSnap)); }
+  catch (e) { /* abaikan */ }
+}
+function noteChanges(mkt, rows) {
+  if (!favSet.size || !digestBaseTs) return;
+  rows.forEach(r => {
+    if (!r.scoreObj || !isFav(mkt, r.symbol)) return;
+    const key = mkt + ":" + r.symbol;
+    const prev = bootSnapMap[key];
+    if (!prev || digestChanges.some(c => c.key === key)) return;
+    const cur = r.scoreObj;
+    if (prev.s !== cur.side) {
+      digestChanges.push({ key, mkt, symbol: r.symbol, label: r.label, kind: "side",
+        fromSide: prev.s, toSide: cur.side, fromScore: prev.v, toScore: cur.score });
+    } else if (Math.abs(cur.score - prev.v) >= 30) {
+      digestChanges.push({ key, mkt, symbol: r.symbol, label: r.label, kind: "swing",
+        fromSide: prev.s, toSide: cur.side, fromScore: prev.v, toScore: cur.score });
+    }
+  });
+  renderDigest();
+}
+function renderDigest() {
+  const box = $("digestBox");
+  if (!box) return;
+  if (digestDismissed || !digestChanges.length || !digestBaseTs) {
+    box.classList.add("hidden");
+    return;
+  }
+  const order = c => c.kind === "side"
+    ? (c.toSide === "LONG" ? 0 : c.toSide === "SHORT" ? 1 : 2) : 3;
+  const arr = digestChanges.slice().sort((a, b) => order(a) - order(b)).slice(0, 8);
+  $("digestWhen").textContent = "Sejak terakhir dibuka · " +
+    new Date(digestBaseTs).toLocaleString("id-ID",
+      { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  $("digestList").innerHTML = arr.map(c => {
+    const cls = c.toSide === "LONG" ? "long" : c.toSide === "SHORT" ? "short" : "neu";
+    const mid = c.kind === "side"
+      ? '<span class="dside">' + c.fromSide + '</span> → <span class="dside ' + cls + '">' + c.toSide + "</span>"
+      : '<span class="dside ' + cls + '">' + c.toSide +
+        (c.toScore > c.fromScore ? " menguat" : " melemah") + "</span>";
+    return '<div class="drow" data-dsym="' + escHtml(c.symbol) + '" data-dmkt="' + c.mkt + '">' +
+      "<b>" + escHtml(c.label) + "</b>" + mid +
+      "<small>skor " + (c.fromScore > 0 ? "+" : "") + c.fromScore + " → " +
+      (c.toScore > 0 ? "+" : "") + c.toScore + "</small></div>";
+  }).join("") + (digestChanges.length > 8
+    ? '<div class="dmore">+ ' + (digestChanges.length - 8) + " perubahan lainnya</div>" : "");
+  box.classList.remove("hidden");
+}
+$("digestClose").addEventListener("click", () => {
+  digestDismissed = true;
+  $("digestBox").classList.add("hidden");
+});
+$("digestList").addEventListener("click", ev2 => {
+  const r = ev2.target.closest("[data-dsym]");
+  if (r) openDetail(r.dataset.dsym, r.dataset.dmkt);
+});
 
 /* ================= Detail & grafik (LIVE via WebSocket) ================= */
 let currentSymbol = null, currentInterval = "1h", detailTimer = null;
