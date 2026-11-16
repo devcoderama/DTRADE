@@ -16,6 +16,7 @@ logs/
 data/
 reports/
 *.log
+PERBAIKAN_LOG.md
 
 # OS / editor
 .DS_Store
