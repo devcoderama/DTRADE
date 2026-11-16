@@ -449,7 +449,7 @@
   <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
   <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
   Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.26.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.27.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -2331,7 +2331,11 @@ function drawShareChart(ctx, x0, y0, w, h) {
   const X = i => x0 + pad + i * ((plotW - labelW) / kl.length) + (plotW - labelW) / kl.length / 2;
   const cw = (plotW - labelW) / kl.length;
   const closes = kl.map(k => parseFloat(k[4]));
-  const e20 = emaSeries(closes, 20), e50 = emaSeries(closes, 50);
+  /* EMA dari seluruh riwayat detail lalu dipotong 100 terakhir —
+     garis utuh di kartu Bagikan juga (v1.27.0). */
+  const allCloses = detailKlines.map(k => parseFloat(k[4]));
+  const e20 = emaSeries(allCloses, 20).slice(-100);
+  const e50 = emaSeries(allCloses, 50).slice(-100);
   const vols = kl.map(k => parseFloat(k[5]));
   const maxV = Math.max.apply(null, vols) || 1;
   let hi = -Infinity, lo = Infinity;
@@ -2757,7 +2761,7 @@ function fmtWaktuCandle(ts, iv, spanMs) {
   return p2(d.getHours()) + ":" + p2(d.getMinutes());
 }
 
-function paintChart(canvas, kl, H) {
+function paintChart(canvas, kl, H, emaSeg) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth;
   canvas.width = W * dpr; canvas.height = H * dpr;
@@ -2766,7 +2770,10 @@ function paintChart(canvas, kl, H) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
   const closes = kl.map(k => parseFloat(k[4]));
-  const e20 = emaSeries(closes, 20), e50 = emaSeries(closes, 50);
+  /* EMA dari segmen riwayat penuh bila disediakan (v1.27.0) — garis
+     tidak lagi mulai/terpotong di tengah jendela tampilan. */
+  const e20 = emaSeg ? emaSeg.e20 : emaSeries(closes, 20);
+  const e50 = emaSeg ? emaSeg.e50 : emaSeries(closes, 50);
   const vols = kl.map(k => parseFloat(k[5]));
   const maxV = Math.max.apply(null, vols) || 1;
   let hi = -Infinity, lo = Infinity;
@@ -2922,16 +2929,29 @@ const DRAW_HINTS = {
 
 let chartOffset = 0;   // berapa candle jendela digeser ke belakang
 let viewKlines = [];   // irisan candle yang sedang tampil (geometri)
+let viewEmaSeg = null; // segmen EMA riwayat penuh untuk jendela ini
 function drawChart(kl) {
   const maxOff = Math.max(0, kl.length - VIEW_N);
   if (chartOffset > maxOff) chartOffset = maxOff;
   if (chartOffset < 0) chartOffset = 0;
   const end = kl.length - chartOffset;
-  viewKlines = kl.slice(Math.max(0, end - VIEW_N), end);
-  chartGeom.main = paintChart($("chart"), viewKlines, 348);
+  const start = Math.max(0, end - VIEW_N);
+  viewKlines = kl.slice(start, end);
+  /* EMA dihitung dari SELURUH riwayat (300 candle) lalu dipotong
+     mengikuti jendela — garis EMA20/50 utuh dari tepi ke tepi di
+     posisi geser mana pun (v1.27.0). Hanya kanvas yang terlihat
+     yang dilukis (hemat CPU saat layar penuh terbuka). */
+  const closesAll = kl.map(k => parseFloat(k[4]));
+  const emaSeg = {
+    e20: emaSeries(closesAll, 20).slice(start, end),
+    e50: emaSeries(closesAll, 50).slice(start, end)
+  };
+  viewEmaSeg = emaSeg;
   if (fsOpen) {
     const wrap = $("fsWrap");
-    chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18));
+    chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18), emaSeg);
+  } else {
+    chartGeom.main = paintChart($("chart"), viewKlines, 348, emaSeg);
   }
   $("btnLatest").classList.toggle("hidden", chartOffset === 0);
   $("btnLatestFs").classList.toggle("hidden", chartOffset === 0);
@@ -2971,7 +2991,7 @@ function priceForY(g, yy) {
   return g.lo + (g.priceH - yy) / g.priceH * (g.hi - g.lo);
 }
 function renderDrawings() {
-  paintDrawLayer($("drawCv"), $("chart"), chartGeom.main);
+  if (!fsOpen) paintDrawLayer($("drawCv"), $("chart"), chartGeom.main);
   if (fsOpen) paintDrawLayer($("drawFsCv"), $("chartFsCv"), chartGeom.fs);
 }
 function paintDrawLayer(ov, base, g) {
@@ -3169,6 +3189,18 @@ attachDrawHandlers($("drawFsCv"), "fs");
    menggeser jendela 100 candle ke riwayat sebelumnya (detail memuat
    300 candle). Mode gambar menonaktifkannya. Tombol "Terbaru"
    muncul selama jendela tergeser. */
+/* Lukis ulang geseran diringkas per frame (v1.27.0): pointermove
+   bisa datang >100x/detik; tanpa ini setiap kejadian melukis ulang
+   seluruh grafik dan terasa lag di HP. */
+let panRaf = false;
+function queuePanDraw() {
+  if (panRaf) return;
+  panRaf = true;
+  requestAnimationFrame(() => {
+    panRaf = false;
+    if (detailKlines.length) drawChart(detailKlines);
+  });
+}
 function attachPanHandlers(cv, which) {
   let pan = null;
   const px = e => typeof e.offsetX === "number" ? e.offsetX
@@ -3182,11 +3214,17 @@ function attachPanHandlers(cv, which) {
     if (!pan) return;
     const g = which === "fs" ? chartGeom.fs : chartGeom.main;
     if (!g || !g.cw) return;
-    const d = Math.round((pan.x - px(e)) / g.cw);
+    /* v1.27.0: konten MENGIKUTI jari seperti layar sentuh HP —
+       seret ke kanan untuk melihat candle-candle lama, seret ke
+       kiri untuk kembali ke yang terbaru. */
+    const d = Math.round((px(e) - pan.x) / g.cw);
     const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), pan.off + d));
-    if (no !== chartOffset) { chartOffset = no; drawChart(detailKlines); }
+    if (no !== chartOffset) { chartOffset = no; queuePanDraw(); }
   });
-  const endPan = () => { pan = null; };
+  const endPan = () => {
+    if (pan && chartOffset !== pan.off) queuePanDraw();
+    pan = null;
+  };
   cv.addEventListener("pointerup", endPan);
   cv.addEventListener("pointercancel", endPan);
   cv.addEventListener("wheel", e => {
@@ -3194,7 +3232,7 @@ function attachPanHandlers(cv, which) {
     e.preventDefault();
     const step = e.deltaY > 0 ? 6 : -6;
     const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), chartOffset + step));
-    if (no !== chartOffset) { chartOffset = no; drawChart(detailKlines); }
+    if (no !== chartOffset) { chartOffset = no; queuePanDraw(); }
   }, { passive: false });
 }
 attachPanHandlers($("chart"), "main");
