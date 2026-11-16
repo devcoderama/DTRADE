@@ -368,6 +368,32 @@ ini hanya membaca teks, analisis gambar mewajibkan kunci API Pollinations
 milik pengguna sendiri (gratis dari enter.pollinations.ai, diisi di tab
 Lainnya aplikasi, tersimpan lokal di perangkat).
 
+### Indikator yang Bisa Diatur — mesin skor profesional (v1.32.0)
+
+Perhitungan skor teknikal mode mandiri kini digerakkan konfigurasi
+(`INDCAT` + `dtrade-indcfg-v1` di `standalone.html`). **Preset Default =
+persis mesin v2 lama** (12 komponen, semua bobot ×1) — skor tidak berubah
+sebelum pengguna mengubah apa pun (terverifikasi identik termasuk daftar
+alasannya). Katalog berisi **26 indikator standar** ala Binance/TradingView:
+Tren EMA, MACD, Supertrend, ADX/DMI, SMA Cross, Ichimoku Cloud, Parabolic
+SAR, RSI, Stochastic, StochRSI, CCI, Williams %R, Momentum/ROC, Awesome
+Oscillator, TRIX, Ultimate Oscillator, Bollinger %B, Keltner, Donchian,
+VWAP, Konfirmasi Volume, MFI, OBV, Chaikin Money Flow, Pola Candle, dan
+Support/Resistance. Dari panel **Indikator & Skor** (ikon slider di grafik
+atau tab Lainnya) pengguna bisa: menghapus/menambah indikator dari katalog,
+mengubah **parameter** (periode, pengali, dll.) dan **bobot skor**
+(×0 = diam … ×3), membuat **indikator kustom** dengan bahasa rumus aman
+(sumber `close/open/high/low/volume/hl2/hlc3/ohlc4`; fungsi
+`SMA/EMA/WMA/RSI/MACDHIST/ATR/STOCHK/CCI/WILLR/MFI/VWAP/OBV/BBUP/BBMID/BBLO/
+HIGHEST/LOWEST/REF/CHANGE/ABS/MAX/MIN`; mode skor deviasi ×ATR atau nilai
+mentah), dan **Reset Default** dua ketuk. Indikator aktif yang relevan
+digambar sebagai **overlay** di grafik (EMA/SMA, pita Bollinger/Ichimoku/
+Keltner, VWAP, Supertrend, titik SAR) dengan legenda dinamis, dan ada
+**panel osilator** terpisah di bawah grafik (RSI, MACD, Stochastic,
+StochRSI, CCI, Williams %R, MFI, ADX, AO, TRIX, Ultimate) yang bisa dipilih
+per chip. Setelan berlaku konsisten ke semua skor: daftar Pasar, Analisis,
+snapshot teknikal berita, dan teks bagikan.
+
 ### AI Skill Mandiri — pengetahuan finance/trading untuk Chat AI aplikasi (`AI_SKILL_MANDIRI.md`)
 
 Chat AI di aplikasi Android (mode mandiri, AI web gratis) punya file skill

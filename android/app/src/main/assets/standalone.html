@@ -175,6 +175,24 @@
   /* Mode lanskap: overlay diputar 90° (kotak ditukar lebar/tingginya) */
   #chartFs.land{inset:auto;left:50%;top:50%;width:100vh;width:100dvh;height:100vw;height:100dvw;
     transform:translate(-50%,-50%) rotate(90deg)}
+  #oscBox{margin:8px 14px 0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 8px 2px}
+  #oscChips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:2px}
+  .oscchip{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:3px 9px;font-size:.7rem;cursor:pointer}
+  .oscchip.on{background:var(--gold);color:#0b0e11;font-weight:700;border-color:var(--gold)}
+  #oscCv{width:100%;height:84px;display:block}
+  .indrow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+  .indrow .nm{font-weight:700;font-size:.9rem}
+  .indrow .ds{color:var(--muted);font-size:.75rem;margin-top:2px;line-height:1.45}
+  .indparams{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end}
+  .indparam{display:flex;flex-direction:column;gap:2px;font-size:.68rem;color:var(--muted)}
+  .indparam input{width:76px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:5px 7px;font-size:.82rem}
+  .indrow select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:5px 7px;font-size:.82rem}
+  .indsec{font-size:.78rem;font-weight:800;color:var(--gold);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.04em}
+  .indbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 10px;font-size:.78rem;cursor:pointer}
+  .indbtn.gold{background:var(--gold);color:#0b0e11;font-weight:700;border-color:var(--gold)}
+  .indbtn.danger{color:#f6465d}
+  #indView input[type=text], #indView textarea{background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:7px 9px;font-size:.85rem;width:100%;box-sizing:border-box}
+  .catchip{display:inline-block;background:rgba(240,185,11,.13);color:var(--gold);border-radius:999px;padding:1px 8px;font-size:.66rem;font-weight:700;margin-left:6px;vertical-align:2px}
   .zoomlbl{font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(21,26,33,.88);
     border:1px solid var(--line);border-radius:8px;padding:5px 6px;min-width:38px;text-align:center}
   .latestbtn{position:absolute;left:10px;bottom:10px;z-index:6;background:var(--gold);color:#0b0e11;
@@ -473,6 +491,7 @@
       <button class="cbtn" id="btnZoomOut" aria-label="Zoom out grafik" title="Zoom out (candle lebih banyak)"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
       <span class="zoomlbl" id="zoomLbl">100%</span>
       <button class="cbtn" id="btnZoomIn" aria-label="Zoom in grafik" title="Zoom in (candle lebih sedikit, lebih besar)"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+      <button class="cbtn" id="btnInd" aria-label="Setelan indikator" title="Atur indikator, parameter & bobot skor"><i class="fa-solid fa-sliders"></i></button>
     </div>
     <button class="latestbtn hidden" id="btnLatest"><i class="fa-solid fa-angles-right"></i> Terbaru</button>
   </div>
@@ -488,6 +507,10 @@
     <button id="drawClear" class="dtool" title="Hapus semua gambar di simbol ini"><i class="fa-solid fa-trash"></i></button>
     <div class="dhint" id="drawHint">Garis tren: ketuk titik awal, lalu ketuk titik akhir pada grafik.</div>
   </div></div>
+  <div id="oscBox">
+    <div id="oscChips"></div>
+    <canvas id="oscCv" height="84"></canvas>
+  </div>
   <div class="verdict" id="verdict"></div>
   <div class="reasons" id="mtfBox"><h4>Multi-Timeframe</h4>
     <div class="mtfrow" id="mtfRow"><div class="status" style="padding:2px 0">Menghitung skor antar-timeframe…</div></div>
@@ -530,6 +553,18 @@
     <button class="latestbtn hidden" id="btnLatestFs"><i class="fa-solid fa-angles-right"></i> Terbaru</button>
   </div>
   <div id="drawToolsHomeFs"></div>
+</div>
+
+<div id="indView" class="hidden" style="position:fixed;inset:0;z-index:58;background:var(--bg);display:flex;flex-direction:column">
+  <div class="dhead" style="padding:12px 14px 2px">
+    <button class="iconbtn" id="btnIndBack" aria-label="Tutup setelan indikator"><i class="fa-solid fa-arrow-left"></i></button>
+    <div style="flex:1">
+      <div class="nm">Indikator &amp; Skor</div>
+      <div class="chg" style="color:var(--muted)">Atur indikator, parameter &amp; bobot perhitungan skor teknikal</div>
+    </div>
+    <button class="iconbtn" id="btnIndReset" aria-label="Kembali ke default" title="Kembalikan semua setelan ke bawaan aplikasi" style="width:auto;padding:0 10px;font-size:.75rem;font-weight:700">Reset Default</button>
+  </div>
+  <div id="indBody" style="overflow-y:auto;padding:10px 14px 48px;flex:1"></div>
 </div>
 
 <div id="pickerView" class="hidden" style="position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column">
@@ -652,6 +687,10 @@
     <div>Server: <b id="serverUrl">—</b></div>
     <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
     <button id="btnServer" style="margin-left:0">Hubungkan</button>
+  </div>
+  <div class="serverbar" style="margin:0 14px 10px">
+    <div>Indikator &amp; skor: <b id="indSummary">Default</b></div>
+    <button id="btnInd2" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Atur Indikator</button>
   </div>
   <div class="info" style="margin:0 14px 10px">
     <b>Analisis gambar di Chat AI</b> memakai model vision Pollinations yang
@@ -958,150 +997,1050 @@ function vwapLast(highs, lows, closes, vols, window) {
   return v > 0 ? pv / v : null;
 }
 
-/* Skor teknikal v2 (v1.25.0) — 12 komponen: tren EMA, MACD, ADX/DI,
-   Supertrend, RSI, Stochastic, Bollinger, momentum, VWAP, konfirmasi
-   volume, pola candle, support/resistance. Blok tren diskalakan oleh
-   kekuatan tren (ADX). vols & opens opsional. */
-function scoreSymbol(closes, highs, lows, vols, opens) {
-  const parts = []; // {pts, text}
-  const last = closes[closes.length - 1];
+/* ================= Mesin indikator yang bisa diatur (v1.32.0) =====
+   Katalog indikator standar ala Binance/TradingView. Setiap indikator
+   punya parameter + bobot sendiri; pengguna bisa menonaktifkan,
+   menambah dari katalog, mengubah parameter/bobot, dan membuat
+   indikator kustom berbasis rumus. Konfigurasi tersimpan di
+   localStorage. Preset "Default" = persis mesin skor v2 lama
+   (12 komponen, bobot 1) — skor tidak berubah sebelum pengguna
+   mengubah apa pun. Tombol Reset mengembalikan ke Default. */
+
+/* ---------- Seri indikator (untuk skor, overlay grafik, panel) --- */
+function smaSeries(values, period) {
+  const out = new Array(values.length).fill(null);
+  if (!period || period < 1) return out;
+  let s = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] === null || values[i] === undefined) { s = 0; continue; }
+    s += values[i];
+    if (i >= period) s -= values[i - period] || 0;
+    if (i >= period - 1) out[i] = s / period;
+  }
+  return out;
+}
+function wmaSeries(values, period) {
+  const out = new Array(values.length).fill(null);
+  const den = period * (period + 1) / 2;
+  for (let i = period - 1; i < values.length; i++) {
+    let s = 0, ok = true;
+    for (let j = 0; j < period; j++) {
+      const v = values[i - j];
+      if (v === null || v === undefined) { ok = false; break; }
+      s += v * (period - j);
+    }
+    if (ok) out[i] = s / den;
+  }
+  return out;
+}
+function emaOfSeries(values, period) {
+  /* EMA untuk seri yang bisa berisi null (lewati null di awal). */
+  const out = new Array(values.length).fill(null);
+  const k = 2 / (period + 1);
+  let e = null;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (v === null || v === undefined) continue;
+    e = e === null ? v : v * k + e * (1 - k);
+    out[i] = e;
+  }
+  return out;
+}
+function rsiSeries(closes, period) {
+  period = period || 14;
+  const out = new Array(closes.length).fill(null);
+  if (closes.length < period + 1) return out;
+  let avgG = 0, avgL = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) avgG += d / period; else avgL -= d / period;
+  }
+  out[period] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgG = (avgG * (period - 1) + Math.max(d, 0)) / period;
+    avgL = (avgL * (period - 1) + Math.max(-d, 0)) / period;
+    out[i] = avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL);
+  }
+  return out;
+}
+function atrSeries(highs, lows, closes, period) {
+  period = period || 14;
   const n = closes.length;
-  const atr = atrWilder(highs, lows, closes, 14);
-  const adxR = adxLast(highs, lows, closes, 14);
-  const adx = adxR ? adxR.adx : null;
-  const trendScale = adx === null ? 1 : adx >= 22 ? 1 : adx >= 15 ? 0.9 : 0.78;
-
-  // --- Blok tren (diskalakan ADX) ---
-  let trend = 0;
-  const e20s = emaSeries(closes, 20), e50s = emaSeries(closes, 50);
-  const e20 = e20s[e20s.length - 1], e50 = e50s[e50s.length - 1];
-  if (e20 !== null && e50 !== null) {
-    if (last > e20) { trend += 6; parts.push({ p: 6, t: "Harga di atas EMA20" }); }
-    else { trend -= 6; parts.push({ p: -6, t: "Harga di bawah EMA20" }); }
-    if (e20 > e50) { trend += 10; parts.push({ p: 10, t: "EMA20 di atas EMA50 — tren naik" }); }
-    else { trend -= 10; parts.push({ p: -10, t: "EMA20 di bawah EMA50 — tren turun" }); }
-    if (last > e50) { trend += 8; parts.push({ p: 8, t: "Harga di atas EMA50" }); }
-    else { trend -= 8; parts.push({ p: -8, t: "Harga di bawah EMA50" }); }
-    const e50prev = e50s[e50s.length - 6];
-    if (e50prev !== null && e50prev !== undefined) {
-      if (e50 > e50prev) { trend += 4; parts.push({ p: 4, t: "EMA50 menanjak" }); }
-      else if (e50 < e50prev) { trend -= 4; parts.push({ p: -4, t: "EMA50 menurun" }); }
+  const out = new Array(n).fill(null);
+  if (n < period + 1) return out;
+  const tr = new Array(n).fill(null);
+  for (let i = 1; i < n; i++) {
+    tr[i] = Math.max(highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+  }
+  let a = 0;
+  for (let i = 1; i <= period; i++) a += tr[i];
+  a /= period;
+  out[period] = a;
+  for (let i = period + 1; i < n; i++) {
+    a = (a * (period - 1) + tr[i]) / period;
+    out[i] = a;
+  }
+  return out;
+}
+function macdSeries(closes, fast, slow, sig) {
+  fast = fast || 12; slow = slow || 26; sig = sig || 9;
+  const ef = emaSeries(closes, fast), es = emaSeries(closes, slow);
+  const line = closes.map((_, i) =>
+    (ef[i] !== null && es[i] !== null) ? ef[i] - es[i] : null);
+  const signal = emaOfSeries(line, sig);
+  const hist = line.map((v, i) =>
+    (v !== null && signal[i] !== null) ? v - signal[i] : null);
+  return { line, signal, hist };
+}
+function stochSeries(highs, lows, closes, kPeriod, smooth) {
+  kPeriod = kPeriod || 14; smooth = smooth || 3;
+  const n = closes.length;
+  const rawK = new Array(n).fill(null);
+  for (let i = kPeriod - 1; i < n; i++) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      if (highs[j] > hh) hh = highs[j];
+      if (lows[j] < ll) ll = lows[j];
+    }
+    rawK[i] = hh === ll ? 50 : 100 * (closes[i] - ll) / (hh - ll);
+  }
+  const k = smaSeries(rawK.map(v => v === null ? 0 : v), smooth)
+    .map((v, i) => rawK[i] === null || i < kPeriod + smooth - 2 ? null : v);
+  const d = smaSeries(k.map(v => v === null ? 0 : v), 3)
+    .map((v, i) => k[i] === null ? null : v);
+  return { k, d };
+}
+function bollSeries(closes, period, mult) {
+  period = period || 20; mult = mult || 2;
+  const mid = smaSeries(closes, period);
+  const upper = new Array(closes.length).fill(null);
+  const lower = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    let s = 0;
+    for (let j = i - period + 1; j <= i; j++) s += (closes[j] - mid[i]) * (closes[j] - mid[i]);
+    const sd = Math.sqrt(s / period);
+    upper[i] = mid[i] + mult * sd;
+    lower[i] = mid[i] - mult * sd;
+  }
+  return { mid, upper, lower };
+}
+function obvSeries(closes, vols) {
+  const out = new Array(closes.length).fill(0);
+  for (let i = 1; i < closes.length; i++) {
+    const dir = closes[i] > closes[i - 1] ? 1 : closes[i] < closes[i - 1] ? -1 : 0;
+    out[i] = out[i - 1] + dir * (vols ? (vols[i] || 0) : 0);
+  }
+  return out;
+}
+function sarSeries(highs, lows, closes, step, maxStep) {
+  step = step || 0.02; maxStep = maxStep || 0.2;
+  const n = closes.length;
+  const sar = new Array(n).fill(null), dir = new Array(n).fill(0);
+  if (n < 2) return { sar, dir };
+  let up = closes[1] >= closes[0];
+  let af = step;
+  let ep = up ? highs[0] : lows[0];
+  let s = up ? lows[0] : highs[0];
+  sar[0] = s; dir[0] = up ? 1 : -1;
+  for (let i = 1; i < n; i++) {
+    s = s + af * (ep - s);
+    if (up) {
+      s = Math.min(s, lows[i - 1], i >= 2 ? lows[i - 2] : lows[i - 1]);
+      if (highs[i] > ep) { ep = highs[i]; af = Math.min(af + step, maxStep); }
+      if (closes[i] < s) { up = false; s = ep; ep = lows[i]; af = step; }
+    } else {
+      s = Math.max(s, highs[i - 1], i >= 2 ? highs[i - 2] : highs[i - 1]);
+      if (lows[i] < ep) { ep = lows[i]; af = Math.min(af + step, maxStep); }
+      if (closes[i] > s) { up = true; s = ep; ep = highs[i]; af = step; }
+    }
+    sar[i] = s; dir[i] = up ? 1 : -1;
+  }
+  return { sar, dir };
+}
+function hhllAt(highs, lows, i, p) {
+  let hh = -Infinity, ll = Infinity;
+  for (let j = Math.max(0, i - p + 1); j <= i; j++) {
+    if (highs[j] > hh) hh = highs[j];
+    if (lows[j] < ll) ll = lows[j];
+  }
+  return [hh, ll];
+}
+function ichimokuSeries(highs, lows, closes, tp, kp, sp) {
+  tp = tp || 9; kp = kp || 26; sp = sp || 52;
+  const n = closes.length;
+  const tenkan = new Array(n).fill(null), kijun = new Array(n).fill(null);
+  const senkouA = new Array(n).fill(null), senkouB = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (i >= tp - 1) { const r = hhllAt(highs, lows, i, tp); tenkan[i] = (r[0] + r[1]) / 2; }
+    if (i >= kp - 1) { const r = hhllAt(highs, lows, i, kp); kijun[i] = (r[0] + r[1]) / 2; }
+    const j = i - kp;
+    if (j >= 0 && tenkan[j] !== null && kijun[j] !== null) senkouA[i] = (tenkan[j] + kijun[j]) / 2;
+    if (j >= sp - 1) { const r = hhllAt(highs, lows, j, sp); senkouB[i] = (r[0] + r[1]) / 2; }
+  }
+  return { tenkan, kijun, senkouA, senkouB };
+}
+function cciSeries(highs, lows, closes, period) {
+  period = period || 20;
+  const tp = closes.map((c, i) => (highs[i] + lows[i] + c) / 3);
+  const sma = smaSeries(tp, period);
+  const out = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    let md = 0;
+    for (let j = i - period + 1; j <= i; j++) md += Math.abs(tp[j] - sma[i]);
+    md /= period;
+    out[i] = md === 0 ? 0 : (tp[i] - sma[i]) / (0.015 * md);
+  }
+  return out;
+}
+function willrSeries(highs, lows, closes, period) {
+  period = period || 14;
+  const out = new Array(closes.length).fill(null);
+  for (let i = period - 1; i < closes.length; i++) {
+    const r = hhllAt(highs, lows, i, period);
+    out[i] = r[0] === r[1] ? -50 : -100 * (r[0] - closes[i]) / (r[0] - r[1]);
+  }
+  return out;
+}
+function mfiSeries(highs, lows, closes, vols, period) {
+  period = period || 14;
+  const n = closes.length;
+  const out = new Array(n).fill(null);
+  if (!vols) return out;
+  const tp = closes.map((c, i) => (highs[i] + lows[i] + c) / 3);
+  const mf = tp.map((v, i) => v * (vols[i] || 0));
+  for (let i = period; i < n; i++) {
+    let pos = 0, neg = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      if (tp[j] > tp[j - 1]) pos += mf[j];
+      else if (tp[j] < tp[j - 1]) neg += mf[j];
+    }
+    out[i] = neg === 0 ? 100 : 100 - 100 / (1 + pos / neg);
+  }
+  return out;
+}
+function donchianSeries(highs, lows, period) {
+  period = period || 20;
+  const n = highs.length;
+  const upper = new Array(n).fill(null), lower = new Array(n).fill(null);
+  for (let i = period - 1; i < n; i++) {
+    const r = hhllAt(highs, lows, i, period);
+    upper[i] = r[0]; lower[i] = r[1];
+  }
+  return { upper, lower };
+}
+function keltnerSeries(highs, lows, closes, period, atrP, mult) {
+  period = period || 20; atrP = atrP || 10; mult = mult || 2;
+  const mid = emaSeries(closes, period);
+  const atr = atrSeries(highs, lows, closes, atrP);
+  const upper = mid.map((v, i) => v !== null && atr[i] !== null ? v + mult * atr[i] : null);
+  const lower = mid.map((v, i) => v !== null && atr[i] !== null ? v - mult * atr[i] : null);
+  return { mid, upper, lower };
+}
+function aoSeries(highs, lows) {
+  const mp = highs.map((h, i) => (h + lows[i]) / 2);
+  const f = smaSeries(mp, 5), s = smaSeries(mp, 34);
+  return mp.map((_, i) => f[i] !== null && s[i] !== null ? f[i] - s[i] : null);
+}
+function trixSeries(closes, period) {
+  period = period || 15;
+  const e1 = emaOfSeries(closes, period);
+  const e2 = emaOfSeries(e1, period);
+  const e3 = emaOfSeries(e2, period);
+  return e3.map((v, i) => {
+    if (i === 0 || v === null || e3[i - 1] === null || e3[i - 1] === 0) return null;
+    return (v - e3[i - 1]) / e3[i - 1] * 100;
+  });
+}
+function adxSeries(highs, lows, closes, period) {
+  period = period || 14;
+  const n = closes.length;
+  const adx = new Array(n).fill(null), pdi = new Array(n).fill(null), mdi = new Array(n).fill(null);
+  if (n < period * 2 + 2) return { adx, pdi, mdi };
+  const trs = [], pdm = [], mdm = [];
+  for (let i = 1; i < n; i++) {
+    trs.push(Math.max(highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+    const up = highs[i] - highs[i - 1], dn = lows[i - 1] - lows[i];
+    pdm.push(up > dn && up > 0 ? up : 0);
+    mdm.push(dn > up && dn > 0 ? dn : 0);
+  }
+  let sTR = 0, sP = 0, sM = 0;
+  for (let i = 0; i < period; i++) { sTR += trs[i]; sP += pdm[i]; sM += mdm[i]; }
+  const dxs = [];
+  for (let i = period; i < trs.length; i++) {
+    sTR = sTR - sTR / period + trs[i];
+    sP = sP - sP / period + pdm[i];
+    sM = sM - sM / period + mdm[i];
+    const p = sTR === 0 ? 0 : 100 * sP / sTR;
+    const m = sTR === 0 ? 0 : 100 * sM / sTR;
+    pdi[i + 1] = p; mdi[i + 1] = m;
+    dxs.push({ idx: i + 1, v: p + m === 0 ? 0 : 100 * Math.abs(p - m) / (p + m) });
+  }
+  if (dxs.length >= period) {
+    let a = 0;
+    for (let j = 0; j < period; j++) a += dxs[j].v;
+    a /= period;
+    adx[dxs[period - 1].idx] = a;
+    for (let j = period; j < dxs.length; j++) {
+      a = (a * (period - 1) + dxs[j].v) / period;
+      adx[dxs[j].idx] = a;
     }
   }
-  const m = macdLast(closes);
-  if (m) {
-    if (m.hist > 0) { trend += 10; parts.push({ p: 10, t: "MACD histogram positif" }); }
-    else { trend -= 10; parts.push({ p: -10, t: "MACD histogram negatif" }); }
-    if (m.line > 0) { trend += 4; parts.push({ p: 4, t: "MACD di atas nol" }); }
-    else { trend -= 4; parts.push({ p: -4, t: "MACD di bawah nol" }); }
-    if (m.prevHist !== null) {
-      if (m.hist > m.prevHist && m.hist > 0) { trend += 3; parts.push({ p: 3, t: "Histogram MACD menguat" }); }
-      else if (m.hist < m.prevHist && m.hist < 0) { trend -= 3; parts.push({ p: -3, t: "Histogram MACD melemah" }); }
+  return { adx, pdi, mdi };
+}
+function vwapSeries(highs, lows, closes, vols, window) {
+  window = window || 24;
+  const n = closes.length;
+  const out = new Array(n).fill(null);
+  if (!vols) return out;
+  for (let i = 0; i < n; i++) {
+    let pv = 0, v = 0;
+    for (let j = Math.max(0, i - window + 1); j <= i; j++) {
+      pv += ((highs[j] + lows[j] + closes[j]) / 3) * (vols[j] || 0);
+      v += vols[j] || 0;
     }
+    out[i] = v > 0 ? pv / v : null;
   }
-  const st = supertrendLast(highs, lows, closes, 10, 3);
-  if (st) {
-    trend += st.dir * 9;
-    parts.push({ p: st.dir * 9, t: st.dir > 0 ? "Supertrend naik (harga di atas pita)" : "Supertrend turun (harga di bawah pita)" });
-  }
-  const trendPts = Math.round(trend * trendScale);
-
-  // --- ADX/DI (arah + kekuatan) ---
-  let rest = 0;
-  if (adxR) {
-    const f = adx < 15 ? 0.25 : adx >= 25 ? 1 : 0.25 + (adx - 15) / 10 * 0.75;
-    const pts = Math.round(8 * f) * (adxR.plusDI >= adxR.minusDI ? 1 : -1);
-    rest += pts;
-    parts.push({ p: pts, t: "ADX " + adx.toFixed(0) + (adx >= 25 ? " — tren kuat, " : adx >= 15 ? " — tren sedang, " : " — tren lemah, ") + (pts >= 0 ? "+DI dominan" : "−DI dominan") });
-  }
-
-  // --- Osilator & momentum ---
-  const rsi = rsiLast(closes);
-  if (rsi !== null) {
-    let pts = Math.max(-12, Math.min(12, (rsi - 50) * 0.6));
-    if (rsi > 75) pts = Math.min(pts, 4);
-    if (rsi < 25) pts = Math.max(pts, -4);
-    pts = Math.round(pts);
-    rest += pts;
-    parts.push({ p: pts, t: "RSI " + rsi.toFixed(1) });
-  }
-  const stoch = stochLast(highs, lows, closes, 14, 3);
-  if (stoch) {
-    let pts = Math.round((stoch.k - 50) / 50 * 6);
-    if (stoch.kPrev <= stoch.d && stoch.k > stoch.d) pts += 2;
-    else if (stoch.kPrev >= stoch.d && stoch.k < stoch.d) pts -= 2;
-    if (adx !== null && adx >= 25) pts = Math.round(pts * 0.5);
-    rest += pts;
-    parts.push({ p: pts, t: "Stochastic %K " + stoch.k.toFixed(0) });
-  }
-  const b = bollLast(closes);
-  if (b) {
-    const pts = Math.round((b.pctB - 0.5) * 16);
-    rest += pts;
-    parts.push({ p: pts, t: "Posisi Bollinger %B " + b.pctB.toFixed(2) });
-  }
-  if (n > 10) {
-    const mom = (last / closes[n - 11] - 1) * 100;
-    const pts = Math.round(Math.max(-10, Math.min(10, mom * 2)));
-    rest += pts;
-    parts.push({ p: pts, t: "Momentum 10 candle " + mom.toFixed(2) + "%" });
-  }
-
-  // --- VWAP + konfirmasi volume ---
-  const vwap = vwapLast(highs, lows, closes, vols, 24);
-  if (vwap !== null && atr) {
-    const dev = (last - vwap) / atr;
-    const pts = Math.max(-6, Math.min(6, Math.round(dev * 4)));
-    rest += pts;
-    parts.push({ p: pts, t: "Harga " + Math.abs(dev).toFixed(1) + "×ATR " + (dev >= 0 ? "di atas" : "di bawah") + " VWAP" });
-  }
-  if (vols && vols.length >= 21) {
-    const smaV = vols.slice(-21, -1).reduce((a, x) => a + x, 0) / 20;
-    if (smaV > 0) {
-      const ratio = vols[vols.length - 1] / smaV;
-      const dirC = Math.sign(last - closes[n - 2]);
-      if (dirC !== 0 && ratio >= 1.15) {
-        const pts = dirC * (ratio >= 1.5 ? 4 : 2);
-        rest += pts;
-        parts.push({ p: pts, t: "Volume " + ratio.toFixed(1) + "× rataan " + (dirC > 0 ? "mengonfirmasi kenaikan" : "mengonfirmasi penurunan") });
-      }
-    }
-  }
-
-  // --- Pola candle terakhir (perlu opens) ---
-  if (opens && n >= 2 && highs && lows) {
-    const i = n - 1, j = n - 2;
-    const o = opens[i], c = closes[i], po = opens[j], pc = closes[j];
+  return out;
+}
+function cmfLast(highs, lows, closes, vols, period) {
+  period = period || 20;
+  if (!vols || closes.length < period) return null;
+  let num = 0, den = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
     const range = highs[i] - lows[i];
-    const body = Math.abs(c - o);
-    if (range > 0) {
+    const mfm = range === 0 ? 0 : ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range;
+    num += mfm * (vols[i] || 0);
+    den += vols[i] || 0;
+  }
+  return den > 0 ? num / den : null;
+}
+function stochRsiSeries(closes, rsiP, stochP) {
+  const rsi = rsiSeries(closes, rsiP || 14);
+  stochP = stochP || 14;
+  const out = new Array(closes.length).fill(null);
+  for (let i = 0; i < closes.length; i++) {
+    if (rsi[i] === null) continue;
+    let mn = Infinity, mx = -Infinity, cnt = 0;
+    for (let j = Math.max(0, i - stochP + 1); j <= i; j++) {
+      if (rsi[j] === null) continue;
+      cnt++;
+      if (rsi[j] < mn) mn = rsi[j];
+      if (rsi[j] > mx) mx = rsi[j];
+    }
+    if (cnt >= stochP) out[i] = mx === mn ? 50 : 100 * (rsi[i] - mn) / (mx - mn);
+  }
+  return out;
+}
+function uoSeries(highs, lows, closes) {
+  const n = closes.length;
+  const out = new Array(n).fill(null);
+  const bp = new Array(n).fill(0), tr = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const pc = closes[i - 1];
+    bp[i] = closes[i] - Math.min(lows[i], pc);
+    tr[i] = Math.max(highs[i], pc) - Math.min(lows[i], pc);
+  }
+  const avg = p => {
+    let sb = 0, st = 0;
+    return i => {
+      sb = 0; st = 0;
+      for (let j = i - p + 1; j <= i; j++) { sb += bp[j]; st += tr[j]; }
+      return st === 0 ? 0 : sb / st;
+    };
+  };
+  const a7 = avg(7), a14 = avg(14), a28 = avg(28);
+  for (let i = 28; i < n; i++) out[i] = 100 * (4 * a7(i) + 2 * a14(i) + a28(i)) / 7;
+  return out;
+}
+function lastVal(series) {
+  if (!series) return null;
+  for (let i = series.length - 1; i >= 0; i--) {
+    if (series[i] !== null && series[i] !== undefined) return series[i];
+  }
+  return null;
+}
+
+/* ---------- Katalog indikator ----------
+   score(d, p, ctx) -> { parts: [{p, t}] } | { pts, text } | null
+   d = {closes, highs, lows, vols, opens}; ctx = {atr, adx, adxR, last, n}.
+   group "trend" diskalakan kekuatan tren (ADX) seperti mesin lama. */
+const INDCAT = [
+  { id: "ema_trend", name: "Tren EMA", cat: "Tren", group: "trend", defOn: true,
+    desc: "Posisi harga vs EMA cepat/lambat + arah EMA lambat.",
+    params: [
+      { k: "fast", label: "EMA cepat", def: 20, min: 2, max: 200 },
+      { k: "slow", label: "EMA lambat", def: 50, min: 3, max: 400 }],
+    score(d, p, ctx) {
+      const eF = emaSeries(d.closes, p.fast), eS = emaSeries(d.closes, p.slow);
+      const ev1 = eF[eF.length - 1], ev2 = eS[eS.length - 1];
+      if (ev1 === null || ev2 === null || ev1 === undefined || ev2 === undefined) return null;
+      const last = ctx.last, parts = [];
+      parts.push({ p: last > ev1 ? 6 : -6, t: "Harga di " + (last > ev1 ? "atas" : "bawah") + " EMA" + p.fast });
+      parts.push({ p: ev1 > ev2 ? 10 : -10, t: "EMA" + p.fast + " di " + (ev1 > ev2 ? "atas" : "bawah") + " EMA" + p.slow + " — tren " + (ev1 > ev2 ? "naik" : "turun") });
+      parts.push({ p: last > ev2 ? 8 : -8, t: "Harga di " + (last > ev2 ? "atas" : "bawah") + " EMA" + p.slow });
+      const prev = eS[eS.length - 6];
+      if (prev !== null && prev !== undefined) {
+        if (ev2 > prev) parts.push({ p: 4, t: "EMA" + p.slow + " menanjak" });
+        else if (ev2 < prev) parts.push({ p: -4, t: "EMA" + p.slow + " menurun" });
+      }
+      return { parts };
+    },
+    overlay(d, p) {
+      return { lines: [
+        { data: emaSeries(d.closes, p.fast), color: "#f0b90b", width: 1.4, label: "EMA" + p.fast },
+        { data: emaSeries(d.closes, p.slow), color: "#4f8ff7", width: 1.4, label: "EMA" + p.slow }] };
+    } },
+  { id: "macd", name: "MACD", cat: "Tren", group: "trend", defOn: true,
+    desc: "Histogram, garis MACD vs nol, dan perubahan histogram.",
+    params: [
+      { k: "fast", label: "Cepat", def: 12, min: 2, max: 100 },
+      { k: "slow", label: "Lambat", def: 26, min: 5, max: 200 },
+      { k: "signal", label: "Sinyal", def: 9, min: 2, max: 50 }],
+    score(d, p, ctx) {
+      const s = macdSeries(d.closes, p.fast, p.slow, p.signal);
+      const li = s.line.length - 1;
+      const line = s.line[li], hist = s.hist[li];
+      if (line === null || hist === null) return null;
+      const prevHist = li > 0 ? s.hist[li - 1] : null;
+      const parts = [];
+      parts.push({ p: hist > 0 ? 10 : -10, t: "MACD histogram " + (hist > 0 ? "positif" : "negatif") });
+      parts.push({ p: line > 0 ? 4 : -4, t: "MACD di " + (line > 0 ? "atas" : "bawah") + " nol" });
+      if (prevHist !== null && prevHist !== undefined) {
+        if (hist > prevHist && hist > 0) parts.push({ p: 3, t: "Histogram MACD menguat" });
+        else if (hist < prevHist && hist < 0) parts.push({ p: -3, t: "Histogram MACD melemah" });
+      }
+      return { parts };
+    } },
+  { id: "supertrend", name: "Supertrend", cat: "Tren", group: "trend", defOn: true,
+    desc: "Arah pita Supertrend berbasis ATR.",
+    params: [
+      { k: "period", label: "Periode ATR", def: 10, min: 2, max: 50 },
+      { k: "mult", label: "Pengali", def: 3, min: 0.5, max: 10, step: 0.5 }],
+    score(d, p) {
+      const st = supertrendLast(d.highs, d.lows, d.closes, p.period, p.mult);
+      if (!st) return null;
+      return { pts: st.dir * 9, text: st.dir > 0 ? "Supertrend naik (harga di atas pita)" : "Supertrend turun (harga di bawah pita)" };
+    },
+    overlay(d, p) {
+      // Seri supertrend dihitung ulang dari logika Last secara berjalan.
+      const atr = atrSeries(d.highs, d.lows, d.closes, p.period);
+      const n = d.closes.length;
+      const line = new Array(n).fill(null);
+      let upperPrev = null, lowerPrev = null, dir = 1;
+      for (let i = 0; i < n; i++) {
+        if (atr[i] === null) continue;
+        const mid = (d.highs[i] + d.lows[i]) / 2;
+        let upper = mid + p.mult * atr[i], lower = mid - p.mult * atr[i];
+        if (upperPrev !== null) {
+          if (d.closes[i - 1] <= upperPrev) upper = Math.min(upper, upperPrev);
+          if (d.closes[i - 1] >= lowerPrev) lower = Math.max(lower, lowerPrev);
+          if (d.closes[i] > upperPrev) dir = 1;
+          else if (d.closes[i] < lowerPrev) dir = -1;
+        }
+        upperPrev = upper; lowerPrev = lower;
+        line[i] = dir === 1 ? lower : upper;
+      }
+      return { lines: [{ data: line, color: "#b06ee8", width: 1.4, label: "Supertrend" }] };
+    } },
+  { id: "adx", name: "ADX / DMI", cat: "Tren", group: "rest", defOn: true,
+    desc: "Kekuatan tren + dominasi +DI/−DI. Juga menimbang blok tren.",
+    params: [{ k: "period", label: "Periode", def: 14, min: 2, max: 50 }],
+    score(d, p, ctx) {
+      const r = ctx.adxR;
+      if (!r) return null;
+      const adx = r.adx;
+      const f = adx < 15 ? 0.25 : adx >= 25 ? 1 : 0.25 + (adx - 15) / 10 * 0.75;
+      const pts = Math.round(8 * f) * (r.plusDI >= r.minusDI ? 1 : -1);
+      return { pts, text: "ADX " + adx.toFixed(0) + (adx >= 25 ? " — tren kuat, " : adx >= 15 ? " — tren sedang, " : " — tren lemah, ") + (pts >= 0 ? "+DI dominan" : "−DI dominan") };
+    } },
+  { id: "sma_cross", name: "SMA Cross", cat: "Tren", group: "trend", defOn: false,
+    desc: "Rata-rata bergerak sederhana: posisi harga & persilangan SMA.",
+    params: [
+      { k: "fast", label: "SMA cepat", def: 20, min: 2, max: 200 },
+      { k: "slow", label: "SMA lambat", def: 50, min: 3, max: 400 }],
+    score(d, p, ctx) {
+      const f = lastVal(smaSeries(d.closes, p.fast)), s = lastVal(smaSeries(d.closes, p.slow));
+      if (f === null || s === null) return null;
+      let pts = 0;
+      pts += ctx.last > f ? 6 : -6;
+      pts += f > s ? 8 : -8;
+      pts += ctx.last > s ? 6 : -6;
+      return { pts, text: "SMA" + p.fast + (f > s ? " di atas " : " di bawah ") + "SMA" + p.slow };
+    },
+    overlay(d, p) {
+      return { lines: [
+        { data: smaSeries(d.closes, p.fast), color: "#f0b90b", width: 1.2, label: "SMA" + p.fast },
+        { data: smaSeries(d.closes, p.slow), color: "#4f8ff7", width: 1.2, label: "SMA" + p.slow }] };
+    } },
+  { id: "ichimoku", name: "Ichimoku Cloud", cat: "Tren", group: "trend", defOn: false,
+    desc: "Harga vs awan (Kumo), Tenkan vs Kijun, harga vs Kijun.",
+    params: [
+      { k: "tenkan", label: "Tenkan", def: 9, min: 2, max: 50 },
+      { k: "kijun", label: "Kijun", def: 26, min: 5, max: 100 },
+      { k: "senkou", label: "Senkou B", def: 52, min: 10, max: 200 }],
+    score(d, p, ctx) {
+      const s = ichimokuSeries(d.highs, d.lows, d.closes, p.tenkan, p.kijun, p.senkou);
+      const i = d.closes.length - 1;
+      const a = s.senkouA[i], b = s.senkouB[i], t = s.tenkan[i], kj = s.kijun[i];
+      if (a === null || b === null || t === null || kj === null) return null;
+      const top = Math.max(a, b), bot = Math.min(a, b);
+      let pts = 0;
+      pts += ctx.last > top ? 8 : ctx.last < bot ? -8 : 0;
+      pts += t > kj ? 5 : -5;
+      pts += ctx.last > kj ? 3 : -3;
+      return { pts, text: "Ichimoku: harga " + (ctx.last > top ? "di atas awan" : ctx.last < bot ? "di bawah awan" : "di dalam awan") };
+    },
+    overlay(d, p) {
+      const s = ichimokuSeries(d.highs, d.lows, d.closes, p.tenkan, p.kijun, p.senkou);
+      return {
+        bands: [{ upper: s.senkouA, lower: s.senkouB, fill: "rgba(79,143,247,.10)" }],
+        lines: [
+          { data: s.tenkan, color: "#f6465d", width: 1, label: "Tenkan" },
+          { data: s.kijun, color: "#4f8ff7", width: 1, label: "Kijun" }] };
+    } },
+  { id: "psar", name: "Parabolic SAR", cat: "Tren", group: "trend", defOn: false,
+    desc: "Titik SAR di bawah harga = naik; di atas harga = turun.",
+    params: [
+      { k: "step", label: "Langkah AF", def: 0.02, min: 0.005, max: 0.1, step: 0.005 },
+      { k: "max", label: "AF maks", def: 0.2, min: 0.05, max: 1, step: 0.05 }],
+    score(d, p) {
+      const s = sarSeries(d.highs, d.lows, d.closes, p.step, p.max);
+      const dir = s.dir[s.dir.length - 1];
+      if (!dir) return null;
+      return { pts: dir * 8, text: "Parabolic SAR " + (dir > 0 ? "naik (titik di bawah harga)" : "turun (titik di atas harga)") };
+    },
+    overlay(d, p) {
+      const s = sarSeries(d.highs, d.lows, d.closes, p.step, p.max);
+      return { dots: [{ data: s.sar, colors: s.dir.map(v => v > 0 ? "#0ecb81" : "#f6465d"), label: "SAR" }] };
+    } },
+  { id: "rsi", name: "RSI", cat: "Momentum", group: "rest", defOn: true,
+    desc: "Relative Strength Index — momentum 0..100, ekstrem dijinakkan.",
+    params: [{ k: "period", label: "Periode", def: 14, min: 2, max: 50 }],
+    score(d, p) {
+      const v = rsiLast(d.closes, p.period);
+      if (v === null) return null;
+      let pts = Math.max(-12, Math.min(12, (v - 50) * 0.6));
+      if (v > 75) pts = Math.min(pts, 4);
+      if (v < 25) pts = Math.max(pts, -4);
+      return { pts: Math.round(pts), text: "RSI " + v.toFixed(1) };
+    } },
+  { id: "stoch", name: "Stochastic", cat: "Momentum", group: "rest", defOn: true,
+    desc: "%K yang dihaluskan + persilangan %D; dilemahkan saat tren kuat.",
+    params: [
+      { k: "k", label: "%K", def: 14, min: 2, max: 50 },
+      { k: "smooth", label: "Penghalus", def: 3, min: 1, max: 10 }],
+    score(d, p, ctx) {
+      const st = stochLast(d.highs, d.lows, d.closes, p.k, p.smooth);
+      if (!st) return null;
+      let pts = Math.round((st.k - 50) / 50 * 6);
+      if (st.kPrev <= st.d && st.k > st.d) pts += 2;
+      else if (st.kPrev >= st.d && st.k < st.d) pts -= 2;
+      if (ctx.adx !== null && ctx.adx >= 25) pts = Math.round(pts * 0.5);
+      return { pts, text: "Stochastic %K " + st.k.toFixed(0) };
+    } },
+  { id: "stochrsi", name: "StochRSI", cat: "Momentum", group: "rest", defOn: false,
+    desc: "Stochastic yang diterapkan pada RSI — lebih sensitif.",
+    params: [
+      { k: "rsiP", label: "Periode RSI", def: 14, min: 2, max: 50 },
+      { k: "stochP", label: "Periode Stoch", def: 14, min: 2, max: 50 }],
+    score(d, p) {
+      const v = lastVal(stochRsiSeries(d.closes, p.rsiP, p.stochP));
+      if (v === null) return null;
+      return { pts: Math.round((v - 50) / 50 * 8), text: "StochRSI " + v.toFixed(0) };
+    } },
+  { id: "cci", name: "CCI", cat: "Momentum", group: "rest", defOn: false,
+    desc: "Commodity Channel Index — deviasi harga tipikal; ±100 zona kuat.",
+    params: [{ k: "period", label: "Periode", def: 20, min: 2, max: 100 }],
+    score(d, p) {
+      const v = lastVal(cciSeries(d.highs, d.lows, d.closes, p.period));
+      if (v === null) return null;
+      let pts = Math.max(-8, Math.min(8, Math.round(v / 20)));
+      if (v > 150) pts = Math.min(pts, 3);
+      if (v < -150) pts = Math.max(pts, -3);
+      return { pts, text: "CCI " + v.toFixed(0) };
+    } },
+  { id: "willr", name: "Williams %R", cat: "Momentum", group: "rest", defOn: false,
+    desc: "Posisi tutup dalam rentang terakhir, skala −100..0.",
+    params: [{ k: "period", label: "Periode", def: 14, min: 2, max: 100 }],
+    score(d, p) {
+      const v = lastVal(willrSeries(d.highs, d.lows, d.closes, p.period));
+      if (v === null) return null;
+      return { pts: Math.round((v + 50) / 50 * 8), text: "Williams %R " + v.toFixed(0) };
+    } },
+  { id: "momentum", name: "Momentum (ROC)", cat: "Momentum", group: "rest", defOn: true,
+    desc: "Perubahan harga selama N candle terakhir, persen.",
+    params: [{ k: "period", label: "Periode", def: 10, min: 2, max: 100 }],
+    score(d, p, ctx) {
+      const n = d.closes.length;
+      if (n <= p.period) return null;
+      const mom = (ctx.last / d.closes[n - 1 - p.period] - 1) * 100;
+      const pts = Math.round(Math.max(-10, Math.min(10, mom * 2)));
+      return { pts, text: "Momentum " + p.period + " candle " + mom.toFixed(2) + "%" };
+    } },
+  { id: "ao", name: "Awesome Oscillator", cat: "Momentum", group: "rest", defOn: false,
+    desc: "SMA5 − SMA34 dari harga median, dinormalkan ke ATR.",
+    params: [],
+    score(d, p, ctx) {
+      const v = lastVal(aoSeries(d.highs, d.lows));
+      if (v === null || !ctx.atr) return null;
+      const pts = Math.max(-8, Math.min(8, Math.round(v / ctx.atr * 5)));
+      return { pts, text: "Awesome Oscillator " + (v >= 0 ? "positif" : "negatif") };
+    } },
+  { id: "trix", name: "TRIX", cat: "Momentum", group: "trend", defOn: false,
+    desc: "Laju perubahan EMA tiga kali — tren momentum halus.",
+    params: [{ k: "period", label: "Periode", def: 15, min: 2, max: 100 }],
+    score(d, p) {
+      const v = lastVal(trixSeries(d.closes, p.period));
+      if (v === null) return null;
+      const pts = Math.max(-6, Math.min(6, Math.round(v * 20)));
+      return { pts, text: "TRIX " + v.toFixed(3) };
+    } },
+  { id: "uo", name: "Ultimate Oscillator", cat: "Momentum", group: "rest", defOn: false,
+    desc: "Gabungan tekanan beli 7/14/28 candle, skala 0..100.",
+    params: [],
+    score(d) {
+      const v = lastVal(uoSeries(d.highs, d.lows, d.closes));
+      if (v === null) return null;
+      const pts = Math.max(-8, Math.min(8, Math.round((v - 50) * 0.32)));
+      return { pts, text: "Ultimate Oscillator " + v.toFixed(0) };
+    } },
+  { id: "boll", name: "Bollinger %B", cat: "Volatilitas", group: "rest", defOn: true,
+    desc: "Posisi harga di dalam pita Bollinger (0 = bawah, 1 = atas).",
+    params: [
+      { k: "period", label: "Periode", def: 20, min: 2, max: 100 },
+      { k: "mult", label: "Deviasi", def: 2, min: 0.5, max: 5, step: 0.1 }],
+    score(d, p, ctx) {
+      const s = bollSeries(d.closes, p.period, p.mult);
+      const i = d.closes.length - 1;
+      if (s.upper[i] === null) return null;
+      const pctB = s.upper[i] === s.lower[i] ? 0.5 : (ctx.last - s.lower[i]) / (s.upper[i] - s.lower[i]);
+      return { pts: Math.round((pctB - 0.5) * 16), text: "Posisi Bollinger %B " + pctB.toFixed(2) };
+    },
+    overlay(d, p) {
+      const s = bollSeries(d.closes, p.period, p.mult);
+      return {
+        bands: [{ upper: s.upper, lower: s.lower, fill: "rgba(240,185,11,.05)" }],
+        lines: [{ data: s.mid, color: "rgba(240,185,11,.55)", width: 1, label: "BB" + p.period }] };
+    } },
+  { id: "keltner", name: "Keltner Channel", cat: "Volatilitas", group: "rest", defOn: false,
+    desc: "Posisi harga dalam kanal EMA ± ATR (seperti %B).",
+    params: [
+      { k: "period", label: "Periode EMA", def: 20, min: 2, max: 100 },
+      { k: "mult", label: "Pengali ATR", def: 2, min: 0.5, max: 5, step: 0.1 }],
+    score(d, p, ctx) {
+      const s = keltnerSeries(d.highs, d.lows, d.closes, p.period, 10, p.mult);
+      const i = d.closes.length - 1;
+      if (s.upper[i] === null) return null;
+      const pct = s.upper[i] === s.lower[i] ? 0.5 : (ctx.last - s.lower[i]) / (s.upper[i] - s.lower[i]);
+      return { pts: Math.round((pct - 0.5) * 12), text: "Posisi Keltner " + pct.toFixed(2) };
+    },
+    overlay(d, p) {
+      const s = keltnerSeries(d.highs, d.lows, d.closes, p.period, 10, p.mult);
+      return {
+        bands: [{ upper: s.upper, lower: s.lower, fill: "rgba(14,203,129,.05)" }],
+        lines: [{ data: s.mid, color: "rgba(14,203,129,.5)", width: 1, label: "KC" + p.period }] };
+    } },
+  { id: "donchian", name: "Donchian Channel", cat: "Volatilitas", group: "rest", defOn: false,
+    desc: "Posisi harga dalam kanal tertinggi/terendah N candle.",
+    params: [{ k: "period", label: "Periode", def: 20, min: 2, max: 200 }],
+    score(d, p, ctx) {
+      const s = donchianSeries(d.highs, d.lows, p.period);
+      const i = d.closes.length - 1;
+      if (s.upper[i] === null || s.upper[i] === s.lower[i]) return null;
+      const pos = (ctx.last - s.lower[i]) / (s.upper[i] - s.lower[i]);
+      return { pts: Math.round((pos - 0.5) * 12), text: "Posisi Donchian " + pos.toFixed(2) };
+    },
+    overlay(d, p) {
+      const s = donchianSeries(d.highs, d.lows, p.period);
+      return { lines: [
+        { data: s.upper, color: "rgba(232,236,241,.4)", width: 1, label: "DC" + p.period },
+        { data: s.lower, color: "rgba(232,236,241,.4)", width: 1, label: "" }] };
+    } },
+  { id: "vwap", name: "VWAP", cat: "Volume", group: "rest", defOn: true,
+    desc: "Deviasi harga dari VWAP bergulir, diukur dalam ATR.",
+    params: [{ k: "window", label: "Jendela", def: 24, min: 2, max: 200 }],
+    score(d, p, ctx) {
+      const v = vwapLast(d.highs, d.lows, d.closes, d.vols, p.window);
+      if (v === null || !ctx.atr) return null;
+      const dev = (ctx.last - v) / ctx.atr;
+      const pts = Math.max(-6, Math.min(6, Math.round(dev * 4)));
+      return { pts, text: "Harga " + Math.abs(dev).toFixed(1) + "×ATR " + (dev >= 0 ? "di atas" : "di bawah") + " VWAP" };
+    },
+    overlay(d, p) {
+      return { lines: [{ data: vwapSeries(d.highs, d.lows, d.closes, d.vols, p.window), color: "#e879c6", width: 1.2, label: "VWAP" }] };
+    } },
+  { id: "volconfirm", name: "Konfirmasi Volume", cat: "Volume", group: "rest", defOn: true,
+    desc: "Volume terakhir di atas rataan mengonfirmasi arah candle.",
+    params: [{ k: "period", label: "Periode rataan", def: 20, min: 2, max: 100 }],
+    score(d, p, ctx) {
+      const vols = d.vols;
+      if (!vols || vols.length < p.period + 1) return null;
+      const w = vols.slice(-(p.period + 1), -1);
+      const smaV = w.reduce((a, x) => a + x, 0) / p.period;
+      if (smaV <= 0) return null;
+      const ratio = vols[vols.length - 1] / smaV;
+      const dirC = Math.sign(ctx.last - d.closes[d.closes.length - 2]);
+      if (dirC === 0 || ratio < 1.15) return null;
+      const pts = dirC * (ratio >= 1.5 ? 4 : 2);
+      return { pts, text: "Volume " + ratio.toFixed(1) + "× rataan " + (dirC > 0 ? "mengonfirmasi kenaikan" : "mengonfirmasi penurunan") };
+    } },
+  { id: "mfi", name: "MFI (Money Flow)", cat: "Volume", group: "rest", defOn: false,
+    desc: "RSI berbobot volume — aliran uang masuk/keluar.",
+    params: [{ k: "period", label: "Periode", def: 14, min: 2, max: 50 }],
+    score(d, p) {
+      const v = lastVal(mfiSeries(d.highs, d.lows, d.closes, d.vols, p.period));
+      if (v === null) return null;
+      let pts = Math.max(-10, Math.min(10, Math.round((v - 50) * 0.5)));
+      if (v > 80) pts = Math.min(pts, 3);
+      if (v < 20) pts = Math.max(pts, -3);
+      return { pts, text: "MFI " + v.toFixed(1) };
+    } },
+  { id: "obv", name: "OBV Trend", cat: "Volume", group: "rest", defOn: false,
+    desc: "Perubahan On-Balance Volume 10 candle vs total volumenya.",
+    params: [],
+    score(d) {
+      if (!d.vols || d.closes.length < 11) return null;
+      const obv = obvSeries(d.closes, d.vols);
+      const n = obv.length;
+      let tot = 0;
+      for (let i = n - 10; i < n; i++) tot += d.vols[i] || 0;
+      if (tot <= 0) return null;
+      const delta = (obv[n - 1] - obv[n - 11]) / tot;
+      return { pts: Math.round(delta * 6), text: "OBV " + (delta >= 0 ? "naik" : "turun") + " 10 candle" };
+    } },
+  { id: "cmf", name: "Chaikin Money Flow", cat: "Volume", group: "rest", defOn: false,
+    desc: "Tekanan beli/jual berbobot volume, skala −1..1.",
+    params: [{ k: "period", label: "Periode", def: 20, min: 2, max: 100 }],
+    score(d, p) {
+      const v = cmfLast(d.highs, d.lows, d.closes, d.vols, p.period);
+      if (v === null) return null;
+      const pts = Math.max(-6, Math.min(6, Math.round(v * 25)));
+      return { pts, text: "CMF " + v.toFixed(2) };
+    } },
+  { id: "patterns", name: "Pola Candle", cat: "Pola", group: "rest", defOn: true,
+    desc: "Engulfing, hammer, shooting star pada candle terakhir.",
+    params: [],
+    score(d, p, ctx) {
+      const opens = d.opens, closes = d.closes, highs = d.highs, lows = d.lows;
+      const n = closes.length;
+      if (!opens || n < 2 || !highs || !lows) return null;
+      const i = n - 1, j = n - 2;
+      const o = opens[i], c = closes[i], po = opens[j], pc = closes[j];
+      const range = highs[i] - lows[i];
+      const body = Math.abs(c - o);
+      if (range <= 0) return null;
       const bullEngulf = pc < po && c > o && o <= pc && c >= po;
       const bearEngulf = pc > po && c < o && o >= pc && c <= po;
       const upperWick = highs[i] - Math.max(o, c);
       const lowerWick = Math.min(o, c) - lows[i];
-      if (bullEngulf) { rest += 4; parts.push({ p: 4, t: "Pola bullish engulfing" }); }
-      else if (bearEngulf) { rest -= 4; parts.push({ p: -4, t: "Pola bearish engulfing" }); }
-      else if (body > 0 && lowerWick > body * 2 && upperWick < range * 0.25) {
-        rest += 3; parts.push({ p: 3, t: "Pola hammer — penolakan harga bawah" });
-      } else if (body > 0 && upperWick > body * 2 && lowerWick < range * 0.25) {
-        rest -= 3; parts.push({ p: -3, t: "Pola shooting star — penolakan harga atas" });
+      if (bullEngulf) return { pts: 4, text: "Pola bullish engulfing" };
+      if (bearEngulf) return { pts: -4, text: "Pola bearish engulfing" };
+      if (body > 0 && lowerWick > body * 2 && upperWick < range * 0.25) return { pts: 3, text: "Pola hammer — penolakan harga bawah" };
+      if (body > 0 && upperWick > body * 2 && lowerWick < range * 0.25) return { pts: -3, text: "Pola shooting star — penolakan harga atas" };
+      return null;
+    } },
+  { id: "sr", name: "Support / Resistance", cat: "Tren", group: "rest", defOn: true,
+    desc: "Breakout/breakdown ayunan N candle + kedekatan level.",
+    params: [{ k: "period", label: "Periode ayunan", def: 30, min: 5, max: 200 }],
+    score(d, p, ctx) {
+      const highs = d.highs, lows = d.lows, n = d.closes.length;
+      if (!highs || !lows || n < p.period + 1 || !ctx.atr) return null;
+      let swH = -Infinity, swL = Infinity;
+      for (let i = n - p.period - 1; i < n - 1; i++) {
+        if (highs[i] > swH) swH = highs[i];
+        if (lows[i] < swL) swL = lows[i];
+      }
+      const last = ctx.last;
+      if (last > swH) return { pts: 5, text: "Breakout di atas resistance " + p.period + " candle" };
+      if (last < swL) return { pts: -5, text: "Breakdown di bawah support " + p.period + " candle" };
+      if (swH - last <= 0.35 * ctx.atr) return { pts: -2, text: "Harga mendekati resistance" };
+      if (last - swL <= 0.35 * ctx.atr) return { pts: 2, text: "Harga mendekati support" };
+      return null;
+    } }
+];
+function indDef(id) { return INDCAT.find(x => x.id === id) || null; }
+
+/* ---------- Konfigurasi pengguna ---------- */
+const IND_CFG_KEY = "dtrade-indcfg-v1";
+let indCfgVer = 1;
+function defaultIndCfg() {
+  return {
+    active: INDCAT.filter(x => x.defOn).map(x => ({
+      id: x.id,
+      params: Object.fromEntries(x.params.map(pr => [pr.k, pr.def])),
+      weight: 1
+    })),
+    custom: []
+  };
+}
+function loadIndCfg() {
+  try {
+    const raw = localStorage.getItem(IND_CFG_KEY);
+    if (!raw) return defaultIndCfg();
+    const cfg = JSON.parse(raw);
+    if (!cfg || !Array.isArray(cfg.active)) return defaultIndCfg();
+    cfg.active = cfg.active.filter(e => indDef(e.id)).map(e => {
+      const def = indDef(e.id);
+      const params = {};
+      for (const pr of def.params) {
+        const v = e.params && typeof e.params[pr.k] === "number" ? e.params[pr.k] : pr.def;
+        params[pr.k] = Math.max(pr.min, Math.min(pr.max, v));
+      }
+      return { id: e.id, params, weight: typeof e.weight === "number" ? e.weight : 1 };
+    });
+    if (!Array.isArray(cfg.custom)) cfg.custom = [];
+    cfg.custom = cfg.custom.filter(c => c && c.name && c.expr);
+    return cfg;
+  } catch (e) { return defaultIndCfg(); }
+}
+let indCfg = loadIndCfg();
+function saveIndCfg() {
+  try { localStorage.setItem(IND_CFG_KEY, JSON.stringify(indCfg)); } catch (e) {}
+  indCfgVer++;
+}
+function cfgEntry(id) { return indCfg.active.find(e => e.id === id) || null; }
+
+/* ---------- Indikator kustom: bahasa rumus aman ----------
+   Sumber: close, open, high, low, volume, hl2, hlc3, ohlc4.
+   Fungsi: SMA(x,n) EMA(x,n) WMA(x,n) RSI([x,]n) MACDHIST(f,s,g)
+   MACDLINE(f,s) MACDSIG(f,s,g) ATR(n) STOCHK(n) STOCHD(n,m) CCI(n)
+   WILLR(n) MFI(n) VWAP(n) OBV() BBUP(n,m) BBMID(n) BBLO(n,m)
+   HIGHEST(x,n) LOWEST(x,n) REF(x,n) CHANGE(x,n) ABS(x) MAX(a,b) MIN(a,b).
+   Operator: + - * / dan kurung. Semua nilai adalah seri per-candle. */
+function exprTokenize(src) {
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === " " || ch === "\n" || ch === "\t") { i++; continue; }
+    if ("+-*/(),".includes(ch)) { toks.push({ t: ch }); i++; continue; }
+    if (/[0-9.]/.test(ch)) {
+      let j = i;
+      while (j < src.length && /[0-9.]/.test(src[j])) j++;
+      const v = parseFloat(src.slice(i, j));
+      if (isNaN(v)) throw new Error("Angka tidak valid di posisi " + i);
+      toks.push({ t: "num", v });
+      i = j; continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i;
+      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
+      toks.push({ t: "id", v: src.slice(i, j).toUpperCase() });
+      i = j; continue;
+    }
+    throw new Error("Karakter tidak dikenal: '" + ch + "'");
+  }
+  return toks;
+}
+function exprParse(src) {
+  const toks = exprTokenize(src);
+  let pos = 0;
+  const peek = () => toks[pos];
+  const next = () => toks[pos++];
+  function parseExpr() {
+    let node = parseTerm();
+    while (peek() && (peek().t === "+" || peek().t === "-")) {
+      const op = next().t;
+      node = { op, l: node, r: parseTerm() };
+    }
+    return node;
+  }
+  function parseTerm() {
+    let node = parseFactor();
+    while (peek() && (peek().t === "*" || peek().t === "/")) {
+      const op = next().t;
+      node = { op, l: node, r: parseFactor() };
+    }
+    return node;
+  }
+  function parseFactor() {
+    const tk = peek();
+    if (!tk) throw new Error("Rumus berakhir tiba-tiba");
+    if (tk.t === "-") { next(); return { op: "neg", l: parseFactor() }; }
+    if (tk.t === "(") {
+      next();
+      const node = parseExpr();
+      if (!peek() || peek().t !== ")") throw new Error("Kurung tutup hilang");
+      next();
+      return node;
+    }
+    if (tk.t === "num") { next(); return { op: "num", v: tk.v }; }
+    if (tk.t === "id") {
+      next();
+      if (peek() && peek().t === "(") {
+        next();
+        const args = [];
+        if (!(peek() && peek().t === ")")) {
+          args.push(parseExpr());
+          while (peek() && peek().t === ",") { next(); args.push(parseExpr()); }
+        }
+        if (!peek() || peek().t !== ")") throw new Error("Kurung tutup fungsi hilang");
+        next();
+        return { op: "call", name: tk.v, args };
+      }
+      return { op: "src", name: tk.v };
+    }
+    throw new Error("Token tak terduga: '" + tk.t + "'");
+  }
+  const ast = parseExpr();
+  if (pos < toks.length) throw new Error("Sisa rumus tidak terbaca");
+  return ast;
+}
+function seriesBin(a, b, fn) {
+  const n = Math.max(a.length, b.length);
+  const out = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    const x = a[i], y = b[i];
+    if (x === null || x === undefined || y === null || y === undefined) { out[i] = null; continue; }
+    const v = fn(x, y);
+    out[i] = (v === null || v === undefined || !isFinite(v)) ? null : v;
+  }
+  return out;
+}
+function seriesMap(a, fn) {
+  return a.map(v => (v === null || v === undefined) ? null : fn(v));
+}
+function scalarOf(series, what) {
+  const v = lastVal(series);
+  if (v === null || !isFinite(v) || v < 0) throw new Error("Parameter " + what + " harus angka positif");
+  return Math.max(1, Math.round(v));
+}
+function rollingExtremum(x, n, isMax) {
+  const out = new Array(x.length).fill(null);
+  for (let i = 0; i < x.length; i++) {
+    if (i < n - 1) continue;
+    let best = null;
+    for (let j = i - n + 1; j <= i; j++) {
+      const v = x[j];
+      if (v === null || v === undefined) continue;
+      best = best === null ? v : isMax ? Math.max(best, v) : Math.min(best, v);
+    }
+    out[i] = best;
+  }
+  return out;
+}
+function exprEval(node, d) {
+  const n = d.closes.length;
+  const konst = v => new Array(n).fill(v);
+  switch (node.op) {
+    case "num": return konst(node.v);
+    case "neg": return seriesMap(exprEval(node.l, d), v => -v);
+    case "+": return seriesBin(exprEval(node.l, d), exprEval(node.r, d), (a, b) => a + b);
+    case "-": return seriesBin(exprEval(node.l, d), exprEval(node.r, d), (a, b) => a - b);
+    case "*": return seriesBin(exprEval(node.l, d), exprEval(node.r, d), (a, b) => a * b);
+    case "/": return seriesBin(exprEval(node.l, d), exprEval(node.r, d), (a, b) => b === 0 ? null : a / b);
+    case "src": {
+      switch (node.name) {
+        case "CLOSE": case "C": return d.closes.slice();
+        case "OPEN": case "O": return (d.opens || d.closes).slice();
+        case "HIGH": case "H": return d.highs.slice();
+        case "LOW": case "L": return d.lows.slice();
+        case "VOLUME": case "VOL": case "V": return (d.vols || new Array(n).fill(0)).slice();
+        case "HL2": return d.closes.map((_, i) => (d.highs[i] + d.lows[i]) / 2);
+        case "HLC3": return d.closes.map((c, i) => (d.highs[i] + d.lows[i] + c) / 3);
+        case "OHLC4": return d.closes.map((c, i) => ((d.opens ? d.opens[i] : c) + d.highs[i] + d.lows[i] + c) / 4);
+        default: throw new Error("Sumber tidak dikenal: " + node.name + " (pakai close/open/high/low/volume)");
+      }
+    }
+    case "call": {
+      const A = node.args.map(a => exprEval(a, d));
+      const need = (cnt) => { if (A.length !== cnt) throw new Error(node.name + " butuh " + cnt + " argumen"); };
+      switch (node.name) {
+        case "SMA": need(2); return smaSeries(A[0], scalarOf(A[1], "SMA"));
+        case "EMA": need(2); return emaOfSeries(A[0], scalarOf(A[1], "EMA"));
+        case "WMA": need(2); return wmaSeries(A[0], scalarOf(A[1], "WMA"));
+        case "RSI":
+          if (A.length === 1) return rsiSeries(d.closes, scalarOf(A[0], "RSI"));
+          need(2); return rsiSeries(A[0], scalarOf(A[1], "RSI"));
+        case "MACDHIST": need(3); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), scalarOf(A[2], "MACD")).hist;
+        case "MACDLINE": need(2); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), 9).line;
+        case "MACDSIG": need(3); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), scalarOf(A[2], "MACD")).signal;
+        case "ATR": need(1); return atrSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "ATR"));
+        case "STOCHK": need(1); return stochSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "STOCHK"), 1).k;
+        case "STOCHD": need(2); return stochSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "STOCHD"), scalarOf(A[1], "STOCHD")).d;
+        case "CCI": need(1); return cciSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "CCI"));
+        case "WILLR": need(1); return willrSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "WILLR"));
+        case "MFI": need(1); return mfiSeries(d.highs, d.lows, d.closes, d.vols, scalarOf(A[0], "MFI"));
+        case "VWAP": need(1); return vwapSeries(d.highs, d.lows, d.closes, d.vols, scalarOf(A[0], "VWAP"));
+        case "OBV": need(0); return obvSeries(d.closes, d.vols);
+        case "BBUP": need(2); return bollSeries(d.closes, scalarOf(A[0], "BB"), lastVal(A[1]) || 2).upper;
+        case "BBMID": need(1); return bollSeries(d.closes, scalarOf(A[0], "BB"), 2).mid;
+        case "BBLO": need(2); return bollSeries(d.closes, scalarOf(A[0], "BB"), lastVal(A[1]) || 2).lower;
+        case "HIGHEST": need(2); return rollingExtremum(A[0], scalarOf(A[1], "HIGHEST"), true);
+        case "LOWEST": need(2); return rollingExtremum(A[0], scalarOf(A[1], "LOWEST"), false);
+        case "REF": {
+          need(2);
+          const sh = scalarOf(A[1], "REF");
+          return A[0].map((v, i) => i - sh >= 0 ? A[0][i - sh] : null);
+        }
+        case "CHANGE": {
+          need(2);
+          const sh = scalarOf(A[1], "CHANGE");
+          return A[0].map((v, i) => (i - sh >= 0 && v !== null && A[0][i - sh] !== null) ? v - A[0][i - sh] : null);
+        }
+        case "ABS": need(1); return seriesMap(A[0], v => Math.abs(v));
+        case "MAX": need(2); return seriesBin(A[0], A[1], (a, b) => Math.max(a, b));
+        case "MIN": need(2); return seriesBin(A[0], A[1], (a, b) => Math.min(a, b));
+        default: throw new Error("Fungsi tidak dikenal: " + node.name);
       }
     }
   }
+  throw new Error("Rumus tidak valid");
+}
+function evalCustomValue(expr, d) {
+  const series = exprEval(exprParse(expr), d);
+  return { value: lastVal(series), series };
+}
 
-  // --- Support / Resistance (ayunan 30 candle) ---
-  if (highs && lows && n >= 31 && atr) {
-    let swH = -Infinity, swL = Infinity;
-    for (let i = n - 31; i < n - 1; i++) {
-      if (highs[i] > swH) swH = highs[i];
-      if (lows[i] < swL) swL = lows[i];
+/* ---------- Skor teknikal digerakkan konfigurasi (v1.32.0) -------
+   Struktur sama dengan mesin v2: blok tren (EMA/MACD/Supertrend/dll)
+   diskalakan kekuatan tren ADX, sisanya dijumlah, total ×1,18.
+   Dengan konfigurasi Default hasilnya identik dengan mesin lama. */
+function scoreSymbol(closes, highs, lows, vols, opens) {
+  const d = { closes, highs, lows, vols, opens };
+  const n = closes.length;
+  const last = closes[n - 1];
+  const adxEntry = cfgEntry("adx");
+  const adxPeriod = adxEntry && adxEntry.params.period ? adxEntry.params.period : 14;
+  const atr = atrWilder(highs, lows, closes, 14);
+  const adxR = adxLast(highs, lows, closes, adxPeriod);
+  const adx = adxR ? adxR.adx : null;
+  const ctx = { atr, adxR, adx: adxEntry ? adx : null, last, n };
+  const trendScale = !adxEntry || adx === null ? 1 : adx >= 22 ? 1 : adx >= 15 ? 0.9 : 0.78;
+  const parts = [];
+  let trend = 0, rest = 0;
+  for (const e of indCfg.active) {
+    const def = indDef(e.id);
+    if (!def) continue;
+    let r = null;
+    try { r = def.score(d, e.params, ctx); } catch (err) { r = null; }
+    if (!r) continue;
+    const rawParts = r.parts ? r.parts : [{ p: r.pts, t: r.text }];
+    const wMul = typeof e.weight === "number" ? e.weight : 1;
+    for (const rp of rawParts) {
+      const pts = Math.round(rp.p * wMul);
+      parts.push({ p: pts, t: rp.t });
+      if (def.group === "trend") trend += pts; else rest += pts;
     }
-    if (last > swH) { rest += 5; parts.push({ p: 5, t: "Breakout di atas resistance 30 candle" }); }
-    else if (last < swL) { rest -= 5; parts.push({ p: -5, t: "Breakdown di bawah support 30 candle" }); }
-    else if (swH - last <= 0.35 * atr) { rest -= 2; parts.push({ p: -2, t: "Harga mendekati resistance" }); }
-    else if (last - swL <= 0.35 * atr) { rest += 2; parts.push({ p: 2, t: "Harga mendekati support" }); }
   }
-
+  for (const c of indCfg.custom) {
+    let v = null;
+    try { v = evalCustomValue(c.expr, d).value; } catch (err) { v = null; }
+    if (v === null || v === undefined || !isFinite(v)) continue;
+    let pts;
+    if (c.mode === "raw") pts = Math.max(-10, Math.min(10, Math.round(v)));
+    else {
+      if (!atr) continue;
+      pts = Math.max(-10, Math.min(10, Math.round(v / atr * 5)));
+    }
+    pts = Math.round(pts * (typeof c.weight === "number" ? c.weight : 1));
+    parts.push({ p: pts, t: c.name + " (" + (Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3)) + ")" });
+    rest += pts;
+  }
+  const trendPts = Math.round(trend * trendScale);
   let score = Math.round((trendPts + rest) * 1.18);
   score = Math.max(-100, Math.min(100, score));
   const side = score >= 25 ? "LONG" : score <= -25 ? "SHORT" : "NETRAL";
@@ -1109,8 +2048,22 @@ function scoreSymbol(closes, highs, lows, vols, opens) {
     .slice()
     .sort((a, b2) => Math.abs(b2.p) - Math.abs(a.p))
     .map(x => x.t + " (" + (x.p >= 0 ? "+" : "−") + Math.abs(x.p) + ")");
-  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, atr, adx, stoch, vwap, reasons };
+  /* Bidang tampilan (dipakai kartu skor, snapshot berita, bagikan) —
+     selalu dihitung standar agar konsumen lama tetap utuh. */
+  const e20s = emaSeries(closes, 20), e50s = emaSeries(closes, 50);
+  return {
+    score, side,
+    rsi: rsiLast(closes),
+    macd: macdLast(closes),
+    boll: bollLast(closes),
+    ema20: e20s[e20s.length - 1], ema50: e50s[e50s.length - 1],
+    atr, adx,
+    stoch: stochLast(highs, lows, closes, 14, 3),
+    vwap: vwapLast(highs, lows, closes, vols, 24),
+    reasons
+  };
 }
+
 
 /* ================= Cache-first daftar Pasar (v1.16.0) =================
    Hasil muat terakhir (harga + skor, tanpa candle) disimpan lokal.
@@ -2994,7 +3947,8 @@ function fmtWaktuCandle(ts, iv, spanMs) {
   return p2(d.getHours()) + ":" + p2(d.getMinutes());
 }
 
-function paintChart(canvas, kl, H, emaSeg) {
+function paintChart(canvas, kl, H, ov) {
+  ov = ov || { bands: [], lines: [], dots: [], legend: [] };
   /* Optimasi lukis (v1.31.18): DPR dibatasi 2 (GPU HP tidak terbebani
      piksel tak terlihat), ukuran kanvas hanya diubah bila benar-benar
      berubah (mengubah ukuran = realokasi + hapus total yang mahal),
@@ -3024,14 +3978,25 @@ function paintChart(canvas, kl, H, emaSeg) {
     if (ls[i] < lo) lo = ls[i];
     if (vs[i] > maxV) maxV = vs[i];
   }
-  /* EMA dari segmen riwayat penuh bila disediakan (v1.27.0) — garis
-     tidak lagi mulai/terpotong di tengah jendela tampilan. */
-  const e20 = emaSeg ? emaSeg.e20 : emaSeries(cs, 20);
-  const e50 = emaSeg ? emaSeg.e50 : emaSeries(cs, 50);
   if (tradePlan) {
     hi = Math.max(hi, tradePlan.entry, tradePlan.tp, tradePlan.sl);
     lo = Math.min(lo, tradePlan.entry, tradePlan.tp, tradePlan.sl);
   }
+  /* Rentang harga ikut menampung overlay indikator (pita/kanal) agar
+     tidak terpotong di tepi grafik (v1.32.0). */
+  const extendRange = arr => {
+    if (!arr) return;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v !== null && v !== undefined && isFinite(v)) {
+        if (v > hi) hi = v;
+        if (v < lo) lo = v;
+      }
+    }
+  };
+  for (const b of ov.bands) { extendRange(b.upper); extendRange(b.lower); }
+  for (const l of ov.lines) extendRange(l.data);
+  for (const dt of ov.dots) extendRange(dt.data);
   /* v1.13.2: bantalan vertikal diperbesar (7% → 10%) supaya candle dan
      label ekstrem tidak lagi menempel/terpotong tepi kanvas. */
   const pad = (hi - lo) * 0.10 || 1; hi += pad; lo -= pad;
@@ -3056,6 +4021,38 @@ function paintChart(canvas, kl, H, emaSeg) {
     if (planLabelYs.some(py => Math.abs(py - ly) < 11)) continue;
     ctx.fillText(fmtPrice(p), W - labelW + 5, ly + 3);
   }
+  // Pita overlay indikator (Bollinger/Ichimoku/Keltner) di bawah candle
+  for (const b of ov.bands) {
+    ctx.beginPath();
+    let startedB = false;
+    for (let i = 0; i < n; i++) {
+      const v = b.upper[i];
+      if (v === null || v === undefined) continue;
+      const x = i * cw + cw / 2;
+      if (!startedB) { ctx.moveTo(x, y(v)); startedB = true; } else ctx.lineTo(x, y(v));
+    }
+    for (let i = n - 1; i >= 0; i--) {
+      const v = b.lower[i];
+      if (v === null || v === undefined) continue;
+      ctx.lineTo(i * cw + cw / 2, y(v));
+    }
+    ctx.closePath();
+    ctx.fillStyle = b.fill || "rgba(240,185,11,.05)";
+    ctx.fill();
+    const edgeB = arr => {
+      ctx.strokeStyle = "rgba(232,236,241,.35)"; ctx.lineWidth = 1;
+      ctx.beginPath();
+      let st = false;
+      for (let i = 0; i < n; i++) {
+        const v = arr[i];
+        if (v === null || v === undefined) continue;
+        const x = i * cw + cw / 2;
+        if (!st) { ctx.moveTo(x, y(v)); st = true; } else ctx.lineTo(x, y(v));
+      }
+      ctx.stroke();
+    };
+    edgeB(b.upper); edgeB(b.lower);
+  }
   // Volume
   for (let i = 0; i < n; i++) {
     const up = cs[i] >= os[i];
@@ -3074,19 +4071,30 @@ function paintChart(canvas, kl, H, emaSeg) {
     const t = y(Math.max(o, c)), b = y(Math.min(o, c));
     ctx.fillRect(x - bw / 2, t, bw, Math.max(b - t, 1));
   }
-  // EMA
-  function line(series, color) {
-    ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
+  // Garis overlay indikator aktif (EMA/SMA/BB tengah/VWAP/dll, v1.32.0)
+  function line(series, color, width) {
+    if (!series) return;
+    ctx.strokeStyle = color; ctx.lineWidth = width || 1.4; ctx.beginPath();
     let started = false;
     series.forEach((v, i) => {
-      if (v === null) return;
+      if (v === null || v === undefined) return;
       const x = i * cw + cw / 2;
       if (!started) { ctx.moveTo(x, y(v)); started = true; } else ctx.lineTo(x, y(v));
     });
     ctx.stroke(); ctx.lineWidth = 1;
   }
-  line(e20, "#f0b90b");
-  line(e50, "#4f8ff7");
+  for (const l of ov.lines) line(l.data, l.color, l.width);
+  // Titik overlay (Parabolic SAR)
+  for (const dt of ov.dots) {
+    for (let i = 0; i < n; i++) {
+      const v = dt.data[i];
+      if (v === null || v === undefined) continue;
+      ctx.fillStyle = dt.colors ? dt.colors[i] : "#e8ecf1";
+      ctx.beginPath();
+      ctx.arc(i * cw + cw / 2, y(v), 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   // Harga terakhir: garis putus-putus + label harga di sumbu kanan
   const last = cs[n - 1];
   ctx.strokeStyle = "rgba(240,185,11,.55)";
@@ -3128,10 +4136,15 @@ function paintChart(canvas, kl, H, emaSeg) {
     }
     ctx.font = "10px sans-serif";
   }
-  ctx.fillStyle = "#f0b90b";
-  ctx.fillText("EMA20", 6, 14);
-  ctx.fillStyle = "#4f8ff7";
-  ctx.fillText("EMA50", 48, 14);
+  /* Legenda overlay indikator aktif (v1.32.0) */
+  let lx = 6;
+  ctx.font = "10px sans-serif";
+  for (const lg of (ov.legend || []).slice(0, 6)) {
+    ctx.fillStyle = lg.color;
+    ctx.fillText(lg.label, lx, 14);
+    lx += ctx.measureText(lg.label).width + 12;
+    if (lx > W - labelW - 40) break;
+  }
   /* Sumbu waktu (v1.13.2): ±5 label waktu candle di bawah grafik,
      format mengikuti timeframe (intraday: jam; harian: tanggal;
      bulanan: bulan/tahun) dalam zona waktu perangkat. */
@@ -3208,20 +4221,24 @@ function drawChart(kl) {
      mengikuti jendela — garis EMA20/50 utuh dari tepi ke tepi di
      posisi geser mana pun (v1.27.0). Hanya kanvas yang terlihat
      yang dilukis (hemat CPU saat layar penuh terbuka). */
-  const full = emaFullFor(kl);
-  const emaSeg = {
-    e20: full.e20.slice(start, end),
-    e50: full.e50.slice(start, end)
+  emaFullFor(kl); // segarkan tanda tangan data untuk cache overlay/osilator
+  const ovF = computeOverlaysFull(kl);
+  const slArr = arr => arr ? arr.slice(start, end) : arr;
+  const ov = {
+    bands: ovF.bands.map(b => ({ upper: slArr(b.upper), lower: slArr(b.lower), fill: b.fill })),
+    lines: ovF.lines.map(l => ({ data: slArr(l.data), color: l.color, width: l.width })),
+    dots: ovF.dots.map(dt => ({ data: slArr(dt.data), colors: slArr(dt.colors) })),
+    legend: ovF.legend
   };
-  viewEmaSeg = emaSeg;
   const zpct = Math.round(VIEW_N / viewN * 100) + "%";
   if ($("zoomLbl")) $("zoomLbl").textContent = zpct;
   if ($("zoomLblFs")) $("zoomLblFs").textContent = zpct;
   if (fsOpen) {
     const wrap = $("fsWrap");
-    chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18), emaSeg);
+    chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18), ov);
   } else {
-    chartGeom.main = paintChart($("chart"), viewKlines, 348, emaSeg);
+    chartGeom.main = paintChart($("chart"), viewKlines, 348, ov);
+    drawOscPane();
   }
   $("btnLatest").classList.toggle("hidden", chartOffset === 0);
   $("btnLatestFs").classList.toggle("hidden", chartOffset === 0);
@@ -4584,7 +5601,8 @@ function syncChatFab() {
   // v1.31.17: tombol tampil juga di halaman Analisis/detail & pembaca
   // (permintaan pemilik) — hanya sembunyi di tab Chat AI itu sendiri
   // dan saat pemilih simbol terbuka (layar penuh sementara).
-  const pickerOpen = !$("pickerView").classList.contains("hidden");
+  const pickerOpen = !$("pickerView").classList.contains("hidden") ||
+    !$("indView").classList.contains("hidden");
   const show = chatFloatState.floated ||
     (currentTab !== "chat" && !pickerOpen);
   fab.classList.toggle("hidden", !show);
@@ -4621,6 +5639,8 @@ $("chatFab").addEventListener("click", () => {
 });
 new MutationObserver(syncChatFab)
   .observe($("pickerView"), { attributes: true, attributeFilter: ["class"] });
+new MutationObserver(syncChatFab)
+  .observe($("indView"), { attributes: true, attributeFilter: ["class"] });
 syncChatFab();
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
@@ -5138,6 +6158,385 @@ async function translateListTitles() {
   }
   if (currentSymbol) renderRelatedNews();
 }
+
+/* ---------- Overlay grafik dari indikator aktif (v1.32.0) ------- */
+let ovCacheKey = "";
+let ovCacheFull = null;
+function klinesToData(kl) {
+  return {
+    closes: kl.map(k => parseFloat(k[4])),
+    highs: kl.map(k => parseFloat(k[2])),
+    lows: kl.map(k => parseFloat(k[3])),
+    vols: kl.map(k => parseFloat(k[5])),
+    opens: kl.map(k => parseFloat(k[1]))
+  };
+}
+function computeOverlaysFull(kl) {
+  const key = emaCacheSig + "|" + indCfgVer;
+  if (ovCacheFull && key === ovCacheKey) return ovCacheFull;
+  const d = klinesToData(kl);
+  const out = { bands: [], lines: [], dots: [], legend: [] };
+  for (const e of indCfg.active) {
+    const def = indDef(e.id);
+    if (!def || !def.overlay) continue;
+    let ov = null;
+    try { ov = def.overlay(d, e.params); } catch (err) { ov = null; }
+    if (!ov) continue;
+    if (ov.bands) for (const b of ov.bands) out.bands.push(b);
+    if (ov.lines) for (const l of ov.lines) {
+      out.lines.push(l);
+      if (l.label) out.legend.push({ label: l.label, color: l.color });
+    }
+    if (ov.dots) for (const dt of ov.dots) {
+      out.dots.push(dt);
+      if (dt.label) out.legend.push({ label: dt.label, color: "#e8ecf1" });
+    }
+  }
+  ovCacheFull = out;
+  ovCacheKey = key;
+  return out;
+}
+
+/* ---------- Panel osilator di bawah grafik (v1.32.0) ------------ */
+const OSC_LIST = [
+  { id: "rsi", label: "RSI" }, { id: "macd", label: "MACD" },
+  { id: "stoch", label: "Stochastic" }, { id: "stochrsi", label: "StochRSI" },
+  { id: "cci", label: "CCI" }, { id: "willr", label: "Williams %R" },
+  { id: "mfi", label: "MFI" }, { id: "adx", label: "ADX" },
+  { id: "ao", label: "AO" }, { id: "trix", label: "TRIX" },
+  { id: "uo", label: "Ultimate" }
+];
+function oscSeriesFor(id, d) {
+  switch (id) {
+    case "rsi": {
+      const e = cfgEntry("rsi");
+      return { series: [{ data: rsiSeries(d.closes, e ? e.params.period : 14), color: "#b06ee8" }], min: 0, max: 100, refs: [30, 70] };
+    }
+    case "macd": {
+      const e = cfgEntry("macd");
+      const pr = e ? e.params : { fast: 12, slow: 26, signal: 9 };
+      const s = macdSeries(d.closes, pr.fast, pr.slow, pr.signal);
+      return { series: [{ data: s.line, color: "#4f8ff7" }, { data: s.signal, color: "#f0b90b" }], bars: s.hist, min: null, max: null, refs: [0] };
+    }
+    case "stoch": {
+      const e = cfgEntry("stoch");
+      const pr = e ? e.params : { k: 14, smooth: 3 };
+      const s = stochSeries(d.highs, d.lows, d.closes, pr.k, pr.smooth);
+      return { series: [{ data: s.k, color: "#4f8ff7" }, { data: s.d, color: "#f0b90b" }], min: 0, max: 100, refs: [20, 80] };
+    }
+    case "stochrsi": return { series: [{ data: stochRsiSeries(d.closes, 14, 14), color: "#b06ee8" }], min: 0, max: 100, refs: [20, 80] };
+    case "cci": return { series: [{ data: cciSeries(d.highs, d.lows, d.closes, 20), color: "#e879c6" }], min: null, max: null, refs: [-100, 0, 100] };
+    case "willr": return { series: [{ data: willrSeries(d.highs, d.lows, d.closes, 14), color: "#e879c6" }], min: -100, max: 0, refs: [-80, -20] };
+    case "mfi": return { series: [{ data: mfiSeries(d.highs, d.lows, d.closes, d.vols, 14), color: "#0ecb81" }], min: 0, max: 100, refs: [20, 80] };
+    case "adx": {
+      const s = adxSeries(d.highs, d.lows, d.closes, 14);
+      return { series: [{ data: s.adx, color: "#f0b90b" }, { data: s.pdi, color: "#0ecb81" }, { data: s.mdi, color: "#f6465d" }], min: 0, max: 100, refs: [25] };
+    }
+    case "ao": return { series: [], bars: aoSeries(d.highs, d.lows), min: null, max: null, refs: [0] };
+    case "trix": return { series: [{ data: trixSeries(d.closes, 15), color: "#4f8ff7" }], min: null, max: null, refs: [0] };
+    case "uo": return { series: [{ data: uoSeries(d.highs, d.lows, d.closes), color: "#0ecb81" }], min: 0, max: 100, refs: [30, 70] };
+  }
+  return null;
+}
+let oscCacheKey = "";
+let oscCacheData = null;
+function renderOscChips() {
+  const wrap = $("oscChips");
+  if (!wrap) return;
+  const cur = localStorage.getItem("dtrade-osc") || "rsi";
+  wrap.innerHTML = OSC_LIST.map(o =>
+    '<button class="oscchip' + (o.id === cur ? " on" : "") + '" data-osc="' + o.id + '">' + o.label + "</button>").join("");
+  wrap.querySelectorAll("[data-osc]").forEach(b => b.addEventListener("click", () => {
+    localStorage.setItem("dtrade-osc", b.dataset.osc);
+    renderOscChips();
+    drawOscPane();
+  }));
+}
+function drawOscPane() {
+  const cv = $("oscCv");
+  if (!cv || !detailKlines.length || fsOpen) return;
+  const id = localStorage.getItem("dtrade-osc") || "rsi";
+  const key = emaCacheSig + "|" + id + "|" + indCfgVer;
+  if (oscCacheKey !== key) {
+    oscCacheData = oscSeriesFor(id, klinesToData(detailKlines));
+    oscCacheKey = key;
+  }
+  const data = oscCacheData;
+  if (!data) return;
+  const end = detailKlines.length - chartOffset;
+  const start = Math.max(0, end - viewN);
+  const cnt = end - start;
+  if (cnt < 2) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = cv.clientWidth, H = 84;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const labelW = 56, cw = (W - labelW) / cnt;
+  let mn = data.min, mx = data.max;
+  if (mn === null || mx === null) {
+    mn = Infinity; mx = -Infinity;
+    const scan = arr => { if (!arr) return; for (let i = start; i < end; i++) { const v = arr[i]; if (v !== null && v !== undefined && isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; } } };
+    for (const s of data.series) scan(s.data);
+    scan(data.bars);
+    if (!isFinite(mn)) { mn = -1; mx = 1; }
+    if (data.refs.includes(0)) { const a = Math.max(Math.abs(mn), Math.abs(mx)) || 1; mn = -a; mx = a; }
+    const pad = (mx - mn) * 0.12 || 1;
+    mn -= pad; mx += pad;
+  }
+  const y = v => H - (v - mn) / (mx - mn) * (H - 8) - 4;
+  ctx.font = "9px sans-serif";
+  for (const rv of data.refs) {
+    if (rv < mn || rv > mx) continue;
+    ctx.strokeStyle = "#232a33";
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(0, y(rv)); ctx.lineTo(W - labelW, y(rv)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#7d8896";
+    ctx.fillText(String(rv), W - labelW + 5, y(rv) + 3);
+  }
+  if (data.bars) {
+    const y0 = y(Math.max(mn, Math.min(mx, 0)));
+    for (let i = start; i < end; i++) {
+      const v = data.bars[i];
+      if (v === null || v === undefined) continue;
+      const x = (i - start) * cw;
+      ctx.fillStyle = v >= 0 ? "rgba(14,203,129,.55)" : "rgba(246,70,93,.55)";
+      ctx.fillRect(x + 0.5, Math.min(y(v), y0), Math.max(cw - 1, 0.6), Math.abs(y(v) - y0));
+    }
+  }
+  for (const s of data.series) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    let started = false;
+    for (let i = start; i < end; i++) {
+      const v = s.data[i];
+      if (v === null || v === undefined) continue;
+      const x = (i - start) * cw + cw / 2;
+      if (!started) { ctx.moveTo(x, y(v)); started = true; } else ctx.lineTo(x, y(v));
+    }
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+  const first = data.series[0] || (data.bars ? { data: data.bars } : null);
+  if (first) {
+    const lv = lastVal(first.data.slice(0, end));
+    if (lv !== null) {
+      ctx.fillStyle = "#e8ecf1";
+      ctx.font = "bold 9px sans-serif";
+      ctx.fillText((OSC_LIST.find(o => o.id === id) || {}).label + " " +
+        (Math.abs(lv) >= 100 ? lv.toFixed(0) : lv.toFixed(2)), W - labelW + 5, 11);
+    }
+  }
+}
+
+/* ---------- Panel setelan indikator (v1.32.0) ------------------- */
+let custEditorOpen = false;
+let custDraft = { name: "", expr: "", mode: "atr", weight: 1, msg: "" };
+function weightOptions(cur) {
+  return [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3].map(w =>
+    '<option value="' + w + '"' + (w === cur ? " selected" : "") + ">×" + w + (w === 0 ? " (diam)" : "") + "</option>").join("");
+}
+function updateIndSummary() {
+  const el = $("indSummary");
+  if (!el) return;
+  const isDef = JSON.stringify(indCfg) === JSON.stringify(defaultIndCfg());
+  el.textContent = isDef ? "Default" :
+    "Kustom · " + indCfg.active.length + " indikator" +
+    (indCfg.custom.length ? " + " + indCfg.custom.length + " rumus" : "");
+}
+function applyIndCfgToDetail() {
+  updateIndSummary();
+  if (currentSymbol && detailKlines.length) renderAnalysis();
+}
+function openIndPanel() {
+  renderIndPanel();
+  $("indView").classList.remove("hidden");
+}
+function closeIndPanel() {
+  $("indView").classList.add("hidden");
+  applyIndCfgToDetail();
+}
+function renderIndPanel() {
+  const body = $("indBody");
+  if (!body) return;
+  let h = "";
+  h += '<div class="indsec">Indikator aktif — ikut menghitung skor (' + indCfg.active.length + " katalog" +
+    (indCfg.custom.length ? " + " + indCfg.custom.length + " kustom" : "") + ")</div>";
+  if (!indCfg.active.length && !indCfg.custom.length) {
+    h += '<div class="indrow"><div class="ds">Belum ada indikator aktif — skor akan selalu 0 (NETRAL). Tambahkan dari katalog di bawah.</div></div>';
+  }
+  for (const e of indCfg.active) {
+    const def = indDef(e.id);
+    if (!def) continue;
+    h += '<div class="indrow"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+      '<div><span class="nm">' + escHtml(def.name) + '</span><span class="catchip">' + escHtml(def.cat) + "</span>" +
+      '<div class="ds">' + escHtml(def.desc) + "</div></div>" +
+      '<button class="indbtn danger" data-act="del" data-id="' + def.id + '">Hapus</button></div>' +
+      '<div class="indparams">';
+    for (const pr of def.params) {
+      h += '<label class="indparam">' + escHtml(pr.label) +
+        '<input type="number" data-param="' + def.id + ":" + pr.k + '" value="' + e.params[pr.k] +
+        '" min="' + pr.min + '" max="' + pr.max + '" step="' + (pr.step || 1) + '"></label>';
+    }
+    h += '<label class="indparam">Bobot skor<select data-weight="' + def.id + '">' + weightOptions(e.weight) + "</select></label>" +
+      "</div></div>";
+  }
+  for (const c of indCfg.custom) {
+    h += '<div class="indrow"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+      '<div><span class="nm">' + escHtml(c.name) + '</span><span class="catchip">Kustom</span>' +
+      '<div class="ds" style="font-family:monospace">' + escHtml(c.expr) + "</div>" +
+      '<div class="ds">Mode: ' + (c.mode === "raw" ? "nilai mentah (−10..10)" : "deviasi ×ATR") + "</div></div>" +
+      '<button class="indbtn danger" data-act="delcust" data-id="' + c.cid + '">Hapus</button></div>' +
+      '<div class="indparams"><label class="indparam">Bobot skor<select data-weightcust="' + c.cid + '">' + weightOptions(c.weight || 1) + "</select></label></div></div>";
+  }
+  h += '<div class="indsec">Katalog — tambah indikator</div>';
+  for (const def of INDCAT) {
+    if (cfgEntry(def.id)) continue;
+    h += '<div class="indrow"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+      '<div><span class="nm">' + escHtml(def.name) + '</span><span class="catchip">' + escHtml(def.cat) + "</span>" +
+      '<div class="ds">' + escHtml(def.desc) + "</div></div>" +
+      '<button class="indbtn gold" data-act="add" data-id="' + def.id + '">Tambah</button></div></div>';
+  }
+  h += '<div class="indsec">Indikator kustom — rumus sendiri</div>';
+  if (!custEditorOpen) {
+    h += '<button class="indbtn gold" data-act="newcust">＋ Buat indikator kustom</button>';
+  } else {
+    h += '<div class="indrow"><div class="nm">Indikator kustom baru</div>' +
+      '<div style="margin-top:8px"><input type="text" id="custName" placeholder="Nama, cth: Dorongan EMA" value="' + escHtml(custDraft.name) + '"></div>' +
+      '<div style="margin-top:8px"><textarea id="custExpr" rows="3" placeholder="Rumus, cth: EMA(close, 9) - EMA(close, 21)">' + escHtml(custDraft.expr) + "</textarea></div>" +
+      '<div class="ds" style="margin-top:6px">Sumber: close, open, high, low, volume, hl2, hlc3, ohlc4. ' +
+      "Fungsi: SMA(x,n), EMA(x,n), WMA(x,n), RSI(n), MACDHIST(f,s,g), MACDLINE(f,s), ATR(n), STOCHK(n), STOCHD(n,m), CCI(n), WILLR(n), MFI(n), VWAP(n), OBV(), BBUP(n,m), BBMID(n), BBLO(n,m), HIGHEST(x,n), LOWEST(x,n), REF(x,n), CHANGE(x,n), ABS(x), MAX(a,b), MIN(a,b). Operator + − * / dan kurung.</div>" +
+      '<div class="indparams"><label class="indparam">Mode skor<select id="custMode">' +
+      '<option value="atr"' + (custDraft.mode === "atr" ? " selected" : "") + ">Deviasi ×ATR — untuk selisih harga (cth selisih EMA)</option>" +
+      '<option value="raw"' + (custDraft.mode === "raw" ? " selected" : "") + ">Nilai mentah −10..10 — untuk osilator (cth RSI−50)</option></select></label>" +
+      '<label class="indparam">Bobot skor<select id="custWeight">' + weightOptions(custDraft.weight) + "</select></label></div>" +
+      (custDraft.msg ? '<div class="ds" style="margin-top:6px">' + escHtml(custDraft.msg) + "</div>" : "") +
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">' +
+      '<button class="indbtn" data-act="testcust">Uji rumus</button>' +
+      '<button class="indbtn gold" data-act="savecust">Simpan indikator</button>' +
+      '<button class="indbtn" data-act="cancelcust">Batal</button></div></div>';
+  }
+  h += '<div class="ds" style="margin-top:14px;line-height:1.55">Cara kerja skor: indikator grup Tren (EMA, MACD, Supertrend, SMA Cross, Ichimoku, SAR, TRIX) dijumlah lalu diskalakan kekuatan tren ADX; indikator lain dijumlah langsung; total dikalibrasi ×1,18 ke rentang −100..+100. Bobot mengalikan sumbangan tiap indikator. Setelan tersimpan di perangkat dan berlaku untuk semua skor (daftar Pasar, Analisis, snapshot berita). <b>Reset Default</b> mengembalikan 12 indikator bawaan persis seperti rilis sebelumnya.</div>';
+  body.innerHTML = h;
+}
+function testCustomDraft() {
+  let d;
+  if (detailKlines.length) d = klinesToData(detailKlines);
+  else {
+    const closes = [], highs = [], lows = [], vols = [], opens = [];
+    let p = 100;
+    for (let i = 0; i < 120; i++) {
+      const c = p * (1 + 0.002 * Math.sin(i / 9) + 0.001);
+      closes.push(c); highs.push(c * 1.004); lows.push(c * 0.996);
+      opens.push(p); vols.push(1000 + i * 5); p = c;
+    }
+    d = { closes, highs, lows, vols, opens };
+  }
+  return evalCustomValue(custDraft.expr, d);
+}
+$("indBody").addEventListener("click", e => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act, id = btn.dataset.id;
+  if (act === "del") {
+    indCfg.active = indCfg.active.filter(x => x.id !== id);
+    saveIndCfg(); renderIndPanel();
+  } else if (act === "add") {
+    const def = indDef(id);
+    if (def && !cfgEntry(id)) {
+      indCfg.active.push({ id, params: Object.fromEntries(def.params.map(pr => [pr.k, pr.def])), weight: 1 });
+      saveIndCfg(); renderIndPanel();
+    }
+  } else if (act === "delcust") {
+    indCfg.custom = indCfg.custom.filter(c => c.cid !== id);
+    saveIndCfg(); renderIndPanel();
+  } else if (act === "newcust") {
+    custEditorOpen = true; custDraft.msg = "";
+    renderIndPanel();
+  } else if (act === "cancelcust") {
+    custEditorOpen = false;
+    renderIndPanel();
+  } else if (act === "testcust") {
+    syncCustDraft();
+    try {
+      const r = testCustomDraft();
+      custDraft.msg = r.value === null ? "Rumus valid, tapi hasilnya kosong untuk data ini (seri terlalu pendek?)." :
+        "✓ Rumus valid — nilai terakhir: " + (Math.abs(r.value) >= 100 ? r.value.toFixed(1) : r.value.toFixed(4));
+    } catch (err) { custDraft.msg = "✗ " + err.message; }
+    renderIndPanel();
+  } else if (act === "savecust") {
+    syncCustDraft();
+    if (!custDraft.name.trim()) { custDraft.msg = "✗ Nama indikator belum diisi."; renderIndPanel(); return; }
+    try {
+      const r = testCustomDraft();
+      if (r.value === null) { custDraft.msg = "✗ Rumus menghasilkan nilai kosong — periksa lagi."; renderIndPanel(); return; }
+    } catch (err) { custDraft.msg = "✗ " + err.message; renderIndPanel(); return; }
+    indCfg.custom.push({
+      cid: "c" + Date.now().toString(36),
+      name: custDraft.name.trim().slice(0, 40),
+      expr: custDraft.expr.trim(), mode: custDraft.mode, weight: custDraft.weight
+    });
+    saveIndCfg();
+    custEditorOpen = false;
+    custDraft = { name: "", expr: "", mode: "atr", weight: 1, msg: "" };
+    renderIndPanel();
+  }
+});
+function syncCustDraft() {
+  const nm = $("custName"), ex = $("custExpr"), md = $("custMode"), wt = $("custWeight");
+  if (nm) custDraft.name = nm.value;
+  if (ex) custDraft.expr = ex.value;
+  if (md) custDraft.mode = md.value;
+  if (wt) custDraft.weight = parseFloat(wt.value) || 1;
+}
+$("indBody").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.param) {
+    const [id, key] = t.dataset.param.split(":");
+    const entry = cfgEntry(id);
+    const def = indDef(id);
+    const pr = def ? def.params.find(x => x.k === key) : null;
+    if (entry && pr) {
+      let v = parseFloat(t.value);
+      if (isNaN(v)) v = pr.def;
+      v = Math.max(pr.min, Math.min(pr.max, v));
+      entry.params[key] = v;
+      t.value = v;
+      saveIndCfg();
+    }
+  } else if (t.dataset.weight) {
+    const entry = cfgEntry(t.dataset.weight);
+    if (entry) { entry.weight = parseFloat(t.value) || 0; saveIndCfg(); }
+  } else if (t.dataset.weightcust) {
+    const c = indCfg.custom.find(x => x.cid === t.dataset.weightcust);
+    if (c) { c.weight = parseFloat(t.value) || 0; saveIndCfg(); }
+  }
+});
+$("btnInd").addEventListener("click", openIndPanel);
+$("btnInd2").addEventListener("click", openIndPanel);
+$("btnIndBack").addEventListener("click", closeIndPanel);
+$("btnIndReset").addEventListener("click", () => {
+  const b = $("btnIndReset");
+  if (b.dataset.armed) {
+    indCfg = defaultIndCfg();
+    saveIndCfg();
+    custEditorOpen = false;
+    delete b.dataset.armed;
+    b.textContent = "Reset Default";
+    renderIndPanel();
+    applyIndCfgToDetail();
+  } else {
+    b.dataset.armed = "1";
+    b.textContent = "Klik lagi untuk reset";
+    setTimeout(() => { delete b.dataset.armed; b.textContent = "Reset Default"; }, 3000);
+  }
+});
+renderOscChips();
+updateIndSummary();
 
 /* ============ Pemilih simbol di halaman detail (v1.7.0; saham v1.21.0) ============ */
 function pickerStockRowHtml(e) {
