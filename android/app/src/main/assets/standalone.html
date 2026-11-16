@@ -367,7 +367,7 @@
     <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
   </div>
   <button class="sharebtn" id="btnShare"><i class="fa-solid fa-share-nodes"></i> Bagikan analisis — gambar + teks</button>
-  <button class="aibtn" id="btnAskAi"><i class="fa-solid fa-robot"></i> Minta Pendapat AI — gratis dari web</button>
+  <button class="aibtn" id="btnAskAi"><i class="fa-solid fa-robot"></i> Minta Pendapat AI — D TRADE</button>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
   <div class="foot" id="dFoot">Skor = gabungan 12 komponen teknikal dari candle terakhir.
   Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
@@ -445,10 +445,6 @@
 </div>
 
 <div id="chatView" class="hidden">
-  <div class="info" style="margin:12px 14px 0">🤖 <b>Chat AI gratis dari web</b> (tanpa kunci API, tanpa akun) —
-  untuk tanya jawab umum dan membantu membaca analisis teknikal. Jawaban bisa lambat dan terbatas,
-  dan <b>bukan nasihat keuangan</b>. Riwayat chat hanya tersimpan di HP ini.
-  Di mode server, AI memakai kunci API backend Anda sendiri.</div>
   <div id="chatList"></div>
   <div class="chips" id="chatChips" style="padding-bottom:8px">
     <button data-q="Jelaskan apa itu RSI dan cara membacanya untuk pemula">Apa itu RSI?</button>
@@ -483,7 +479,7 @@
   <div class="info" style="margin:0 14px 10px">Mode mandiri: aplikasi tidak terhubung ke server DTRADE, jadi yang
   ditampilkan adalah <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita</b> dari
   API publik Binance, Yahoo Finance &amp; RSS — tanpa eksekusi order. Satu-satunya AI di mode ini adalah
-  <b>Chat AI gratis dari web</b> (tab Chat AI, tanpa kunci API) — AI dari kunci API backend hanya ada di mode server.</div>
+  <b>Chat AI D TRADE</b> (tab Chat AI) — AI dari kunci API backend hanya ada di mode server.</div>
   <div class="serverbar" id="serverBar" style="margin:0 14px 10px">
     <div>Server: <b id="serverUrl">—</b></div>
     <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
@@ -3498,7 +3494,7 @@ function renderChat() {
   const box = $("chatList");
   box.innerHTML = "";
   if (!chatMsgs.length) {
-    box.innerHTML = '<div class="status" style="padding:16px 4px">Halo! Saya AI gratis dari web. ' +
+    box.innerHTML = '<div class="status" style="padding:16px 4px">Halo! Saya D TRADE AI. ' +
       'Tanyakan apa saja — misalnya konsep indikator — atau buka tab Analisis lalu ketuk ' +
       '"Minta Pendapat AI" agar saya membantu membaca analisis sebuah simbol.</div>';
     return;
