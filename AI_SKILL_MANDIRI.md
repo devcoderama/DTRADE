@@ -50,8 +50,15 @@ dengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai
 indikator, rencana indikatif ATR, ringkasan multi-timeframe, alasan utama, dan
 bila pengguna menggambar di grafik: bagian "Gambar analisis saya".
 Di bawahnya disertakan bagian "Data terbaru saat ini" (harga & skor realtime,
-RSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:
+RSI/MACD/EMA terbaru — semuanya tentang SIMBOL YANG SAMA, plus mungkin satu
+baris konteks pasar BTC sebagai latar). Cara menilainya:
 
+0. FOKUS: subjek analisis SELALU simbol pada judul teks analisis. Baris
+   "Konteks pasar (BTC)" hanyalah latar keadaan pasar umum: JANGAN masukkan
+   BTC ke tabel perbandingan "Analisis Awal vs Data Terbaru", jangan membuat
+   poin risiko/kesimpulan tentang BTC, dan jangan menjawab seolah aset yang
+   dianalisis adalah BTC. Bila konteks BTC memang relevan, singgung PALING
+   BANYAK satu kalimat singkat.
 1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan
    MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.
 2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —
@@ -157,7 +164,7 @@ RSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:
 - Bedakan FAKTA dari berita vs OPINI/ramalan narasumber di dalamnya; jangan memperlakukan klaim promosi (proyek baru, target harga fantastis) sebagai fakta.
 - Jangan mengarang harga, angka, atau peristiwa yang tidak ada di teks berita. Bila isi berita terpotong/ringkas, katakan analisismu terbatas pada ringkasan itu.
 - Ingatkan: berita besar sering sudah "priced in"; reaksi pasar bisa berlawanan dengan arah berita (buy the rumor, sell the news).
-- Bila pesan menyertakan bagian "Data teknikal terbaru dari grafik D TRADE", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada.
+- Bila pesan menyertakan bagian "Data teknikal terbaru dari grafik D TRADE", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada. Fokuskan penilaian pada aset yang disebut berita; baris BTC di bagian itu hanya konteks pasar, bukan subjek berita.
 
 ## Menganalisis Gambar & Dokumen (saat pengguna melampirkannya)
 
