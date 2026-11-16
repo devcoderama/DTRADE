@@ -8,53 +8,19 @@
        tambahkan SATU entri domain-config dengan IP persis itu (lihat
        android/README.md), atau — lebih aman — akses backend lewat
        Tailscale/HTTPS dan tidak perlu cleartext sama sekali.
-     - v1.13.0: SSL pinning (SPKI SHA-256 atas sertifikat CA perantara)
-       untuk koneksi jembatan mode mandiri + cek pembaruan. Pin diambil
-       dari data Certificate Transparency (crt.sh) dan repositori resmi
-       CA, lalu diverifikasi tanda tangannya terhadap root publik:
-         * Binance  : Amazon RSA 2048 M01/M04/S21 + Cloudflare TLS
-                      Issuing ECC/RSA CA 3 (Binance memakai beberapa CA).
-         * Yahoo    : DigiCert Global G2 TLS RSA SHA256 2020 CA1.
-         * GitHub   : Sectigo Public Server Authentication CA DV R36/E36.
-       Koneksi yang rantai sertifikatnya tidak memuat salah satu pin
-       DITOLAK (fail-closed). Pin perlu ditinjau ulang bila penyedia
-       mengganti CA penerbitnya. -->
+     - CATATAN v1.13.1: pin-set SSL yang sempat ditambahkan di v1.13.0
+       DICABUT. Pin diturunkan dari data Certificate Transparency, tetapi
+       edge regional yang melayani pengguna ternyata menyajikan rantai
+       CA perantara yang berbeda, sehingga aplikasi menolak koneksi
+       Binance/Yahoo ("Pin verification failed"). Pinning hanya boleh
+       diaktifkan lagi setelah rantai asli teramati dari jaringan
+       pengguna sendiri. Seluruh pengerasan lain v1.13.0 (cakupan
+       jembatan, validasi redirect, blokir HTTP publik, setelan WebView)
+       tetap berlaku. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
-
-    <!-- Binance Futures (utama + testnet) — data pasar mode mandiri -->
-    <domain-config>
-        <domain includeSubdomains="false">fapi.binance.com</domain>
-        <domain includeSubdomains="false">testnet.binancefuture.com</domain>
-        <pin-set>
-            <pin digest="SHA-256">DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw=</pin>
-            <pin digest="SHA-256">G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=</pin>
-            <pin digest="SHA-256">2PapRBB8oK8vWUGt2F5OvDkYXOCXOU4aHTiHNiWJbcs=</pin>
-            <pin digest="SHA-256">44viFzTC+h/L+3OHRg4Rs5v4+AcpzHZvI9Tne2RDNGk=</pin>
-            <pin digest="SHA-256">x8iYC3IJmVJzkxB6t6iAb16ou9o4GlR59wSvRmbEoFA=</pin>
-        </pin-set>
-    </domain-config>
-
-    <!-- Yahoo Finance — data saham + sesi quote (Bid/Offer) -->
-    <domain-config>
-        <domain includeSubdomains="false">query1.finance.yahoo.com</domain>
-        <domain includeSubdomains="false">query2.finance.yahoo.com</domain>
-        <domain includeSubdomains="false">fc.yahoo.com</domain>
-        <pin-set>
-            <pin digest="SHA-256">Wec45nQiFwKvHtuHxSAMGkt19k+uPSw9JlEkxhvYPHk=</pin>
-        </pin-set>
-    </domain-config>
-
-    <!-- GitHub API — cek pembaruan wajib -->
-    <domain-config>
-        <domain includeSubdomains="false">api.github.com</domain>
-        <pin-set>
-            <pin digest="SHA-256">a9khLOZJxlnJyrxstg/P+seiDCm+Yf3OsrXyFocBaI0=</pin>
-            <pin digest="SHA-256">ZSagvDzjltLkewXEBuDxIzpW/dpVw1Juvvmd0hhkzdY=</pin>
-        </pin-set>
     </domain-config>
 </network-security-config>
