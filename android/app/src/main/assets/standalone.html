@@ -26,14 +26,8 @@
   .mode button.on{background:var(--gold);color:#0b0e11}
   .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
     border-radius:9px;width:36px;height:36px;font-size:1rem;cursor:pointer;flex:none}
-  /* Tombol Ganti Simbol berlabel jelas (v1.31.17 — sebelumnya hanya ikon
-     kecil yang mudah terlewat) */
-  #btnPick{width:auto;height:38px;padding:0 12px;border-radius:999px;display:flex;
-    align-items:center;gap:6px;font-size:.78rem;font-weight:700}
-  @media (max-width:400px){
-    #btnPick .pick-lbl{display:none}
-    #btnPick{padding:0 10px}
-  }
+  /* Ganti simbol cukup dengan menekan teks simbol (baris nama) —
+     tombol pil terpisah dihapus di v1.32.1 atas permintaan pengguna. */
   #dSymbolRow{display:flex;align-items:center;gap:5px;cursor:pointer}
   .pick-caret{font-size:.58rem;color:var(--gold)}
   .info{margin:10px 14px 0;background:rgba(240,185,11,.07);border:1px solid rgba(240,185,11,.3);
@@ -160,6 +154,7 @@
   .cbtn{background:rgba(21,26,33,.88);border:1px solid var(--line);color:var(--muted);
     width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:.85rem}
   .cbtn.on{color:#0b0e11;background:var(--gold);border-color:var(--gold)}
+  .iconbtn.on{color:#0b0e11;background:var(--gold);border-color:var(--gold)}
   #drawTools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 12px 2px}
   .dtool{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
     border-radius:9px;padding:7px 10px;font-size:.8rem;cursor:pointer;font-weight:600}
@@ -466,7 +461,6 @@
       <div class="p" id="dPrice">—</div>
       <div class="chg" id="dChange">—</div>
     </div>
-    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol"><i class="fa-solid fa-arrow-right-arrow-left"></i><span class="pick-lbl">Ganti Simbol</span></button>
     <button class="iconbtn favbtn" id="btnFav" aria-label="Favorit" title="Tambah/hapus dari favorit"><i class="fa-regular fa-star"></i></button>
   </div>
   <div class="tabs" id="tabs">
@@ -545,6 +539,8 @@
       <button class="iconbtn" id="btnZoomOutFs" aria-label="Zoom out grafik" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
       <span class="zoomlbl" id="zoomLblFs">100%</span>
       <button class="iconbtn" id="btnZoomInFs" aria-label="Zoom in grafik" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+      <button class="iconbtn" id="btnDrawFs" aria-label="Alat gambar" title="Gambar di grafik (garis tren, zona, coretan)"><i class="fa-solid fa-pen-ruler"></i></button>
+      <button class="iconbtn" id="btnIndFs" aria-label="Setelan indikator" title="Tambah / ubah / hapus indikator"><i class="fa-solid fa-sliders"></i></button>
       <button class="iconbtn" id="btnFsRot" aria-label="Putar orientasi" title="Ganti potret / lanskap"><i class="fa-solid fa-rotate-right"></i></button>
       <button class="iconbtn" id="btnFsClose" aria-label="Tutup layar penuh"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -4600,12 +4596,15 @@ function setDrawMode(on) {
   drawMode = on;
   drawPending = null; drawPreview = null;
   $("btnDraw").classList.toggle("on", on);
+  $("btnDrawFs").classList.toggle("on", on);
   $("chartBox").classList.toggle("drawing", on);
   $("chartFs").classList.toggle("drawing", on);
   $("drawTools").classList.toggle("hidden", !on);
   renderDrawings();
 }
 $("btnDraw").addEventListener("click", () => setDrawMode(!drawMode));
+$("btnDrawFs").addEventListener("click", () => setDrawMode(!drawMode));
+$("btnIndFs").addEventListener("click", openIndPanel);
 document.querySelectorAll("#drawTools [data-tool]").forEach(b => {
   b.addEventListener("click", () => {
     drawTool = b.dataset.tool;
@@ -6638,7 +6637,6 @@ $("qrisDl").addEventListener("click", ev2 => {
     a.remove();
   }
 });
-$("btnPick").addEventListener("click", openPicker);
 $("dSymbolRow").addEventListener("click", openPicker);
 $("btnPickBack").addEventListener("click", closePicker);
 $("pq").addEventListener("input", renderPicker);
