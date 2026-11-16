@@ -262,6 +262,18 @@
   .md-gap{height:5px}
   .cbub.ai strong{color:#fff}
   .cbub.ai code{background:#0d1117;border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:.85em}
+  /* Blok kode berpagar dengan tombol salin per blok (v1.31.5) */
+  .md-code{background:#0d1117;border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden}
+  .md-code-head{display:flex;justify-content:space-between;align-items:center;
+    padding:5px 8px 5px 12px;background:var(--panel2);border-bottom:1px solid var(--line);
+    font-size:.72rem;color:var(--muted)}
+  .md-copy{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:4px 9px;font-size:.8rem;line-height:1;cursor:pointer}
+  .md-copy:active{color:var(--gold);border-color:var(--gold)}
+  .md-code pre{margin:0;padding:10px 12px;overflow-x:auto}
+  .cbub.ai .md-code code{display:block;background:transparent;border:none;border-radius:0;padding:0;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.55;
+    white-space:pre;color:#e6edf3}
   .chatbar{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg)}
   .chatbar input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:999px;
     padding:11px 16px;color:var(--text);font-size:.92rem;outline:none}
@@ -3474,28 +3486,48 @@ function mdLite(t) {
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
     .replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
-  const out = [];
-  let inList = false;
-  const closeList = () => { if (inList) { out.push("</ul>"); inList = false; } };
-  String(t == null ? "" : t).split(/\r?\n/).forEach(rawLine => {
-    const line = rawLine.trimEnd();
-    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
-      closeList(); out.push('<div class="md-hr"></div>'); return;
-    }
-    const h = line.match(/^\s{0,3}#{1,6}\s+(.*)$/);
-    if (h) { closeList(); out.push('<div class="md-h">' + inline(h[1]) + "</div>"); return; }
-    const li = line.match(/^\s*(?:[-*•]|\d{1,2}[.)])\s+(.*)$/);
-    if (li) {
-      if (!inList) { out.push('<ul class="md-ul">'); inList = true; }
-      out.push("<li>" + inline(li[1]) + "</li>");
-      return;
-    }
+  const textPart = txt => {
+    const out = [];
+    let inList = false;
+    const closeList = () => { if (inList) { out.push("</ul>"); inList = false; } };
+    txt.split(/\r?\n/).forEach(rawLine => {
+      const line = rawLine.trimEnd();
+      if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+        closeList(); out.push('<div class="md-hr"></div>'); return;
+      }
+      const h = line.match(/^\s{0,3}#{1,6}\s+(.*)$/);
+      if (h) { closeList(); out.push('<div class="md-h">' + inline(h[1]) + "</div>"); return; }
+      const li = line.match(/^\s*(?:[-*•]|\d{1,2}[.)])\s+(.*)$/);
+      if (li) {
+        if (!inList) { out.push('<ul class="md-ul">'); inList = true; }
+        out.push("<li>" + inline(li[1]) + "</li>");
+        return;
+      }
+      closeList();
+      if (!line.trim()) { out.push('<div class="md-gap"></div>'); return; }
+      out.push('<p class="md-p">' + inline(line) + "</p>");
+    });
     closeList();
-    if (!line.trim()) { out.push('<div class="md-gap"></div>'); return; }
-    out.push('<p class="md-p">' + inline(line) + "</p>");
+    return out.join("");
+  };
+  // Blok kode berpagar ``` dirender sebagai blok tersendiri berkepala
+  // nama bahasa + tombol salin khusus blok itu (v1.31.5).
+  const segs = String(t == null ? "" : t).split(/```/);
+  let html = "";
+  segs.forEach((seg, i) => {
+    if (i % 2 === 1) {
+      let code = seg, lang = "";
+      const nl = code.indexOf("\n");
+      const first = nl >= 0 ? code.slice(0, nl).trim() : "";
+      if (/^[A-Za-z0-9#+.-]{1,20}$/.test(first)) { lang = first; code = code.slice(nl + 1); }
+      html += '<div class="md-code"><div class="md-code-head"><span>' + esc(lang || "kode") + "</span>" +
+        '<button class="md-copy" aria-label="Salin blok kode"><i class="fa-solid fa-copy"></i></button></div>' +
+        "<pre><code>" + esc(code.replace(/\n+$/, "")) + "</code></pre></div>";
+    } else if (seg) {
+      html += textPart(seg);
+    }
   });
-  closeList();
-  return out.join("");
+  return html;
 }
 let chatMsgs = [];
 try { chatMsgs = JSON.parse(localStorage.getItem("dtrade-chat-v1") || "[]"); } catch (e) { chatMsgs = []; }
@@ -3666,6 +3698,14 @@ function chatAct(act, idx) {
   }
 }
 $("chatList").addEventListener("click", e => {
+  const cb = e.target.closest("button.md-copy");
+  if (cb) {
+    // Salin HANYA isi blok kode itu (v1.31.5).
+    const wrap = cb.closest(".md-code");
+    const codeEl = wrap && wrap.querySelector("code");
+    if (codeEl) copyChatText(codeEl.textContent);
+    return;
+  }
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   chatAct(b.dataset.act, parseInt(b.parentElement.dataset.idx, 10));
