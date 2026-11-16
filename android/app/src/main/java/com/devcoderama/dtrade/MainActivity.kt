@@ -179,15 +179,17 @@ class MainActivity : Activity() {
             // v1.8.0: halaman mode mandiri dimuat dengan base URL semu
             // https://dtrade.local/ sehingga subresource relatif (CSS +
             // font Font Awesome di assets/fa/) tidak bisa diambil dari
-            // jaringan — sajikan langsung dari aset aplikasi. Hanya jalur
-            // /fa/ di host semu yang dilayani, dengan penolakan "..".
+            // jaringan — sajikan langsung dari aset aplikasi. Jalur /fa/
+            // dan /img/ (gambar lokal, mis. QRIS donasi v1.23.0) di host
+            // semu yang dilayani, dengan penolakan "..".
             override fun shouldInterceptRequest(
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 val url = request?.url ?: return null
                 val path = url.path ?: return null
-                if (url.host != STANDALONE_HOST || !path.startsWith("/fa/") ||
+                if (url.host != STANDALONE_HOST ||
+                    !(path.startsWith("/fa/") || path.startsWith("/img/")) ||
                     path.contains("..")
                 ) {
                     return null
@@ -197,6 +199,8 @@ class MainActivity : Activity() {
                     val mime = when {
                         assetPath.endsWith(".css") -> "text/css"
                         assetPath.endsWith(".woff2") -> "font/woff2"
+                        assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg") -> "image/jpeg"
+                        assetPath.endsWith(".png") -> "image/png"
                         else -> "application/octet-stream"
                     }
                     WebResourceResponse(mime, "UTF-8", assets.open(assetPath))

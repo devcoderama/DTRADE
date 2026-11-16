@@ -306,6 +306,12 @@
   <div class="list" id="pickList" style="overflow-y:auto;flex:1;padding-bottom:20px"></div>
 </div>
 
+<div id="qrisZoom" class="hidden" style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:18px">
+  <img src="img/qris-donasi.jpg" alt="QRIS donasi — Warung kang dyana (diperbesar)"
+    style="max-width:100%;max-height:86%;border-radius:12px;background:#fff">
+  <div style="color:#c3cad4;font-size:.85rem">Ketuk di mana saja untuk menutup</div>
+</div>
+
 <div id="readerView" class="hidden">
   <div class="dhead" style="padding:12px 14px 2px">
     <button class="iconbtn" id="btnReaderBack" aria-label="Kembali ke daftar berita"><i class="fa-solid fa-arrow-left"></i></button>
@@ -363,7 +369,18 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.22.0</b> — mode mandiri multi-market: crypto futures
+  <div class="lbl" style="padding:10px 14px 6px;font-size:.8rem;color:var(--muted)"><i class="fa-solid fa-mug-hot"></i> Donasi — Traktir Kopi Developer</div>
+  <div class="info" style="margin:0 14px 10px">D TRADE <b>gratis dan tanpa iklan</b>. Kalau aplikasi ini bermanfaat,
+  kamu bisa mendukung pengembangannya dengan donasi seikhlasnya lewat <b>QRIS</b> —
+  bisa dari semua aplikasi bank &amp; e-wallet. Terima kasih! ☕</div>
+  <div style="margin:0 14px 6px">
+    <img id="qrisImg" src="img/qris-donasi.jpg" alt="QRIS donasi — Warung kang dyana"
+      style="width:100%;display:block;border-radius:12px;background:#fff;cursor:zoom-in">
+  </div>
+  <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
+  <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
+  Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.23.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -2910,6 +2927,9 @@ function openPicker() {
   $("pickerView").classList.remove("hidden");
 }
 function closePicker() { $("pickerView").classList.add("hidden"); }
+/* QRIS donasi di tab Lainnya (v1.23.0): ketuk gambar untuk layar penuh. */
+$("qrisImg").addEventListener("click", () => $("qrisZoom").classList.remove("hidden"));
+$("qrisZoom").addEventListener("click", () => $("qrisZoom").classList.add("hidden"));
 $("btnPick").addEventListener("click", openPicker);
 $("dSymbol").addEventListener("click", openPicker);
 $("btnPickBack").addEventListener("click", closePicker);
