@@ -98,7 +98,40 @@
     border-radius:12px;padding:12px 15px}
   .reasons h4{margin:0 0 7px;font-size:.9rem;color:var(--gold)}
   .reasons li{margin:3px 0;color:#cfd8e0;font-size:.88rem}
-  .foot{padding:8px 18px 30px;color:var(--muted);font-size:.78rem;text-align:center}
+  .foot{padding:8px 18px 96px;color:var(--muted);font-size:.78rem;text-align:center}
+  /* ===== Navigasi bawah (v1.6.0) — seperti bottom navigation Web UI ===== */
+  .bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+    background:rgba(11,14,17,.97);border-top:1px solid var(--line);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .bottomnav button{flex:1;background:none;border:none;color:var(--muted);
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    font-size:.68rem;font-weight:600;padding:5px 0 3px;cursor:pointer}
+  .bottomnav button .ic{font-size:1.25rem;line-height:1}
+  .bottomnav button.on{color:var(--gold)}
+  /* ===== Berita ===== */
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 14px 2px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chips button{flex:none;background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:6px 13px;font-size:.8rem;font-weight:600;cursor:pointer}
+  .chips button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
+  .newsitem{display:flex;gap:12px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 13px;margin:0 14px 9px;cursor:pointer}
+  .newsitem:active{border-color:rgba(240,185,11,.45)}
+  .newsitem .tt{font-size:.93rem;font-weight:700;line-height:1.35;color:var(--text);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .newsitem .ds{font-size:.8rem;color:var(--muted);line-height:1.4;margin-top:4px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .newsitem .mt{display:flex;gap:8px;align-items:center;margin-top:7px;font-size:.72rem;color:var(--muted)}
+  .newsitem .src{color:var(--gold);font-weight:700}
+  .nthumb{flex:none;width:76px;height:76px;border-radius:9px;object-fit:cover;background:var(--panel2)}
+  .nthumbf{flex:none;width:76px;height:76px;border-radius:9px;background:var(--panel2);
+    display:flex;align-items:center;justify-content:center;font-size:1.5rem}
+  /* ===== Lainnya ===== */
+  .menuitem{display:flex;align-items:center;gap:12px;width:calc(100% - 28px);margin:0 14px 9px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 13px;color:var(--text);font-size:.95rem;font-weight:600;text-align:left;cursor:pointer}
+  .menuitem small{display:block;color:var(--muted);font-weight:400;font-size:.78rem;margin-top:2px}
+  .menuitem .ic{font-size:1.2rem}
   .hidden{display:none !important}
 </style>
 </head>
@@ -178,8 +211,38 @@ tanpa AI, tanpa eksekusi order.</div>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
 </div>
 
+<div id="signalsView" class="hidden">
+  <div class="status" id="sigStatus">Menghitung sinyal…</div>
+  <div class="list" id="sigList"></div>
+</div>
+
+<div id="newsView" class="hidden">
+  <div class="chips" id="srcChips"></div>
+  <div class="status" id="newsStatus">Ketuk tab Berita untuk memuat kabar crypto terbaru.</div>
+  <div id="newsList" style="padding-top:8px"></div>
+</div>
+
+<div id="moreView" class="hidden">
+  <div style="height:12px"></div>
+  <button class="menuitem" id="mServer"><span class="ic">🖥️</span><span>Hubungkan ke Server<small>Kembali ke Web UI binance-ai-future</small></span></button>
+  <button class="menuitem" id="mEditServer"><span class="ic">✏️</span><span>Ubah Alamat Server<small>Alamat backend di komputer/VPS Anda</small></span></button>
+  <button class="menuitem" id="mReload"><span class="ic">⟳</span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
+  <div class="info" style="margin-top:4px">D TRADE <b>v1.6.0</b> — mode mandiri. Berita dikumpulkan
+  langsung dari RSS publik 11 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
+  U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, dan NewsBTC. Ketuk berita untuk
+  membacanya di browser ponsel.</div>
+</div>
+
 <div class="foot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
 Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
+
+<nav class="bottomnav" id="bottomNav">
+  <button data-tab="pasar" class="on"><span class="ic">🏠</span>Pasar</button>
+  <button data-tab="analisis"><span class="ic">📈</span>Analisis</button>
+  <button data-tab="sinyal"><span class="ic">⚡</span>Sinyal</button>
+  <button data-tab="berita"><span class="ic">📰</span>Berita</button>
+  <button data-tab="lainnya"><span class="ic">☰</span>Lainnya</button>
+</nav>
 
 <script>
 "use strict";
@@ -429,6 +492,7 @@ async function computeSignals(run) {
       if (done === targets.length && run === signalAbort) {
         $("status").textContent = symbols.length + " simbol · sinyal 1h terhitung " +
           new Date().toLocaleTimeString("id-ID");
+        renderSignals();
         if ($("sort").value === "signal") renderList();
       }
     }
@@ -546,7 +610,9 @@ function setLive(on, label) {
 
 async function openDetail(symbol) {
   currentSymbol = symbol;
-  $("listView").classList.add("hidden");
+  lastSymbol = symbol;
+  Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
+  $("bottomNav").classList.add("hidden");
   $("detailView").classList.add("open");
   window.scrollTo(0, 0);
   await loadDetail(false, true);
@@ -561,7 +627,7 @@ function closeDetail() {
   if (detailTimer) clearInterval(detailTimer);
   stopWs();
   $("detailView").classList.remove("open");
-  $("listView").classList.remove("hidden");
+  showTab(currentTab);
 }
 async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
@@ -860,6 +926,224 @@ if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
 } else {
   $("serverBar").classList.add("hidden");
 }
+/* ================= Navigasi bawah (v1.6.0) ================= */
+let currentTab = "pasar";
+let lastSymbol = null;
+const TAB_VIEWS = { pasar: "listView", sinyal: "signalsView", berita: "newsView", lainnya: "moreView" };
+function showTab(name) {
+  if (name === "analisis") { openDetail(lastSymbol || "BTCUSDT"); return; }
+  currentTab = name;
+  Object.entries(TAB_VIEWS).forEach(([t, id]) => $(id).classList.toggle("hidden", t !== name));
+  $("detailView").classList.remove("open");
+  $("bottomNav").classList.remove("hidden");
+  $("bottomNav").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("on", b.dataset.tab === name));
+  if (name === "sinyal") renderSignals();
+  if (name === "berita" && !newsLoaded) loadNews(false);
+  window.scrollTo(0, 0);
+}
+$("bottomNav").querySelectorAll("button").forEach(b =>
+  b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* ================= Tab Sinyal ================= */
+function renderSignals() {
+  const wrap = $("sigList");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const arr = symbols
+    .filter(s => s.scoreObj && s.scoreObj.side !== "NETRAL")
+    .sort((a, b) => Math.abs(b.scoreObj.score) - Math.abs(a.scoreObj.score));
+  $("sigStatus").textContent = arr.length
+    ? arr.length + " sinyal LONG/SHORT (interval 1h) dari " +
+      Math.min(SIGNAL_LIMIT, symbols.length) + " simbol tervolume — diurutkan dari skor terkuat."
+    : "Belum ada sinyal LONG/SHORT. Sinyal masih dihitung, atau semua simbol teratas sedang NETRAL.";
+  arr.forEach(s => {
+    const d = document.createElement("div");
+    d.className = "sym"; d.dataset.symbol = s.symbol;
+    d.innerHTML = rowHtml(s);
+    d.addEventListener("click", () => openDetail(s.symbol));
+    wrap.appendChild(d);
+  });
+}
+
+/* ================= Berita crypto — agregator RSS 11 sumber =================
+   Feed diambil lewat jembatan native (daftar-izin host di MainActivity)
+   agar bebas CORS; di browser biasa memakai fetch langsung. Judul dan
+   ringkasan dari feed SELALU di-escape sebelum ditampilkan. */
+const FEEDS = [
+  { name: "CoinDesk", url: "https://www.coindesk.com/arc/outboundfeeds/rss" },
+  { name: "CoinTelegraph", url: "https://cointelegraph.com/rss" },
+  { name: "Decrypt", url: "https://decrypt.co/feed" },
+  { name: "CryptoPotato", url: "https://cryptopotato.com/feed" },
+  { name: "The Block", url: "https://www.theblock.co/rss.xml" },
+  { name: "U.Today", url: "https://u.today/rss" },
+  { name: "AMBCrypto", url: "https://ambcrypto.com/feed" },
+  { name: "BeInCrypto", url: "https://beincrypto.com/feed" },
+  { name: "Bitcoin Magazine", url: "https://bitcoinmagazine.com/feed" },
+  { name: "CryptoSlate", url: "https://cryptoslate.com/feed/" },
+  { name: "NewsBTC", url: "https://www.newsbtc.com/feed/" }
+];
+let newsItems = [], newsLoaded = false, newsLoading = false, newsFilter = "Semua";
+
+function escHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function stripHtml(s) {
+  const d = document.createElement("div");
+  d.innerHTML = String(s || "");
+  return (d.textContent || "").replace(/\s+/g, " ").trim();
+}
+async function fetchText(url) {
+  if (window.AndroidBridge && window.AndroidBridge.fetch) return bridgeFetch(url);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.text();
+}
+function feedImage(item, descRaw) {
+  const byTag = tag => {
+    const el = item.getElementsByTagName(tag)[0];
+    return el ? el.getAttribute("url") : null;
+  };
+  let u = byTag("media:content") || byTag("media:thumbnail");
+  if (!u) {
+    const enc = item.getElementsByTagName("enclosure")[0];
+    if (enc && (enc.getAttribute("type") || "").indexOf("image") === 0) u = enc.getAttribute("url");
+  }
+  if (!u && descRaw) {
+    const m = String(descRaw).match(/<img[^>]+src="([^"]+)"/i);
+    if (m) u = m[1];
+  }
+  if (u && u.indexOf("http://") === 0) u = "https://" + u.slice(7);
+  return u || "";
+}
+function parseFeed(xmlText, source) {
+  const doc = new DOMParser().parseFromString(xmlText, "text/xml");
+  const out = [];
+  doc.querySelectorAll("item, entry").forEach(it => {
+    const tx = sel => {
+      const el = it.querySelector(sel);
+      return el ? el.textContent.trim() : "";
+    };
+    let link = tx("link");
+    if (!link) {
+      const l = it.querySelector("link[href]");
+      if (l) link = l.getAttribute("href") || "";
+    }
+    const descRaw = tx("description") || tx("summary") || tx("content");
+    const t = Date.parse(tx("pubDate") || tx("published") || tx("updated"));
+    out.push({
+      source: source,
+      title: tx("title"),
+      link: link,
+      desc: stripHtml(descRaw).slice(0, 180),
+      img: feedImage(it, descRaw),
+      time: isNaN(t) ? 0 : t
+    });
+  });
+  return out.filter(n => n.title && n.link);
+}
+function relTime(t) {
+  if (!t) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 3600) return Math.max(1, Math.floor(s / 60)) + " mnt lalu";
+  if (s < 86400) return Math.floor(s / 3600) + " jam lalu";
+  return Math.floor(s / 86400) + " hari lalu";
+}
+async function loadNews(force) {
+  if (newsLoading || (newsLoaded && !force)) return;
+  newsLoading = true;
+  $("newsStatus").textContent = "Memuat berita dari " + FEEDS.length + " sumber…";
+  let ok = 0;
+  const results = await Promise.all(FEEDS.map(async f => {
+    try {
+      const items = parseFeed(await fetchText(f.url), f.name);
+      ok++;
+      return items;
+    } catch (e) { return []; }
+  }));
+  const seen = new Set();
+  newsItems = results.reduce((a, b) => a.concat(b), [])
+    .filter(n => !seen.has(n.link) && seen.add(n.link))
+    .sort((a, b) => b.time - a.time)
+    .slice(0, 90);
+  newsLoaded = true;
+  newsLoading = false;
+  $("newsStatus").textContent = newsItems.length + " berita · " + ok + "/" + FEEDS.length +
+    " sumber termuat · diperbarui " + new Date().toLocaleTimeString("id-ID") +
+    ". Ketuk berita untuk membaca di browser.";
+  renderChips();
+  renderNews();
+}
+function renderChips() {
+  const wrap = $("srcChips");
+  wrap.innerHTML = "";
+  ["Semua"].concat(FEEDS.map(f => f.name)).forEach(nm => {
+    const b = document.createElement("button");
+    b.textContent = nm;
+    if (nm === newsFilter) b.className = "on";
+    b.addEventListener("click", () => { newsFilter = nm; renderChips(); renderNews(); });
+    wrap.appendChild(b);
+  });
+  const r = document.createElement("button");
+  r.textContent = "↻ Segarkan";
+  r.addEventListener("click", () => loadNews(true));
+  wrap.appendChild(r);
+}
+function openNewsLink(url) {
+  if (!/^https:\/\//i.test(url || "")) return;
+  if (window.AndroidBridge && window.AndroidBridge.openExternal) {
+    window.AndroidBridge.openExternal(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+function renderNews() {
+  const wrap = $("newsList");
+  wrap.innerHTML = "";
+  const arr = newsItems.filter(n => newsFilter === "Semua" || n.source === newsFilter);
+  if (!arr.length) {
+    wrap.innerHTML = '<div class="status">Tidak ada berita untuk filter ini.</div>';
+    return;
+  }
+  arr.forEach(n => {
+    const d = document.createElement("div");
+    d.className = "newsitem";
+    d.innerHTML =
+      '<div style="flex:1;min-width:0"><div class="tt">' + escHtml(n.title) + "</div>" +
+      (n.desc ? '<div class="ds">' + escHtml(n.desc) + "</div>" : "") +
+      '<div class="mt"><span class="src">' + escHtml(n.source) + "</span><span>" +
+      relTime(n.time) + "</span></div></div>" +
+      (n.img
+        ? '<img class="nthumb" loading="lazy" alt="" src="' + escHtml(n.img) + '">'
+        : '<div class="nthumbf">📰</div>');
+    const img = d.querySelector("img.nthumb");
+    if (img) img.addEventListener("error", () => {
+      const f = document.createElement("div");
+      f.className = "nthumbf";
+      f.textContent = "📰";
+      img.replaceWith(f);
+    });
+    d.addEventListener("click", () => openNewsLink(n.link));
+    wrap.appendChild(d);
+  });
+}
+renderChips();
+
+/* ================= Tab Lainnya ================= */
+if (window.AndroidBridge && window.AndroidBridge.openServer) {
+  $("mServer").addEventListener("click", () => window.AndroidBridge.openServer());
+  if (window.AndroidBridge.editServerUrl) {
+    $("mEditServer").addEventListener("click", () => window.AndroidBridge.editServerUrl());
+  } else {
+    $("mEditServer").classList.add("hidden");
+  }
+} else {
+  $("mServer").classList.add("hidden");
+  $("mEditServer").classList.add("hidden");
+}
+$("mReload").addEventListener("click", () => { showTab("pasar"); loadList(); });
+
 loadList();
 </script>
 </body>

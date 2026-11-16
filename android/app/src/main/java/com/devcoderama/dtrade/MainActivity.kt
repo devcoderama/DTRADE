@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: TextView
+    private lateinit var fabMenu: Button
     private lateinit var prefs: SharedPreferences
 
     /** true selama halaman mode mandiri yang sedang ditampilkan. */
@@ -58,8 +59,12 @@ class MainActivity : Activity() {
         progressBar = findViewById(R.id.progress)
         errorView = findViewById(R.id.error_view)
         // Sejak v1.3.0 tidak ada action bar (tema NoActionBar) — menu
-        // aplikasi hidup di tombol melayang ini (PopupMenu).
-        findViewById<Button>(R.id.fab_menu).setOnClickListener { showAppMenu(it) }
+        // aplikasi hidup di tombol melayang ini (PopupMenu). Sejak v1.6.0
+        // tombol disembunyikan selama mode mandiri tampil, karena halaman
+        // mandiri kini punya navigasi bawah sendiri (tab Lainnya memuat
+        // menu yang sama).
+        fabMenu = findViewById(R.id.fab_menu)
+        fabMenu.setOnClickListener { showAppMenu(it) }
 
         with(webView.settings) {
             javaScriptEnabled = true
@@ -144,6 +149,7 @@ class MainActivity : Activity() {
 
     private fun loadHome() {
         standaloneMode = false
+        fabMenu.visibility = View.VISIBLE
         webView.loadUrl(serverUrl())
     }
 
@@ -155,6 +161,7 @@ class MainActivity : Activity() {
      */
     private fun loadStandalone() {
         standaloneMode = true
+        fabMenu.visibility = View.GONE
         val html = standaloneHtml ?: try {
             assets.open("standalone.html").bufferedReader().readText()
         } catch (e: Exception) {
@@ -231,10 +238,13 @@ class MainActivity : Activity() {
     /**
      * Jembatan JavaScript untuk halaman mode mandiri. Permukaan yang
      * diekspos sengaja sempit dan read-only:
-     * - fetch(): GET https HANYA ke host API publik Binance (daftar-izin
-     *   di bawah); hasil dikembalikan sebagai teks lewat __apiResolve.
+     * - fetch(): GET https HANYA ke host API publik Binance dan host RSS
+     *   berita crypto (daftar-izin di bawah); hasil dikembalikan sebagai
+     *   teks lewat __apiResolve.
      * - getServerUrl(): alamat server yang dikonfigurasi (untuk label).
      * - openServer(): kembali memuat Web UI server.
+     * - openExternal(): membuka tautan https (artikel berita) di browser
+     *   ponsel — WebView sendiri tetap terkunci ke host server.
      * Tidak ada kredensial, tidak ada penulisan, tidak ada host lain.
      */
     inner class ApiBridge {
@@ -245,7 +255,9 @@ class MainActivity : Activity() {
                 var error: String? = null
                 try {
                     val parsed = URL(url)
-                    if (parsed.protocol != "https" || parsed.host !in BINANCE_HOSTS) {
+                    if (parsed.protocol != "https" ||
+                        (parsed.host !in BINANCE_HOSTS && parsed.host !in NEWS_HOSTS)
+                    ) {
                         throw SecurityException("host tidak diizinkan")
                     }
                     val conn = parsed.openConnection() as HttpURLConnection
@@ -282,6 +294,32 @@ class MainActivity : Activity() {
         fun editServerUrl() {
             webView.post { showUrlDialog() }
         }
+
+        /**
+         * Buka tautan artikel (dari tab Berita) di browser ponsel.
+         * Hanya skema https yang diterima; kegagalan membuka browser
+         * diabaikan diam-diam agar halaman tidak terganggu.
+         */
+        @JavascriptInterface
+        fun openExternal(url: String) {
+            if (!url.startsWith("https://")) return
+            webView.post {
+                try {
+                    startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url)
+                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Tidak ada browser untuk membuka tautan",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     companion object {
@@ -294,8 +332,19 @@ class MainActivity : Activity() {
         /** Host semu (base URL) halaman mode mandiri. */
         private const val STANDALONE_HOST = "dtrade.local"
 
-        /** Satu-satunya host yang boleh dihubungi jembatan mode mandiri. */
+        /** Host API publik Binance yang boleh dihubungi jembatan mode mandiri. */
         private val BINANCE_HOSTS = setOf("fapi.binance.com", "testnet.binancefuture.com")
+
+        /**
+         * Host RSS berita crypto untuk tab Berita mode mandiri (v1.6.0) —
+         * hanya feed publik read-only dari 11 sumber ini.
+         */
+        private val NEWS_HOSTS = setOf(
+            "www.coindesk.com", "cointelegraph.com", "decrypt.co",
+            "cryptopotato.com", "www.theblock.co", "u.today",
+            "ambcrypto.com", "beincrypto.com", "bitcoinmagazine.com",
+            "cryptoslate.com", "www.newsbtc.com"
+        )
 
         private const val MENU_HOME = 1
         private const val MENU_RELOAD = 2
