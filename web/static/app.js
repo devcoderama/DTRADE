@@ -953,11 +953,15 @@ function rsiLast(closes, period) {
 function macdLast(closes) {
   const fast = emaSeries(closes, 12), slow = emaSeries(closes, 26);
   const line = closes.map((_, i) => (fast[i] !== null && slow[i] !== null) ? fast[i] - slow[i] : null);
-  const valid = line.filter((v) => v !== null);
+  const valid = line.filter(v => v !== null);
   const sig = emaSeries(valid, 9);
   const m = valid[valid.length - 1], s = sig[sig.length - 1];
   if (m === undefined || s === null || s === undefined) return null;
-  return { line: m, signal: s, hist: m - s };
+  const prevM = valid[valid.length - 2], prevS = sig[sig.length - 2];
+  return {
+    line: m, signal: s, hist: m - s,
+    prevHist: (prevM !== undefined && prevS !== null && prevS !== undefined) ? prevM - prevS : null
+  };
 }
 function bollLast(closes, period) {
   period = period || 20;
@@ -969,58 +973,289 @@ function bollLast(closes, period) {
   const last = closes[closes.length - 1];
   return { mid, upper, lower, pctB: upper === lower ? 0.5 : (last - lower) / (upper - lower) };
 }
-function scoreSymbolTech(closes, highs, lows) {
-  const reasons = [];
-  let score = 0;
+function atrWilder(highs, lows, closes, period) {
+  if (!highs || !lows || closes.length < period + 1) return null;
+  const trs = [];
+  for (let i = 1; i < closes.length; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+  }
+  let atr = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) atr = (atr * (period - 1) + trs[i]) / period;
+  return atr;
+}
+
+/* ADX(14) + ±DI Wilder: kekuatan & arah tren. */
+function adxLast(highs, lows, closes, period) {
+  period = period || 14;
+  const n = closes.length;
+  if (!highs || !lows || n < period * 2 + 2) return null;
+  const trs = [], pdm = [], mdm = [];
+  for (let i = 1; i < n; i++) {
+    trs.push(Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    ));
+    const up = highs[i] - highs[i - 1], dn = lows[i - 1] - lows[i];
+    pdm.push(up > dn && up > 0 ? up : 0);
+    mdm.push(dn > up && dn > 0 ? dn : 0);
+  }
+  let sTR = 0, sP = 0, sM = 0;
+  for (let i = 0; i < period; i++) { sTR += trs[i]; sP += pdm[i]; sM += mdm[i]; }
+  const dxs = [];
+  for (let i = period; i < trs.length; i++) {
+    sTR = sTR - sTR / period + trs[i];
+    sP = sP - sP / period + pdm[i];
+    sM = sM - sM / period + mdm[i];
+    const pDI = sTR === 0 ? 0 : 100 * sP / sTR;
+    const mDI = sTR === 0 ? 0 : 100 * sM / sTR;
+    dxs.push(pDI + mDI === 0 ? 0 : 100 * Math.abs(pDI - mDI) / (pDI + mDI));
+    if (i === trs.length - 1) {
+      // ADX = rata-rata Wilder dari DX terakhir
+      let adx = dxs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      for (let j = period; j < dxs.length; j++) adx = (adx * (period - 1) + dxs[j]) / period;
+      return { adx, plusDI: pDI, minusDI: mDI };
+    }
+  }
+  return null;
+}
+
+/* Supertrend(10, 3): arah pita ATR. */
+function supertrendLast(highs, lows, closes, period, mult) {
+  period = period || 10; mult = mult || 3;
+  const n = closes.length;
+  if (!highs || !lows || n < period + 2) return null;
+  const atr = atrWilder(highs, lows, closes, period);
+  if (atr === null) return null;
+  // ATR per-candle (Wilder berjalan) diperlukan untuk pita historis;
+  // pendekatan: hitung ulang seri ATR sederhana di sini.
+  const trs = [];
+  for (let i = 1; i < n; i++) {
+    trs.push(Math.max(highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+  }
+  let a = trs.slice(0, period).reduce((x, y) => x + y, 0) / period;
+  let upperPrev = null, lowerPrev = null, dir = 1;
+  for (let i = period; i < trs.length; i++) {
+    a = i === period ? a : (a * (period - 1) + trs[i]) / period;
+    const idx = i + 1; // candle yang sesuai dengan trs[i]
+    const mid = (highs[idx] + lows[idx]) / 2;
+    let upper = mid + mult * a, lower = mid - mult * a;
+    if (upperPrev !== null) {
+      if (closes[idx - 1] <= upperPrev) upper = Math.min(upper, upperPrev);
+      if (closes[idx - 1] >= lowerPrev) lower = Math.max(lower, lowerPrev);
+    }
+    if (upperPrev !== null) {
+      if (closes[idx] > upperPrev) dir = 1;
+      else if (closes[idx] < lowerPrev) dir = -1;
+    }
+    upperPrev = upper; lowerPrev = lower;
+  }
+  return { dir, line: dir === 1 ? lowerPrev : upperPrev };
+}
+
+/* Stochastic(14, 3): %K yang dihaluskan + %D. */
+function stochLast(highs, lows, closes, kPeriod, smooth) {
+  kPeriod = kPeriod || 14; smooth = smooth || 3;
+  const n = closes.length;
+  if (!highs || !lows || n < kPeriod + smooth) return null;
+  const rawK = [];
+  for (let i = kPeriod - 1; i < n; i++) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      if (highs[j] > hh) hh = highs[j];
+      if (lows[j] < ll) ll = lows[j];
+    }
+    rawK.push(hh === ll ? 50 : 100 * (closes[i] - ll) / (hh - ll));
+  }
+  const sma = (arr, p, end) => {
+    let s = 0; for (let j = end - p + 1; j <= end; j++) s += arr[j];
+    return s / p;
+  };
+  const k = sma(rawK, smooth, rawK.length - 1);
+  const kPrev = sma(rawK, smooth, rawK.length - 2);
+  const kSeries = rawK.map((_, i) => i >= smooth - 1 ? sma(rawK, smooth, i) : null).filter(v => v !== null);
+  const d = kSeries.length >= 3 ? (kSeries[kSeries.length - 1] + kSeries[kSeries.length - 2] + kSeries[kSeries.length - 3]) / 3 : k;
+  return { k, d, kPrev };
+}
+
+/* VWAP bergulir 24 candle (harga tipikal × volume). */
+function vwapLast(highs, lows, closes, vols, window) {
+  if (!vols || !vols.length) return null;
+  window = window || 24;
+  const n = Math.min(window, closes.length);
+  let pv = 0, v = 0;
+  for (let i = closes.length - n; i < closes.length; i++) {
+    const tp = (highs[i] + lows[i] + closes[i]) / 3;
+    pv += tp * (vols[i] || 0);
+    v += vols[i] || 0;
+  }
+  return v > 0 ? pv / v : null;
+}
+
+/* Skor teknikal v2 (paritas D TRADE v1.25.0) — 12 komponen: tren EMA, MACD, ADX/DI,
+   Supertrend, RSI, Stochastic, Bollinger, momentum, VWAP, konfirmasi
+   volume, pola candle, support/resistance. Blok tren diskalakan oleh
+   kekuatan tren (ADX). vols & opens opsional. */
+function scoreSymbolTech(closes, highs, lows, vols, opens) {
+  const parts = []; // {pts, text}
   const last = closes[closes.length - 1];
+  const n = closes.length;
+  const atr = atrWilder(highs, lows, closes, 14);
+  const adxR = adxLast(highs, lows, closes, 14);
+  const adx = adxR ? adxR.adx : null;
+  const trendScale = adx === null ? 1 : adx >= 22 ? 1 : adx >= 15 ? 0.9 : 0.78;
+
+  // --- Blok tren (diskalakan ADX) ---
+  let trend = 0;
   const e20s = emaSeries(closes, 20), e50s = emaSeries(closes, 50);
   const e20 = e20s[e20s.length - 1], e50 = e50s[e50s.length - 1];
   if (e20 !== null && e50 !== null) {
-    if (last > e20) { score += 6; reasons.push("Harga di atas EMA20 (+6)"); }
-    else { score -= 6; reasons.push("Harga di bawah EMA20 (−6)"); }
-    if (e20 > e50) { score += 10; reasons.push("EMA20 di atas EMA50 — tren naik (+10)"); }
-    else { score -= 10; reasons.push("EMA20 di bawah EMA50 — tren turun (−10)"); }
-    if (last > e50) { score += 8; reasons.push("Harga di atas EMA50 (+8)"); }
-    else { score -= 8; reasons.push("Harga di bawah EMA50 (−8)"); }
+    if (last > e20) { trend += 6; parts.push({ p: 6, t: "Harga di atas EMA20" }); }
+    else { trend -= 6; parts.push({ p: -6, t: "Harga di bawah EMA20" }); }
+    if (e20 > e50) { trend += 10; parts.push({ p: 10, t: "EMA20 di atas EMA50 — tren naik" }); }
+    else { trend -= 10; parts.push({ p: -10, t: "EMA20 di bawah EMA50 — tren turun" }); }
+    if (last > e50) { trend += 8; parts.push({ p: 8, t: "Harga di atas EMA50" }); }
+    else { trend -= 8; parts.push({ p: -8, t: "Harga di bawah EMA50" }); }
+    const e50prev = e50s[e50s.length - 6];
+    if (e50prev !== null && e50prev !== undefined) {
+      if (e50 > e50prev) { trend += 4; parts.push({ p: 4, t: "EMA50 menanjak" }); }
+      else if (e50 < e50prev) { trend -= 4; parts.push({ p: -4, t: "EMA50 menurun" }); }
+    }
   }
   const m = macdLast(closes);
   if (m) {
-    if (m.hist > 0) { score += 10; reasons.push("MACD histogram positif (+10)"); }
-    else { score -= 10; reasons.push("MACD histogram negatif (−10)"); }
-    if (m.line > 0) { score += 4; reasons.push("MACD di atas nol (+4)"); }
-    else { score -= 4; reasons.push("MACD di bawah nol (−4)"); }
+    if (m.hist > 0) { trend += 10; parts.push({ p: 10, t: "MACD histogram positif" }); }
+    else { trend -= 10; parts.push({ p: -10, t: "MACD histogram negatif" }); }
+    if (m.line > 0) { trend += 4; parts.push({ p: 4, t: "MACD di atas nol" }); }
+    else { trend -= 4; parts.push({ p: -4, t: "MACD di bawah nol" }); }
+    if (m.prevHist !== null) {
+      if (m.hist > m.prevHist && m.hist > 0) { trend += 3; parts.push({ p: 3, t: "Histogram MACD menguat" }); }
+      else if (m.hist < m.prevHist && m.hist < 0) { trend -= 3; parts.push({ p: -3, t: "Histogram MACD melemah" }); }
+    }
   }
+  const st = supertrendLast(highs, lows, closes, 10, 3);
+  if (st) {
+    trend += st.dir * 9;
+    parts.push({ p: st.dir * 9, t: st.dir > 0 ? "Supertrend naik (harga di atas pita)" : "Supertrend turun (harga di bawah pita)" });
+  }
+  const trendPts = Math.round(trend * trendScale);
+
+  // --- ADX/DI (arah + kekuatan) ---
+  let rest = 0;
+  if (adxR) {
+    const f = adx < 15 ? 0.25 : adx >= 25 ? 1 : 0.25 + (adx - 15) / 10 * 0.75;
+    const pts = Math.round(8 * f) * (adxR.plusDI >= adxR.minusDI ? 1 : -1);
+    rest += pts;
+    parts.push({ p: pts, t: "ADX " + adx.toFixed(0) + (adx >= 25 ? " — tren kuat, " : adx >= 15 ? " — tren sedang, " : " — tren lemah, ") + (pts >= 0 ? "+DI dominan" : "−DI dominan") });
+  }
+
+  // --- Osilator & momentum ---
   const rsi = rsiLast(closes);
   if (rsi !== null) {
     let pts = Math.max(-12, Math.min(12, (rsi - 50) * 0.6));
     if (rsi > 75) pts = Math.min(pts, 4);
     if (rsi < 25) pts = Math.max(pts, -4);
     pts = Math.round(pts);
-    score += pts;
-    reasons.push("RSI " + rsi.toFixed(1) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+    rest += pts;
+    parts.push({ p: pts, t: "RSI " + rsi.toFixed(1) });
+  }
+  const stoch = stochLast(highs, lows, closes, 14, 3);
+  if (stoch) {
+    let pts = Math.round((stoch.k - 50) / 50 * 6);
+    if (stoch.kPrev <= stoch.d && stoch.k > stoch.d) pts += 2;
+    else if (stoch.kPrev >= stoch.d && stoch.k < stoch.d) pts -= 2;
+    if (adx !== null && adx >= 25) pts = Math.round(pts * 0.5);
+    rest += pts;
+    parts.push({ p: pts, t: "Stochastic %K " + stoch.k.toFixed(0) });
   }
   const b = bollLast(closes);
   if (b) {
     const pts = Math.round((b.pctB - 0.5) * 16);
-    score += pts;
-    reasons.push("Posisi Bollinger %B " + b.pctB.toFixed(2) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+    rest += pts;
+    parts.push({ p: pts, t: "Posisi Bollinger %B " + b.pctB.toFixed(2) });
   }
-  if (closes.length > 10) {
-    const mom = (last / closes[closes.length - 11] - 1) * 100;
+  if (n > 10) {
+    const mom = (last / closes[n - 11] - 1) * 100;
     const pts = Math.round(Math.max(-10, Math.min(10, mom * 2)));
-    score += pts;
-    reasons.push("Momentum 10 candle " + mom.toFixed(2) + "% (" + (pts >= 0 ? "+" + pts : pts) + ")");
+    rest += pts;
+    parts.push({ p: pts, t: "Momentum 10 candle " + mom.toFixed(2) + "%" });
   }
-  score = Math.max(-100, Math.min(100, Math.round(score)));
+
+  // --- VWAP + konfirmasi volume ---
+  const vwap = vwapLast(highs, lows, closes, vols, 24);
+  if (vwap !== null && atr) {
+    const dev = (last - vwap) / atr;
+    const pts = Math.max(-6, Math.min(6, Math.round(dev * 4)));
+    rest += pts;
+    parts.push({ p: pts, t: "Harga " + Math.abs(dev).toFixed(1) + "×ATR " + (dev >= 0 ? "di atas" : "di bawah") + " VWAP" });
+  }
+  if (vols && vols.length >= 21) {
+    const smaV = vols.slice(-21, -1).reduce((a, x) => a + x, 0) / 20;
+    if (smaV > 0) {
+      const ratio = vols[vols.length - 1] / smaV;
+      const dirC = Math.sign(last - closes[n - 2]);
+      if (dirC !== 0 && ratio >= 1.15) {
+        const pts = dirC * (ratio >= 1.5 ? 4 : 2);
+        rest += pts;
+        parts.push({ p: pts, t: "Volume " + ratio.toFixed(1) + "× rataan " + (dirC > 0 ? "mengonfirmasi kenaikan" : "mengonfirmasi penurunan") });
+      }
+    }
+  }
+
+  // --- Pola candle terakhir (perlu opens) ---
+  if (opens && n >= 2 && highs && lows) {
+    const i = n - 1, j = n - 2;
+    const o = opens[i], c = closes[i], po = opens[j], pc = closes[j];
+    const range = highs[i] - lows[i];
+    const body = Math.abs(c - o);
+    if (range > 0) {
+      const bullEngulf = pc < po && c > o && o <= pc && c >= po;
+      const bearEngulf = pc > po && c < o && o >= pc && c <= po;
+      const upperWick = highs[i] - Math.max(o, c);
+      const lowerWick = Math.min(o, c) - lows[i];
+      if (bullEngulf) { rest += 4; parts.push({ p: 4, t: "Pola bullish engulfing" }); }
+      else if (bearEngulf) { rest -= 4; parts.push({ p: -4, t: "Pola bearish engulfing" }); }
+      else if (body > 0 && lowerWick > body * 2 && upperWick < range * 0.25) {
+        rest += 3; parts.push({ p: 3, t: "Pola hammer — penolakan harga bawah" });
+      } else if (body > 0 && upperWick > body * 2 && lowerWick < range * 0.25) {
+        rest -= 3; parts.push({ p: -3, t: "Pola shooting star — penolakan harga atas" });
+      }
+    }
+  }
+
+  // --- Support / Resistance (ayunan 30 candle) ---
+  if (highs && lows && n >= 31 && atr) {
+    let swH = -Infinity, swL = Infinity;
+    for (let i = n - 31; i < n - 1; i++) {
+      if (highs[i] > swH) swH = highs[i];
+      if (lows[i] < swL) swL = lows[i];
+    }
+    if (last > swH) { rest += 5; parts.push({ p: 5, t: "Breakout di atas resistance 30 candle" }); }
+    else if (last < swL) { rest -= 5; parts.push({ p: -5, t: "Breakdown di bawah support 30 candle" }); }
+    else if (swH - last <= 0.35 * atr) { rest -= 2; parts.push({ p: -2, t: "Harga mendekati resistance" }); }
+    else if (last - swL <= 0.35 * atr) { rest += 2; parts.push({ p: 2, t: "Harga mendekati support" }); }
+  }
+
+  let score = Math.round((trendPts + rest) * 1.18);
+  score = Math.max(-100, Math.min(100, score));
   const side = score >= 25 ? "LONG" : score <= -25 ? "SHORT" : "NETRAL";
-  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, reasons };
+  const reasons = parts
+    .slice()
+    .sort((a, b2) => Math.abs(b2.p) - Math.abs(a.p))
+    .map(x => x.t + " (" + (x.p >= 0 ? "+" : "−") + Math.abs(x.p) + ")");
+  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, atr, adx, stoch, vwap, reasons };
 }
 async function fetchScore(symbol, interval) {
   const d = await api("/api/klines/" + encodeURIComponent(symbol) +
     "?interval=" + interval + "&limit=100");
   const cd = d.candles || [];
   if (cd.length < 55) return null;
-  return scoreSymbolTech(cd.map((c) => c.close), cd.map((c) => c.high), cd.map((c) => c.low));
+  return scoreSymbolTech(cd.map((c) => c.close), cd.map((c) => c.high), cd.map((c) => c.low), cd.map((c) => c.volume), cd.map((c) => c.open));
 }
 
 /* ---------------- Pasar ---------------- */
