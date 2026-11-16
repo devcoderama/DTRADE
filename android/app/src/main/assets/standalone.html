@@ -165,7 +165,7 @@
   #chartFs{position:fixed;inset:0;z-index:55;background:var(--bg);display:flex;flex-direction:column;
     padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
   .fshead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 0 8px}
-  .fsChartWrap{position:relative;flex:1;min-height:0;background:var(--panel);
+  .fsChartWrap{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--panel);
     border:1px solid var(--line);border-radius:12px;padding:10px 6px 6px}
   /* Mode lanskap: overlay diputar 90° (kotak ditukar lebar/tingginya) */
   #chartFs.land{inset:auto;left:50%;top:50%;width:100vh;width:100dvh;height:100vw;height:100dvw;
@@ -4750,6 +4750,24 @@ function attachDrawHandlers(ov, which) {
 }
 attachDrawHandlers($("drawCv"), "main");
 attachDrawHandlers($("drawFsCv"), "fs");
+/* Jaring pengaman tata letak (v1.32.5): setiap perubahan ukuran
+   wadah grafik (bilah alat gambar tampil/sembunyi, orientasi layar
+   penuh, panel osilator, rotasi perangkat) memicu gambar ulang agar
+   ukuran kanvas + geometri ketuk selalu sama dengan wadahnya. */
+let wrapResizeRaf = false;
+function queueWrapRedraw() {
+  if (wrapResizeRaf) return;
+  wrapResizeRaf = true;
+  requestAnimationFrame(() => {
+    wrapResizeRaf = false;
+    if (detailKlines.length && currentSymbol) drawChart(detailKlines);
+  });
+}
+if (typeof ResizeObserver === "function") {
+  const wrapRO = new ResizeObserver(queueWrapRedraw);
+  if ($("fsWrap")) wrapRO.observe($("fsWrap"));
+  if ($("chartBox")) wrapRO.observe($("chartBox"));
+}
 
 /* Geser grafik kiri/kanan (v1.26.0): seret horizontal pada grafik
    menggeser jendela 100 candle ke riwayat sebelumnya (detail memuat
@@ -4888,6 +4906,12 @@ function setDrawMode(on) {
   if (on) selectDrawTool("cursor");
   else { drawSel = -1; drawDrag = null; }
   renderDrawings();
+  /* Bilah alat yang muncul/bersembunyi mengubah tinggi wadah grafik
+     layar penuh — gambar ulang di frame berikutnya agar kanvas dan
+     geometri mengikuti ukuran baru (v1.32.5: sebelumnya kanvas lama
+     yang lebih tinggi menutupi bilah alat sehingga tombol-tombolnya
+     tidak bisa diklik). */
+  requestAnimationFrame(() => { if (detailKlines.length) drawChart(detailKlines); });
 }
 $("btnDraw").addEventListener("click", () => setDrawMode(!drawMode));
 $("btnDrawFs").addEventListener("click", () => setDrawMode(!drawMode));
