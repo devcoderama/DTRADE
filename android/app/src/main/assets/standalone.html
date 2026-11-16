@@ -363,7 +363,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.21.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.22.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1921,11 +1921,149 @@ function rrPath(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+/* Grafik untuk kartu bagikan (v1.22.0): meniru renderer grafik
+   halaman Analisis (drawChart) pada ukuran besar — candle, EMA20/50,
+   garis ENTRY/TP/SL, volume, label harga kanan, dan sumbu waktu. */
+function drawShareChart(ctx, x0, y0, w, h) {
+  const kl = detailKlines;
+  rrPath(ctx, x0, y0, w, h, 16);
+  ctx.fillStyle = "#10141a"; ctx.fill();
+  ctx.strokeStyle = "#2a3038"; ctx.stroke();
+  if (!kl.length) {
+    ctx.fillStyle = "#8a93a3"; ctx.font = "28px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("Grafik tidak tersedia", x0 + w / 2, y0 + h / 2);
+    ctx.textAlign = "left";
+    return;
+  }
+  const pad = 18;
+  const labelW = 118, timeH = 42;
+  const plotW = w - pad * 2, plotH = h - pad * 2 - timeH;
+  const priceH = plotH * 0.78, volTop = plotH * 0.845, volH = plotH * 0.125;
+  const X = i => x0 + pad + i * ((plotW - labelW) / kl.length) + (plotW - labelW) / kl.length / 2;
+  const cw = (plotW - labelW) / kl.length;
+  const closes = kl.map(k => parseFloat(k[4]));
+  const e20 = emaSeries(closes, 20), e50 = emaSeries(closes, 50);
+  const vols = kl.map(k => parseFloat(k[5]));
+  const maxV = Math.max.apply(null, vols) || 1;
+  let hi = -Infinity, lo = Infinity;
+  kl.forEach(k => { hi = Math.max(hi, parseFloat(k[2])); lo = Math.min(lo, parseFloat(k[3])); });
+  if (tradePlan) {
+    hi = Math.max(hi, tradePlan.entry, tradePlan.tp, tradePlan.sl);
+    lo = Math.min(lo, tradePlan.entry, tradePlan.tp, tradePlan.sl);
+  }
+  const pd = (hi - lo) * 0.10 || 1; hi += pd; lo -= pd;
+  const Y = p => y0 + pad + (priceH - (p - lo) / (hi - lo) * priceH);
+  const clampY = yy => Math.max(y0 + pad + 24, Math.min(y0 + pad + priceH - 6, yy));
+  ctx.font = "24px sans-serif";
+  const planLabelYs = tradePlan ?
+    [tradePlan.tp, tradePlan.entry, tradePlan.sl].map(v => clampY(Y(v))) : [];
+  /* Kisi + label harga */
+  ctx.strokeStyle = "#232a33"; ctx.fillStyle = "#9aa7b4"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + (hi - lo) * i / 4, yy = Y(p);
+    ctx.beginPath(); ctx.moveTo(x0 + pad, yy); ctx.lineTo(x0 + pad + plotW - labelW, yy); ctx.stroke();
+    const ly = clampY(yy);
+    if (planLabelYs.some(py => Math.abs(py - ly) < 28)) continue;
+    ctx.fillText(fmtPrice(p), x0 + pad + plotW - labelW + 10, ly + 8);
+  }
+  /* Volume */
+  kl.forEach((k, i) => {
+    const up = parseFloat(k[4]) >= parseFloat(k[1]);
+    ctx.fillStyle = up ? "rgba(14,203,129,.45)" : "rgba(246,70,93,.45)";
+    const hh = vols[i] / maxV * volH;
+    ctx.fillRect(X(i) - cw / 2 + 0.5, y0 + pad + volTop + volH - hh, Math.max(cw - 1, 1), hh);
+  });
+  /* Candle */
+  kl.forEach((k, i) => {
+    const oo = parseFloat(k[1]), hh2 = parseFloat(k[2]), ll = parseFloat(k[3]), cc = parseFloat(k[4]);
+    const up = cc >= oo, col = up ? "#0ecb81" : "#f6465d";
+    const x = X(i);
+    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x, Y(hh2)); ctx.lineTo(x, Y(ll)); ctx.stroke();
+    const bw = Math.max(cw * 0.62, 1.2);
+    const t = Y(Math.max(oo, cc)), b = Y(Math.min(oo, cc));
+    ctx.fillRect(x - bw / 2, t, bw, Math.max(b - t, 1.6));
+  });
+  ctx.lineWidth = 1;
+  /* EMA */
+  function line(series, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath();
+    let started = false;
+    series.forEach((v, i) => {
+      if (v === null) return;
+      if (!started) { ctx.moveTo(X(i), Y(v)); started = true; } else ctx.lineTo(X(i), Y(v));
+    });
+    ctx.stroke(); ctx.lineWidth = 1;
+  }
+  line(e20, "#f0b90b");
+  line(e50, "#4f8ff7");
+  /* Harga terakhir */
+  const last = closes[closes.length - 1];
+  ctx.strokeStyle = "rgba(240,185,11,.55)";
+  ctx.setLineDash([7, 6]);
+  ctx.beginPath(); ctx.moveTo(x0 + pad, Y(last)); ctx.lineTo(x0 + pad + plotW - labelW, Y(last)); ctx.stroke();
+  ctx.setLineDash([]);
+  if (!tradePlan || Math.abs(Y(last) - Y(tradePlan.entry)) > 26) {
+    ctx.fillStyle = "#f0b90b";
+    ctx.fillText(fmtPrice(last), x0 + pad + plotW - labelW + 10, clampY(Y(last)) + 8);
+  }
+  /* Level rencana ENTRY / TP / SL */
+  if (tradePlan) {
+    const levels = [
+      ["ENTRY", tradePlan.entry, "#e8ecf1"],
+      ["TP", tradePlan.tp, "#2ebd85"],
+      ["SL", tradePlan.sl, "#f6465d"]
+    ];
+    ctx.font = "700 25px sans-serif";
+    const usedYs = [];
+    for (const [name, val, color] of levels) {
+      const yy = Y(val);
+      if (yy < y0 + pad - 6 || yy > y0 + pad + priceH + 6) continue;
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.setLineDash([11, 8]);
+      ctx.beginPath(); ctx.moveTo(x0 + pad, yy); ctx.lineTo(x0 + pad + plotW - labelW, yy); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineWidth = 1;
+      let ly = clampY(yy);
+      for (const uy of usedYs) if (Math.abs(ly - uy) < 28) ly = uy + (ly >= uy ? 28 : -28);
+      ly = clampY(ly);
+      usedYs.push(ly);
+      ctx.fillStyle = color;
+      ctx.fillText(name, yy < y0 + pad + 52 ? x0 + pad + 310 : x0 + pad + 12, ly - 10);
+      ctx.fillText(fmtPrice(val), x0 + pad + plotW - labelW + 10, ly + 8);
+    }
+    ctx.font = "24px sans-serif";
+  }
+  /* Legenda */
+  ctx.fillStyle = "#f0b90b"; ctx.font = "700 24px sans-serif";
+  ctx.fillText("EMA20", x0 + pad + 12, y0 + pad + 28);
+  ctx.fillStyle = "#4f8ff7";
+  ctx.fillText("EMA50", x0 + pad + 122, y0 + pad + 28);
+  /* Sumbu waktu */
+  const iv = detailMarket === "stock" ? stockInterval : currentInterval;
+  const spanMs = kl.length > 1 ? (kl[kl.length - 1][0] - kl[0][0]) : 0;
+  ctx.strokeStyle = "#232a33";
+  ctx.beginPath(); ctx.moveTo(x0 + pad, y0 + pad + plotH + 2); ctx.lineTo(x0 + pad + plotW - labelW, y0 + pad + plotH + 2); ctx.stroke();
+  ctx.fillStyle = "#7d8896"; ctx.font = "23px sans-serif";
+  const prevAlign = ctx.textAlign;
+  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+    const idx = Math.min(kl.length - 1, Math.round(f * (kl.length - 1)));
+    const label = fmtWaktuCandle(kl[idx][0], iv, spanMs);
+    const cx = X(idx), tw = ctx.measureText(label).width;
+    let tx = cx, align = "center";
+    if (cx - tw / 2 < x0 + pad) { tx = x0 + pad; align = "left"; }
+    if (cx + tw / 2 > x0 + pad + plotW - labelW) { tx = x0 + pad + plotW - labelW; align = "right"; }
+    ctx.textAlign = align;
+    ctx.fillText(label, tx, y0 + h - pad - 6);
+  }
+  ctx.textAlign = prevAlign;
+}
+
 function drawShareCard() {
   const a = lastAnalysis;
   if (!a) return "";
   const o = a.oc, raw = a.raw;
-  const W = 1080, H = 1480;
+  const hasMtf = !!(mtfLastData && mtfLastData.key === detailMarket + ":" + currentSymbol);
+  const W = 1080, H = hasMtf ? 1620 : 1480;
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
@@ -1948,52 +2086,31 @@ function drawShareCard() {
   ctx.fillText(shareMarketLabel() + " · timeframe " + shareTfLabel() +
     (detailMarket === "stock" && detailEntry ? " · " + detailEntry.name : " · /USDT"), 64, 292);
   /* Lencana sisi + batang skor */
-  rrPath(ctx, 64, 340, 460, 118, 18);
+  rrPath(ctx, 64, 330, 460, 110, 18);
   ctx.fillStyle = sideCol; ctx.fill();
   ctx.fillStyle = "#ffffff"; ctx.font = "800 58px sans-serif"; ctx.textAlign = "center";
-  ctx.fillText(o.side + "  " + (o.score > 0 ? "+" : "") + o.score, 64 + 230, 420);
+  ctx.fillText(o.side + "  " + (o.score > 0 ? "+" : "") + o.score, 64 + 230, 408);
   ctx.textAlign = "left";
-  ctx.fillStyle = "#1c2129"; ctx.fillRect(64, 492, W - 128, 24);
+  ctx.fillStyle = "#1c2129"; ctx.fillRect(64, 470, W - 128, 22);
   ctx.fillStyle = sideCol;
-  ctx.fillRect(64, 492, Math.max(8, Math.abs(o.score) / 100 * (W - 128)), 24);
+  ctx.fillRect(64, 470, Math.max(8, Math.abs(o.score) / 100 * (W - 128)), 22);
   ctx.fillStyle = mut; ctx.font = "28px sans-serif";
-  ctx.fillText("Skor teknikal −100 … +100", 64, 556);
-  /* Harga */
+  ctx.fillText("Skor teknikal −100 … +100", 64, 528);
+  /* Harga + ringkasan indikator */
   ctx.fillStyle = mut; ctx.font = "30px sans-serif";
-  ctx.fillText("Harga terakhir", 64, 640);
+  ctx.fillText("Harga terakhir", 64, 606);
   ctx.fillStyle = "#ffffff"; ctx.font = "800 72px sans-serif";
-  ctx.fillText(fmtActive(a.price), 64, 716);
-  /* Kotak indikator 2×2 */
-  const inds = [
-    ["RSI (14)", raw.rsi !== null ? raw.rsi.toFixed(1) : "—"],
-    ["MACD hist.", raw.macd ? (raw.macd.hist >= 0 ? "Positif" : "Negatif") : "—"],
-    ["EMA20", raw.ema20 != null ? fmtActive(raw.ema20) : "—"],
-    ["EMA50", raw.ema50 != null ? fmtActive(raw.ema50) : "—"]
-  ];
-  inds.forEach((it, i) => {
-    const x = 64 + (i % 2) * 484, y = 764 + Math.floor(i / 2) * 118;
-    rrPath(ctx, x, y, 468, 102, 14);
-    ctx.fillStyle = panel; ctx.fill();
-    ctx.strokeStyle = line; ctx.stroke();
-    ctx.fillStyle = mut; ctx.font = "26px sans-serif";
-    ctx.fillText(it[0], x + 24, y + 40);
-    ctx.fillStyle = "#ffffff"; ctx.font = "700 36px sans-serif";
-    ctx.fillText(it[1], x + 24, y + 84);
-  });
-  let y = 764 + 2 * 118 + 30;
-  /* Rencana */
-  if (tradePlan && o.side !== "NETRAL") {
-    rrPath(ctx, 64, y, W - 128, 120, 14);
-    ctx.fillStyle = panel; ctx.fill();
-    ctx.strokeStyle = gold; ctx.stroke();
-    ctx.fillStyle = "#ffffff"; ctx.font = "700 34px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("Entry " + fmtActive(tradePlan.entry) + "   ·   TP " +
-      fmtActive(tradePlan.tp) + "   ·   SL " + fmtActive(tradePlan.sl), W / 2, y + 74);
-    ctx.textAlign = "left";
-    y += 150;
-  }
+  ctx.fillText(fmtActive(a.price), 64, 678);
+  ctx.fillStyle = mut; ctx.font = "28px sans-serif";
+  ctx.fillText("RSI (14) " + (raw.rsi !== null ? raw.rsi.toFixed(1) : "—") +
+    "  ·  MACD hist. " + (raw.macd ? (raw.macd.hist >= 0 ? "Positif" : "Negatif") : "—") +
+    "  ·  EMA20 " + (raw.ema20 != null ? fmtActive(raw.ema20) : "—") +
+    "  ·  EMA50 " + (raw.ema50 != null ? fmtActive(raw.ema50) : "—"), 64, 730);
+  /* Grafik seperti halaman Analisis: candle + EMA + Entry/TP/SL (v1.22.0) */
+  drawShareChart(ctx, 64, 762, W - 128, 540);
+  let y = 762 + 540 + 26;
   /* Multi-timeframe */
-  if (mtfLastData && mtfLastData.key === detailMarket + ":" + currentSymbol) {
+  if (hasMtf) {
     const tfs = detailMarket === "stock" ? MTF_STOCK : MTF_CRYPTO;
     ctx.fillStyle = mut; ctx.font = "28px sans-serif";
     ctx.fillText("Multi-timeframe", 64, y + 28);
@@ -2010,7 +2127,6 @@ function drawShareCard() {
       ctx.fillText(mo ? mo.side + " " + (mo.score > 0 ? "+" : "") + mo.score : "…", x + 114, y + 120);
     });
     ctx.textAlign = "left";
-    y += 48 + 96 + 30;
   }
   /* Kaki */
   ctx.fillStyle = mut; ctx.font = "27px sans-serif";
