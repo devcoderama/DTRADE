@@ -237,8 +237,9 @@
   .cbub.me.long{font-weight:500;text-align:left}
   /* Aksi pada pesan pengguna: Edit / Salin / Kirim ulang (v1.31.3) */
   .cacts{align-self:flex-end;display:flex;gap:4px;margin:3px 2px 9px}
+  .cacts.left{align-self:flex-start}
   .cacts button{background:transparent;border:1px solid var(--line);color:var(--muted);
-    border-radius:999px;padding:3px 10px;font-size:.72rem;cursor:pointer}
+    border-radius:999px;padding:6px 11px;font-size:.85rem;line-height:1;cursor:pointer}
   .cacts button:active{color:var(--gold);border-color:var(--gold)}
   .editbar{display:flex;justify-content:space-between;align-items:center;gap:8px;
     padding:8px 14px;background:var(--panel2);border-top:1px solid var(--line);
@@ -3528,14 +3529,22 @@ function renderChat() {
     }
     box.appendChild(d);
     if (m.role === "user") {
-      // Baris aksi di bawah pesan pengguna (v1.31.3): Edit / Salin / Kirim ulang.
+      // Baris aksi ikon di bawah pesan pengguna (v1.31.3, ikon saja v1.31.4).
       const acts = document.createElement("div");
       acts.className = "cacts";
       acts.dataset.idx = i;
       acts.innerHTML =
-        '<button data-act="edit"><i class="fa-solid fa-pen"></i> Edit</button>' +
-        '<button data-act="copy"><i class="fa-solid fa-copy"></i> Salin</button>' +
-        '<button data-act="resend"><i class="fa-solid fa-rotate-right"></i> Kirim ulang</button>';
+        '<button data-act="edit" aria-label="Edit pesan"><i class="fa-solid fa-pen"></i></button>' +
+        '<button data-act="copy" aria-label="Salin pesan"><i class="fa-solid fa-copy"></i></button>' +
+        '<button data-act="resend" aria-label="Kirim ulang pesan"><i class="fa-solid fa-rotate-right"></i></button>';
+      box.appendChild(acts);
+    } else {
+      // Ikon salin di bawah jawaban AI (v1.31.4).
+      const acts = document.createElement("div");
+      acts.className = "cacts left";
+      acts.dataset.idx = i;
+      acts.innerHTML =
+        '<button data-act="copyai" aria-label="Salin jawaban AI"><i class="fa-solid fa-copy"></i></button>';
       box.appendChild(acts);
     }
   });
@@ -3621,6 +3630,21 @@ function copyChatText(t) {
   ta.remove();
 }
 function chatAct(act, idx) {
+  if (act === "copyai") {
+    // Salin jawaban AI sebagai teks bersih (hasil render, tanpa markdown).
+    const mm = chatMsgs[idx];
+    if (!mm || mm.role !== "assistant") return;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = mdLite(mm.content);
+    // innerText butuh layout agar jeda baris antar-blok muncul — tempel
+    // sebentar di luar layar, baca, lalu buang.
+    tmp.style.cssText = "position:fixed;left:-9999px;top:0;width:320px";
+    document.body.appendChild(tmp);
+    const txt = tmp.innerText || mm.content;
+    tmp.remove();
+    copyChatText(txt);
+    return;
+  }
   if (chatBusy) return;
   const m = chatMsgs[idx];
   if (!m || m.role !== "user") return;
