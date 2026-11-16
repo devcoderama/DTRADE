@@ -6,6 +6,12 @@ Binance (tidak terpaku pada satu simbol), menganalisisnya dengan indikator
 teknikal, meminta penilaian kedua dari **AI Router BangunWeb**, lalu
 mengeksekusi order hanya setelah lolos **manajemen risiko** yang ketat.
 
+> 🚧 **Status: Masih Dalam Tahap Pengembangan.** DTRADE adalah proyek yang
+> masih aktif dikembangkan untuk keperluan belajar dan pengujian strategi
+> trading. Fitur dapat berubah sewaktu-waktu, dan hasil analisisnya **belum
+> teruji untuk perdagangan dengan dana riil** — bawaan pabriknya berjalan di
+> **testnet + mode dry-run (simulasi)**. Jangan gunakan dengan dana riil.
+
 Tersedia dalam dua antarmuka di atas core yang sama:
 
 - **Web UI** — dashboard responsif, nyaman dibuka dari desktop maupun browser
