@@ -1,4 +1,4 @@
-# binance-ai-future — dependensi Python (semua cross-platform: macOS/Windows/Linux)
+# DTRADE — dependensi Python (semua cross-platform: macOS/Windows/Linux)
 requests>=2.32,<3
 websocket-client>=1.8,<2
 psycopg[binary]>=3.2,<4

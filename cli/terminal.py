@@ -1,4 +1,4 @@
-"""Antarmuka terminal binance-ai-future.
+"""Antarmuka terminal DTRADE.
 
 Contoh:
     python run.py cli balance
@@ -72,7 +72,7 @@ def print_banner(app: "App") -> None:
 
         console.print(Columns([logo, title], padding=(0, 2)))
     else:
-        print(f"binance-ai-future — cli v{CLI_VERSION} · {net} · {mode} · {now}")
+        print(f"DTRADE — cli v{CLI_VERSION} · {net} · {mode} · {now}")
 
 try:
     from rich.console import Console
@@ -445,7 +445,7 @@ def cmd_selfcheck(app: App, args) -> int:
         app.settings, binance=app.binance, database=app.database,
         ai=app.ai, allow_network=True,
     )
-    _print("[bold]Selfcheck binance-ai-future[/bold]")
+    _print("[bold]Selfcheck DTRADE[/bold]")
     for c in checks:
         mark = "[green]OK[/green]" if c.ok else ("[red]GAGAL[/red]" if c.ok is False else "[dim]LEWATI[/dim]")
         _print(f"  {mark}  {c.name}: {c.detail}")
@@ -553,7 +553,7 @@ def cmd_notify_test(app: App, _args) -> int:
 
 # ----------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="binance-ai-future", description="Trading futures Binance berbantuan AI")
+    parser = argparse.ArgumentParser(prog="DTRADE", description="Trading futures Binance berbantuan AI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("balance", help="Saldo & ringkasan akun futures")

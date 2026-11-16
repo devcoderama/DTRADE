@@ -1,6 +1,6 @@
 # Contributors
 
-Terima kasih kepada semua yang berkontribusi pada `binance-ai-future`.
+Terima kasih kepada semua yang berkontribusi pada `DTRADE`.
 
 ## Pemilik & Maintainer
 

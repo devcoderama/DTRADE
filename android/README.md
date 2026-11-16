@@ -1,6 +1,6 @@
-# D TRADE — Aplikasi Android binance-ai-future
+# D TRADE — Aplikasi Android DTRADE
 
-Aplikasi Android pendamping **binance-ai-future**. Aplikasi ini adalah
+Aplikasi Android pendamping **DTRADE**. Aplikasi ini adalah
 WebView aman di atas Web UI: seluruh logika trading tetap berjalan di
 backend Python (komputer/VPS Anda), aplikasi hanya menampilkannya di
 ponsel dengan nama **D TRADE**.

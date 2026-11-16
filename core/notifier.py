@@ -20,7 +20,7 @@ hanya dicatat di log, agar eksekusi tidak pernah gagal gara-gara notifikasi.
 from __future__ import annotations
 
 import html
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -100,7 +100,7 @@ class TelegramNotifier:
     def notify_execution(self, decision: Any, result: Any, reference_price: float) -> bool:
         mode = "🧪 DRY-RUN (simulasi)" if result.dry_run else "🔴 LIVE"
         lines = [
-            f"<b>⚡ binance-ai-future — Eksekusi {html.escape(decision.symbol)}</b>",
+            f"<b>⚡ DTRADE — Eksekusi {html.escape(decision.symbol)}</b>",
             f"Mode: {mode}",
             f"Sisi: <b>{html.escape(decision.side)}</b> | Qty: {decision.quantity} | Leverage: {decision.leverage}x",
             f"Referensi harga: {reference_price}",
@@ -125,7 +125,7 @@ class TelegramNotifier:
 
     def notify_test(self) -> bool:
         return self.send(
-            "✅ <b>binance-ai-future</b> — notifikasi Telegram terhubung. "
+            "✅ <b>DTRADE</b> — notifikasi Telegram terhubung. "
             "Pesan ini adalah uji coba dari perintah <code>notify-test</code>."
         )
 

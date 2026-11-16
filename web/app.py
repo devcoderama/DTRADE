@@ -1,4 +1,4 @@
-"""Server Web UI binance-ai-future (FastAPI).
+"""Server Web UI DTRADE (FastAPI).
 
 Endpoint REST tipis di atas core yang sama dengan CLI:
 
@@ -114,7 +114,7 @@ async def _lifespan(_app: FastAPI):
     reconciler.stop()
 
 
-app = FastAPI(title="binance-ai-future", version="1.0.0", lifespan=_lifespan)
+app = FastAPI(title="DTRADE", version="1.0.0", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 # Keamanan API (P0):
@@ -488,7 +488,7 @@ def _signal_payload(signal) -> dict:
 def health() -> dict:
     # Sengaja minimal: endpoint publik ini tidak membocorkan konfigurasi.
     # Ringkasan konfigurasi & status komponen ada di /api/config (bertoken).
-    return {"ok": True, "service": "binance-ai-future"}
+    return {"ok": True, "service": "DTRADE"}
 
 
 @app.websocket("/api/ws/klines/{symbol}")

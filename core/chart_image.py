@@ -139,7 +139,7 @@ def render_signal_chart(
     side_color = _UP if side == "LONG" else _DOWN if side == "SHORT" else _MUTED
     fig.text(0.065, 0.955, f"{symbol} · {interval}", color=_TEXT, fontsize=16, fontweight="bold", va="center")
     fig.text(0.30, 0.955, f"SINYAL {side}", color=side_color, fontsize=16, fontweight="bold", va="center")
-    fig.text(0.935, 0.955, f"binance-ai-future{(' · ' + network_label) if network_label else ''}",
+    fig.text(0.935, 0.955, f"DTRADE{(' · ' + network_label) if network_label else ''}",
              color=_MUTED, fontsize=10, va="center", ha="right")
     ax.tick_params(labelbottom=False)
 

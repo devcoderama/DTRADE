@@ -1,4 +1,4 @@
-# STRUKTUR.MD — Rancangan Struktur `binance-ai-future`
+# STRUKTUR.MD — Rancangan Struktur `DTRADE`
 
 Dokumen ini adalah gambar rancangan proyek: susunan folder, tanggung jawab tiap
 modul, dan aliran data antar modul. Tujuannya agar pengembangan berikutnya
@@ -14,7 +14,7 @@ siaran Telegram otomatis, pilihan model AI runtime, dan aplikasi Android).
 ## 1. Peta Folder
 
 ```text
-binance-ai-future/
+DTRADE/
 ├── STRUKTUR.MD              ← dokumen ini
 ├── README.MD                ← panduan pengguna
 ├── LICENSE                  ← lisensi MIT

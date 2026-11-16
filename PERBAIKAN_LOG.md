@@ -600,3 +600,9 @@ Fokus Web UI tetap crypto futures Binance (tanpa saham); berita boleh ditambah.
 - Bottom Navigation Bar mobile dihapus total (HTML + CSS + padding bawah body) karena navigasi sudah tersedia di atas.
 - Kelompok tombol atas (Download APK + hamburger) kini tegas rata kanan di mobile (`margin-left:auto` pada `.top-actions` ≤900px); hamburger di tepi kanan membuka menu berisi Fitur/CLI/Web UI/Android/Panduan + GitHub + Download APK.
 - Terverifikasi render lokal 412px: 0 elemen bottomnav, tepi kanan hamburger 388/412 (sisa = padding wrap), menu terbuka dengan 7 tautan.
+
+## REBRANDING: repo binance-ai-future → DTRADE + D TRADE v1.28.0 (16 Nov 2026, permintaan Rams)
+
+- Repo GitHub diganti nama `devcoderama/binance-ai-future` → **`devcoderama/DTRADE`** (URL lama otomatis redirect). GitHub Pages kini di https://devcoderama.github.io/DTRADE/. Alasan Rams: proyek akan berkembang melampaui Binance Futures saja.
+- Seluruh slug `binance-ai-future` di kode sumber diganti `DTRADE`: URL repo & Pages (docs 18 tautan, README, aplikasi), branding Web UI (judul & logo → DTRADE), banner CLI, watermark grafik sinyal, header notifikasi Telegram, FastAPI title + health service, User-Agent news, komentar konfigurasi, nama service/container docker-compose → `dtrade`. Referensi GHCR di README → `ghcr.io/devcoderama/dtrade` (huruf kecil wajib GHCR); workflow docker-publish memakai `ghcr.io/${{ github.repository }}` sehingga otomatis mengikuti nama baru. Entri lama log ini & laporan historis TIDAK diubah (catatan sejarah). pytest 165/165 lulus setelah penggantian.
+- D TRADE v1.28.0: pemeriksaan update & semua tautan GitHub kini menunjuk repo DTRADE secara langsung (versi lama tetap berfungsi lewat redirect API GitHub).

@@ -1,4 +1,4 @@
-/* binance-ai-future — logika frontend dashboard (vanilla JS, tanpa build step) */
+/* DTRADE — logika frontend dashboard (vanilla JS, tanpa build step) */
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -1490,7 +1490,7 @@ $("btn-share-text").addEventListener("click", async () => {
   }
   L.push("");
   L.push("Sinyal teknikal + AI — bukan saran keuangan.");
-  L.push("Dibuat dengan binance-ai-future · " + new Date().toLocaleString("id-ID",
+  L.push("Dibuat dengan DTRADE · " + new Date().toLocaleString("id-ID",
     { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB");
   try {
     await navigator.clipboard.writeText(L.join("\n"));

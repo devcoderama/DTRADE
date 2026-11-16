@@ -1,4 +1,4 @@
-# binance-ai-future
+# DTRADE
 
 Sistem trading **Binance USDⓈ-M Futures** berbantuan AI dengan standar
 pengembangan profesional: memindai **semua simbol perpetual** yang tersedia di
@@ -90,7 +90,7 @@ Tersedia dalam dua antarmuka di atas core yang sama:
 
 ![CLI — backtest BTCUSDT](screenshots/cli-backtest.png)
 
-**Aplikasi Android D TRADE — Mode Mandiri (tanpa terhubung ke server binance-ai-future): daftar simbol berlogo koin + chip sinyal, grafik candlestick LIVE via WebSocket dengan garis ENTRY/TP/SL, dan panel rencana trade Entry/TP/SL berbasis ATR(14)**
+**Aplikasi Android D TRADE — Mode Mandiri (tanpa terhubung ke server DTRADE): daftar simbol berlogo koin + chip sinyal, grafik candlestick LIVE via WebSocket dengan garis ENTRY/TP/SL, dan panel rencana trade Entry/TP/SL berbasis ATR(14)**
 
 <p>
 <img src="screenshots/android-standalone-list.jpg" width="250" alt="D TRADE mode mandiri — daftar simbol berlogo koin dan chip sinyal">
@@ -122,8 +122,8 @@ CLI (terminal.py) dan Web UI (web/app.py) adalah dua kulit di atas core ini.
 ### macOS / Linux
 
 ```bash
-git clone https://github.com/devcoderama/binance-ai-future.git
-cd binance-ai-future
+git clone https://github.com/devcoderama/DTRADE.git
+cd DTRADE
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # lalu isi .env dengan kunci Anda
@@ -132,8 +132,8 @@ cp .env.example .env   # lalu isi .env dengan kunci Anda
 ### Windows (PowerShell)
 
 ```powershell
-git clone https://github.com/devcoderama/binance-ai-future.git
-cd binance-ai-future
+git clone https://github.com/devcoderama/DTRADE.git
+cd DTRADE
 py -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env   # lalu isi .env dengan kunci Anda
@@ -143,8 +143,8 @@ copy .env.example .env   # lalu isi .env dengan kunci Anda
 
 ```bash
 pkg install python git
-git clone https://github.com/devcoderama/binance-ai-future.git
-cd binance-ai-future
+git clone https://github.com/devcoderama/DTRADE.git
+cd DTRADE
 pip install -r requirements.txt
 cp .env.example .env
 ```
@@ -338,7 +338,7 @@ tujuan).
 
 Proyek ini juga punya aplikasi Android resmi bernama **D TRADE**: WebView aman di atas Web UI, jadi seluruh fitur (dasbor, scan, analisis + grafik, backtest, eksekusi) bisa dipakai dari ponsel. Backend Python tetap berjalan di komputer/VPS Anda; aplikasi hanya menampilkannya.
 
-- Unduh APK-nya dari **[Releases](https://github.com/devcoderama/binance-ai-future/releases)** repo ini (v1.0.0, ±650 KB, Android 7.0+).
+- Unduh APK-nya dari **[Releases](https://github.com/devcoderama/DTRADE/releases)** repo ini (v1.0.0, ±650 KB, Android 7.0+).
 - Setelah terpasang: buka aplikasi → menu ⋮ → **Alamat Server** → isi alamat backend Anda (mis. `http://192.168.1.10:8000` untuk satu jaringan Wi-Fi, atau domain VPS Anda).
 - Sumber aplikasi ada di folder [`android/`](android/) (Kotlin, tanpa AndroidX) — cara build & penandatanganan ada di [`android/README.md`](android/README.md).
 
@@ -371,18 +371,18 @@ Image backend juga diterbitkan otomatis ke GitHub Container Registry —
 tanpa clone repo dan tanpa build sendiri:
 
 ```bash
-docker pull ghcr.io/devcoderama/binance-ai-future:latest
-docker run -d --name binance-ai-future \
+docker pull ghcr.io/devcoderama/dtrade:latest
+docker run -d --name DTRADE \
   --env-file .env -p 127.0.0.1:8000:8000 \
   -v baf_data:/app/data -v baf_logs:/app/logs \
-  ghcr.io/devcoderama/binance-ai-future:latest
+  ghcr.io/devcoderama/dtrade:latest
 ```
 
 Tag yang tersedia: `latest` (build terbaru dari `main`), `sha-<commit>`,
 dan nomor versi (mis. `1.5.0`) untuk image yang diterbitkan dari sebuah
 GitHub Release. Konfigurasi tetap dari `.env` Anda — secret **tidak**
 ikut di dalam image. Paketnya publik:
-<https://github.com/devcoderama?tab=packages&repo_name=binance-ai-future>
+<https://github.com/devcoderama?tab=packages&repo_name=DTRADE>
 
 ## Penafian
 

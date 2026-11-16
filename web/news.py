@@ -41,7 +41,7 @@ _NS = {
     "dc": "http://purl.org/dc/elements/1.1/",
     "content": "http://purl.org/rss/1.0/modules/content/",
 }
-_UA = {"User-Agent": "Mozilla/5.0 (compatible; binance-ai-future news reader)"}
+_UA = {"User-Agent": "Mozilla/5.0 (compatible; DTRADE news reader)"}
 _CACHE_TTL = 300.0
 _MAX_ITEMS = 90
 

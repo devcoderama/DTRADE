@@ -1,4 +1,4 @@
-"""Konfigurasi terpusat untuk binance-ai-future.
+"""Konfigurasi terpusat untuk DTRADE.
 
 Seluruh modul WAJIB membaca konfigurasi dari objek `Settings` di sini.
 Tidak ada modul lain yang boleh menyentuh `os.environ` secara langsung,

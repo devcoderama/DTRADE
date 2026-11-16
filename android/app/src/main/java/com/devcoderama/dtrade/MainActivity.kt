@@ -33,9 +33,9 @@ import java.net.URL
 import org.json.JSONObject
 
 /**
- * D TRADE — aplikasi Android pendamping binance-ai-future.
+ * D TRADE — aplikasi Android pendamping DTRADE.
  *
- * Aplikasi ini adalah WebView aman di atas Web UI binance-ai-future:
+ * Aplikasi ini adalah WebView aman di atas Web UI DTRADE:
  * seluruh logika trading tetap berjalan di backend Python (komputer/VPS
  * pengguna), aplikasi hanya menampilkannya di ponsel. Alamat server dapat
  * diganti dari menu "Alamat Server" dan tersimpan di perangkat.
@@ -265,7 +265,7 @@ class MainActivity : Activity() {
         Thread {
             try {
                 val conn = URL(
-                    "https://api.github.com/repos/devcoderama/binance-ai-future/releases/latest"
+                    "https://api.github.com/repos/devcoderama/DTRADE/releases/latest"
                 ).openConnection() as HttpURLConnection
                 conn.setRequestProperty("User-Agent", "D-Trade-Android")
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
@@ -533,7 +533,7 @@ class MainActivity : Activity() {
         webView.visibility = View.GONE
         errorView.visibility = View.VISIBLE
         errorView.text = message ?:
-            "Tidak dapat terhubung ke server binance-ai-future di:\n${serverUrl()}\n\n" +
+            "Tidak dapat terhubung ke server DTRADE di:\n${serverUrl()}\n\n" +
                 "Pastikan backend berjalan di komputer/VPS Anda:\n" +
                 "python run.py web\n\n" +
                 "Ketuk di sini untuk mengatur alamat server."
@@ -545,7 +545,7 @@ class MainActivity : Activity() {
         input.hint = "cth: http://192.168.1.10:8000"
         AlertDialog.Builder(this)
             .setTitle("Alamat Server")
-            .setMessage("Alamat Web UI binance-ai-future di komputer/VPS Anda (satu jaringan Wi-Fi untuk IP lokal).")
+            .setMessage("Alamat Web UI DTRADE di komputer/VPS Anda (satu jaringan Wi-Fi untuk IP lokal).")
             .setView(input)
             .setPositiveButton("Simpan") { _, _ ->
                 val raw = input.text.toString().trim()
@@ -893,7 +893,7 @@ class MainActivity : Activity() {
 
         /** Halaman unduhan resmi untuk dialog aplikasi tidak resmi. */
         private const val OFFICIAL_RELEASES_URL =
-            "https://github.com/devcoderama/binance-ai-future/releases/latest"
+            "https://github.com/devcoderama/DTRADE/releases/latest"
 
         /**
          * Versi yang sudah dimunculkan dialog pembaruannya pada proses

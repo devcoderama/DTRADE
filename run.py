@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pintu masuk utama binance-ai-future.
+"""Pintu masuk utama DTRADE.
 
 Penggunaan:
     python run.py web            → jalankan Web UI (http://localhost:8000)

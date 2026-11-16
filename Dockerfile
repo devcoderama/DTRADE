@@ -1,4 +1,4 @@
-# binance-ai-future — image produksi (server web + core trading)
+# DTRADE — image produksi (server web + core trading)
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \

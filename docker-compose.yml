@@ -1,7 +1,7 @@
 services:
-  binance-ai-future:
+  dtrade:
     build: .
-    container_name: binance-ai-future
+    container_name: dtrade
     restart: unless-stopped
     # File .env berisi SEMUA secret — file ini tidak ikut image/repo.
     env_file:

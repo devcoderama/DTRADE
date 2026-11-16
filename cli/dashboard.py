@@ -95,7 +95,7 @@ def build_app(cli_app, symbol: str, interval: str):
             self.dismiss()
 
     class DashboardApp(App):
-        TITLE = "binance-ai-future"
+        TITLE = "DTRADE"
         CSS = """
         Screen { background: #07090c; color: #eaecef; }
         #titlebar { height: 1; background: #10141a; }
@@ -152,7 +152,7 @@ def build_app(cli_app, symbol: str, interval: str):
         def compose(self) -> ComposeResult:
             with Horizontal(id="titlebar"):
                 yield Static("[#f6465d]●[/] [#f0b90b]●[/] [#0ecb81]●[/]", id="tb-dots")
-                yield Static(f"binance-ai-future — cli v{CLI_VERSION}", id="tb-title")
+                yield Static(f"DTRADE — cli v{CLI_VERSION}", id="tb-title")
                 yield Static("⚙  ⛶", id="tb-icons")
             with Horizontal(id="brand"):
                 yield Static("\n".join(LOGO_LINES), id="logo")
@@ -185,7 +185,7 @@ def build_app(cli_app, symbol: str, interval: str):
                     yield Static("", id="m-ai", classes="metric")
                     yield Static("", id="m-updated", classes="metric")
             with Horizontal(id="footer"):
-                yield Static("[#0ecb81]●[/] [bold #f0b90b]binance-ai-future[/] >", id="prompt-label")
+                yield Static("[#0ecb81]●[/] [bold #f0b90b]DTRADE[/] >", id="prompt-label")
                 yield Input(placeholder="Ketik simbol lalu Enter — cth: BTCUSDT", id="symbol-input")
                 yield Static("F1 Help · F2 Analysis · F3 Settings · Ctrl+C Exit", id="hints")
 
@@ -451,7 +451,7 @@ def build_app(cli_app, symbol: str, interval: str):
                 "[dim]Dashboard ini hanya memantau — eksekusi order tetap lewat\n"
                 "perintah `trade` di CLI biasa atau Web UI.[/]"
             )
-            self.push_screen(_InfoScreen("Bantuan — binance-ai-future CLI", body))
+            self.push_screen(_InfoScreen("Bantuan — DTRADE CLI", body))
 
         def action_settings(self) -> None:
             s = self.cli.settings
