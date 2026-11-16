@@ -324,7 +324,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.15.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.16.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -506,6 +506,33 @@ function scoreSymbol(closes, highs, lows) {
   const atr = atrWilder(highs, lows, closes, 14);
   return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, atr, reasons };
 }
+
+/* ================= Cache-first daftar Pasar (v1.16.0) =================
+   Hasil muat terakhir (harga + skor, tanpa candle) disimpan lokal.
+   Saat aplikasi dibuka, daftar langsung tampil dari simpanan dengan
+   label "data tersimpan per HH:MM", lalu data segar menggantikannya
+   di latar. Kegagalan jaringan tidak lagi mengosongkan daftar. */
+function cacheSave(key, rows) {
+  try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), rows })); }
+  catch (e) { /* kuota penuh / penyimpanan tidak tersedia */ }
+}
+function cacheLoad(key) {
+  try {
+    const c = JSON.parse(localStorage.getItem(key) || "null");
+    return c && c.rows && c.rows.length ? c : null;
+  } catch (e) { return null; }
+}
+function jamLabel(ts) {
+  return new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+function umurLabel(ts) {
+  const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (m < 1) return "baru saja";
+  if (m < 60) return m + " mnt lalu";
+  return Math.floor(m / 60) + " jam " + (m % 60) + " mnt lalu";
+}
+let cryptoCacheTs = 0;
+const stockCacheTs = { idx: 0, global: 0 };
 
 /* ================= Daftar simbol ================= */
 const SIGNAL_LIMIT = 80;      // sinyal dihitung untuk 80 simbol tervolume dulu
@@ -909,9 +936,31 @@ function stockAdjustments() {
 async function loadStocks(mkt, force) {
   if (stocksLoaded[mkt] && !force) { renderStocks(); return; }
   $("listErr").classList.add("hidden");
-  $("status").textContent = "Memuat saham " + (mkt === "idx" ? "IDX" : "global") +
-    " dari Yahoo Finance…";
-  $("list").innerHTML = "";
+  /* Cache-first (v1.16.0): tampilkan simpanan terakhir seketika, lalu
+     segarkan di latar tanpa mengosongkan daftar. */
+  let dariCache = false;
+  if (!force && !stockLists[mkt].length) {
+    const c = cacheLoad("dtrade-cache-" + mkt);
+    if (c) {
+      dariCache = true;
+      stockCacheTs[mkt] = c.ts;
+      stockLists[mkt] = c.rows.map(r =>
+        Object.assign({}, r, { candles: null, loading: false }));
+      if (market === mkt) {
+        renderStocks();
+        $("status").textContent = c.rows.length + " instrumen · data tersimpan per " +
+          jamLabel(c.ts) + " (" + umurLabel(c.ts) + ") · memperbarui…";
+      }
+    }
+  }
+  if (!dariCache && !stockLists[mkt].length) {
+    $("status").textContent = "Memuat saham " + (mkt === "idx" ? "IDX" : "global") +
+      " dari Yahoo Finance…";
+    $("list").innerHTML = "";
+  } else if (!dariCache && market === mkt) {
+    $("status").textContent = "Memperbarui saham " +
+      (mkt === "idx" ? "IDX" : "global") + "…";
+  }
   const entries = await Promise.all(mergedStockDefs(mkt).map(async def => {
     const e = Object.assign({}, def, {
       market: mkt, currency: mkt === "idx" ? "IDR" : "USD",
@@ -932,13 +981,28 @@ async function loadStocks(mkt, force) {
     e.loading = false;
     return e;
   }));
+  const ok = entries.filter(e => e.scoreObj).length;
+  if (dariCache && ok < entries.length / 2) {
+    /* Pembaruan gagal besar-besaran: pertahankan data tersimpan dan
+       jangan timpa cache yang bagus (v1.16.0). */
+    if (market === mkt) {
+      renderStocks();
+      $("status").textContent = "Gagal memperbarui · menampilkan data tersimpan per " +
+        jamLabel(stockCacheTs[mkt]) + " (" + umurLabel(stockCacheTs[mkt]) + ")";
+    }
+    return;
+  }
   stockLists[mkt] = entries;
   stocksLoaded[mkt] = true;
+  stockCacheTs[mkt] = Date.now();
+  cacheSave("dtrade-cache-" + mkt, entries.map(e => ({
+    symbol: e.symbol, ticker: e.ticker, name: e.name, market: e.market,
+    currency: e.currency, index: !!e.index, custom: !!e.custom, kw: e.kw || [],
+    price: e.price, change: e.change, volume: e.volume, scoreObj: e.scoreObj })));
   if (market === mkt) {
     renderStocks();
-    const ok = entries.filter(e => e.scoreObj).length;
     $("status").textContent = entries.length + " instrumen · sinyal 1d terhitung untuk " +
-      ok + " · " + new Date().toLocaleTimeString("id-ID") + " · data Yahoo Finance";
+      ok + " · data per " + jamLabel(stockCacheTs[mkt]) + " · Yahoo Finance";
   }
 }
 /* Logo emiten (v1.11.0), pola yang sama seperti logo koin crypto:
@@ -1081,7 +1145,21 @@ $("asAdd").addEventListener("click", async () => {
 async function loadList() {
   const myRun = ++signalAbort;
   $("listErr").classList.add("hidden");
-  $("status").textContent = "Memuat daftar simbol…";
+  if (!symbols.length) {
+    /* Cache-first: tampilkan simpanan terakhir seketika (v1.16.0). */
+    const c = cacheLoad("dtrade-cache-crypto");
+    if (c) {
+      cryptoCacheTs = c.ts;
+      symbols = c.rows;
+      renderList();
+      $("status").textContent = symbols.length + " simbol · data tersimpan per " +
+        jamLabel(c.ts) + " (" + umurLabel(c.ts) + ") · memperbarui…";
+    } else {
+      $("status").textContent = "Memuat daftar simbol…";
+    }
+  } else {
+    $("status").textContent = "Memuat daftar simbol…";
+  }
   try {
     const [info, tickers] = await Promise.all([
       api("/fapi/v1/exchangeInfo"),
@@ -1106,14 +1184,29 @@ async function loadList() {
       }))
       .sort((a, b) => b.volume - a.volume);
     renderList();
-    $("status").textContent = symbols.length + " simbol USDT perpetual · " +
-      new Date().toLocaleTimeString("id-ID") + " · menghitung sinyal " +
-      Math.min(SIGNAL_LIMIT, symbols.length) + " teratas…";
+    cryptoCacheTs = Date.now();
+    cacheSave("dtrade-cache-crypto", symbols.map(s => ({
+      symbol: s.symbol, base: s.base, price: s.price, change: s.change,
+      volume: s.volume, scoreObj: s.scoreObj })));
+    if (market === "crypto") {
+      $("status").textContent = symbols.length + " simbol USDT perpetual · data per " +
+        jamLabel(cryptoCacheTs) + " · menghitung sinyal " +
+        Math.min(SIGNAL_LIMIT, symbols.length) + " teratas…";
+    }
     computeSignals(myRun);
     scheduleTickerRefresh();
     const autoSym = params.get("symbol");
     if (autoSym && symbols.some(s => s.symbol === autoSym)) openDetail(autoSym);
   } catch (e) {
+    if (symbols.length) {
+      /* Ada data (dari cache): jangan kosongkan daftar (v1.16.0). */
+      if (market === "crypto") {
+        $("status").textContent = "Gagal memperbarui (" + e.message +
+          ") · menampilkan data per " + jamLabel(cryptoCacheTs) +
+          " (" + umurLabel(cryptoCacheTs) + ")";
+      }
+      return;
+    }
     $("status").textContent = "";
     const el = $("listErr");
     el.classList.remove("hidden");
@@ -1144,8 +1237,15 @@ async function computeSignals(run) {
       s.loading = false; done++;
       paintRow(s);
       if (done === targets.length && run === signalAbort) {
-        $("status").textContent = symbols.length + " simbol · sinyal 1h terhitung " +
-          new Date().toLocaleTimeString("id-ID");
+        if (market === "crypto") {
+          $("status").textContent = symbols.length + " simbol · sinyal 1h terhitung · data per " +
+            jamLabel(Date.now());
+        }
+        /* Simpan ulang cache kini dengan skor yang sudah terhitung. */
+        cryptoCacheTs = Date.now();
+        cacheSave("dtrade-cache-crypto", symbols.map(s => ({
+          symbol: s.symbol, base: s.base, price: s.price, change: s.change,
+          volume: s.volume, scoreObj: s.scoreObj })));
         if ($("sort").value === "signal") renderList();
       }
     }
