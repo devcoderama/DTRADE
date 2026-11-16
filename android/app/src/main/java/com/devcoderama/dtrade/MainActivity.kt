@@ -238,9 +238,9 @@ class MainActivity : Activity() {
     /**
      * Jembatan JavaScript untuk halaman mode mandiri. Permukaan yang
      * diekspos sengaja sempit dan read-only:
-     * - fetch(): GET https HANYA ke host API publik Binance dan host RSS
-     *   berita crypto (daftar-izin di bawah); hasil dikembalikan sebagai
-     *   teks lewat __apiResolve.
+     * - fetch(): GET https HANYA ke host API publik Binance, host RSS
+     *   berita crypto, dan endpoint terjemahan Google (daftar-izin di
+     *   bawah); hasil dikembalikan sebagai teks lewat __apiResolve.
      * - getServerUrl(): alamat server yang dikonfigurasi (untuk label).
      * - openServer(): kembali memuat Web UI server.
      * - openExternal(): membuka tautan https (artikel berita) di browser
@@ -256,7 +256,8 @@ class MainActivity : Activity() {
                 try {
                     val parsed = URL(url)
                     if (parsed.protocol != "https" ||
-                        (parsed.host !in BINANCE_HOSTS && parsed.host !in NEWS_HOSTS)
+                        (parsed.host !in BINANCE_HOSTS && parsed.host !in NEWS_HOSTS &&
+                            parsed.host !in TRANSLATE_HOSTS)
                     ) {
                         throw SecurityException("host tidak diizinkan")
                     }
@@ -345,6 +346,9 @@ class MainActivity : Activity() {
             "ambcrypto.com", "beincrypto.com", "bitcoinmagazine.com",
             "cryptoslate.com", "www.newsbtc.com"
         )
+
+        /** Endpoint terjemahan Google (EN→ID) untuk tab Berita (v1.7.0). */
+        private val TRANSLATE_HOSTS = setOf("translate.googleapis.com")
 
         private const val MENU_HOME = 1
         private const val MENU_RELOAD = 2

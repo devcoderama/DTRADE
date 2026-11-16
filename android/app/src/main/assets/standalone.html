@@ -132,6 +132,11 @@
     padding:14px 13px;color:var(--text);font-size:.95rem;font-weight:600;text-align:left;cursor:pointer}
   .menuitem small{display:block;color:var(--muted);font-weight:400;font-size:.78rem;margin-top:2px}
   .menuitem .ic{font-size:1.2rem}
+  /* ===== Pembaca berita (v1.7.0) ===== */
+  .rtitle{font-size:1.18rem;line-height:1.4;margin:6px 0 8px}
+  .rhero{width:100%;border-radius:12px;margin:6px 0 10px;display:block}
+  .article p{line-height:1.68;color:#d7dee6;margin:0 0 14px;font-size:.97rem}
+  .article h3{font-size:1.02rem;margin:18px 0 8px;color:var(--text)}
   .hidden{display:none !important}
 </style>
 </head>
@@ -149,8 +154,8 @@
 </div>
 
 <div class="info">Mode mandiri: aplikasi tidak terhubung ke server binance-ai-future, jadi yang
-ditampilkan hanya <b>sinyal teknikal</b> dan <b>grafik candlestick</b> dari API publik Binance —
-tanpa AI, tanpa eksekusi order.</div>
+ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita crypto</b> dari
+API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 
 <div class="serverbar" id="serverBar">
   <div>Server: <b id="serverUrl">—</b></div>
@@ -185,6 +190,7 @@ tanpa AI, tanpa eksekusi order.</div>
       <div class="p" id="dPrice">—</div>
       <div class="chg" id="dChange">—</div>
     </div>
+    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol">⇄</button>
   </div>
   <div class="tabs" id="tabs">
     <button data-iv="1m">1m</button>
@@ -211,6 +217,33 @@ tanpa AI, tanpa eksekusi order.</div>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
 </div>
 
+<div id="pickerView" class="hidden" style="position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column">
+  <div class="dhead" style="padding:12px 14px 2px">
+    <button class="iconbtn" id="btnPickBack" aria-label="Tutup pemilih simbol">←</button>
+    <div>
+      <div class="nm">Ganti Simbol</div>
+      <div class="chg">Ketuk simbol untuk membuka grafiknya</div>
+    </div>
+  </div>
+  <div class="controls" style="padding:10px 14px 0">
+    <input id="pq" type="search" placeholder="Cari simbol… (cth: ETH)" autocomplete="off">
+  </div>
+  <div class="list" id="pickList" style="overflow-y:auto;flex:1;padding-bottom:20px"></div>
+</div>
+
+<div id="readerView" class="hidden">
+  <div class="dhead" style="padding:12px 14px 2px">
+    <button class="iconbtn" id="btnReaderBack" aria-label="Kembali ke daftar berita">←</button>
+    <div style="flex:1;min-width:0">
+      <div class="nm" style="font-size:1rem">Baca Berita</div>
+      <div class="chg" id="readerMeta">—</div>
+    </div>
+    <button class="iconbtn" id="btnTranslate" aria-label="Alihkan terjemahan" title="Terjemahan Google EN→ID">ID</button>
+    <button class="iconbtn" id="btnReaderExt" aria-label="Buka di browser" title="Buka di browser">↗</button>
+  </div>
+  <div id="readerBody" style="padding:8px 16px 90px"></div>
+</div>
+
 <div id="signalsView" class="hidden">
   <div class="status" id="sigStatus">Menghitung sinyal…</div>
   <div class="list" id="sigList"></div>
@@ -227,7 +260,7 @@ tanpa AI, tanpa eksekusi order.</div>
   <button class="menuitem" id="mServer"><span class="ic">🖥️</span><span>Hubungkan ke Server<small>Kembali ke Web UI binance-ai-future</small></span></button>
   <button class="menuitem" id="mEditServer"><span class="ic">✏️</span><span>Ubah Alamat Server<small>Alamat backend di komputer/VPS Anda</small></span></button>
   <button class="menuitem" id="mReload"><span class="ic">⟳</span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
-  <div class="info" style="margin-top:4px">D TRADE <b>v1.6.0</b> — mode mandiri. Berita dikumpulkan
+  <div class="info" style="margin-top:4px">D TRADE <b>v1.7.0</b> — mode mandiri. Berita dikumpulkan
   langsung dari RSS publik 11 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
   U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, dan NewsBTC. Ketuk berita untuk
   membacanya di browser ponsel.</div>
@@ -612,7 +645,11 @@ async function openDetail(symbol) {
   currentSymbol = symbol;
   lastSymbol = symbol;
   Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
-  $("bottomNav").classList.add("hidden");
+  $("readerView").classList.add("hidden");
+  /* Navigasi bawah TETAP tampil di halaman detail (v1.7.0) — tab
+     Analisis ditandai aktif selama grafik terbuka. */
+  $("bottomNav").querySelectorAll("button").forEach(b =>
+    b.classList.toggle("on", b.dataset.tab === "analisis"));
   $("detailView").classList.add("open");
   window.scrollTo(0, 0);
   await loadDetail(false, true);
@@ -622,11 +659,14 @@ async function openDetail(symbol) {
     if (!document.hidden && !wsOpen) loadDetail(true, false);
   }, 30000);
 }
-function closeDetail() {
+function teardownDetail() {
   currentSymbol = null;
   if (detailTimer) clearInterval(detailTimer);
   stopWs();
   $("detailView").classList.remove("open");
+}
+function closeDetail() {
+  teardownDetail();
   showTab(currentTab);
 }
 async function loadDetail(keepScroll, restartWs) {
@@ -935,7 +975,7 @@ function showTab(name) {
   currentTab = name;
   Object.entries(TAB_VIEWS).forEach(([t, id]) => $(id).classList.toggle("hidden", t !== name));
   $("detailView").classList.remove("open");
-  $("bottomNav").classList.remove("hidden");
+  $("readerView").classList.add("hidden");
   $("bottomNav").querySelectorAll("button").forEach(b =>
     b.classList.toggle("on", b.dataset.tab === name));
   if (name === "sinyal") renderSignals();
@@ -943,7 +983,18 @@ function showTab(name) {
   window.scrollTo(0, 0);
 }
 $("bottomNav").querySelectorAll("button").forEach(b =>
-  b.addEventListener("click", () => showTab(b.dataset.tab)));
+  b.addEventListener("click", () => {
+    const t = b.dataset.tab;
+    if (t === "analisis") {
+      if (!currentSymbol) openDetail(lastSymbol || "BTCUSDT");
+      return;
+    }
+    /* Pindah tab dari halaman detail/pembaca: bersihkan dulu dengan
+       benar (WebSocket + timer berhenti), baru tampilkan tab tujuan. */
+    if (currentSymbol) teardownDetail();
+    closeReader();
+    showTab(t);
+  }));
 
 /* ================= Tab Sinyal ================= */
 function renderSignals() {
@@ -984,6 +1035,11 @@ const FEEDS = [
   { name: "NewsBTC", url: "https://www.newsbtc.com/feed/" }
 ];
 let newsItems = [], newsLoaded = false, newsLoading = false, newsFilter = "Semua";
+/* Status terjemahan Google EN→ID (v1.7.0): default aktif, disimpan di
+   localStorage. Dideklarasikan di sini karena renderChips() dipanggil
+   sebelum blok terjemahan di bawah. */
+let translateOn = true;
+try { translateOn = localStorage.getItem("dtrade-tl") !== "off"; } catch (e) { /* abaikan */ }
 
 function escHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
@@ -1071,9 +1127,10 @@ async function loadNews(force) {
   newsLoading = false;
   $("newsStatus").textContent = newsItems.length + " berita · " + ok + "/" + FEEDS.length +
     " sumber termuat · diperbarui " + new Date().toLocaleTimeString("id-ID") +
-    ". Ketuk berita untuk membaca di browser.";
+    ". Ketuk berita untuk membacanya di aplikasi.";
   renderChips();
   renderNews();
+  if (translateOn) translateListTitles();
 }
 function renderChips() {
   const wrap = $("srcChips");
@@ -1085,6 +1142,17 @@ function renderChips() {
     b.addEventListener("click", () => { newsFilter = nm; renderChips(); renderNews(); });
     wrap.appendChild(b);
   });
+  const tl = document.createElement("button");
+  tl.textContent = translateOn ? "🌐 ID: Aktif" : "🌐 ID: Mati";
+  if (translateOn) tl.className = "on";
+  tl.addEventListener("click", () => {
+    translateOn = !translateOn;
+    try { localStorage.setItem("dtrade-tl", translateOn ? "on" : "off"); } catch (e) { /* abaikan */ }
+    renderChips();
+    renderNews();
+    if (translateOn) translateListTitles();
+  });
+  wrap.appendChild(tl);
   const r = document.createElement("button");
   r.textContent = "↻ Segarkan";
   r.addEventListener("click", () => loadNews(true));
@@ -1110,7 +1178,7 @@ function renderNews() {
     const d = document.createElement("div");
     d.className = "newsitem";
     d.innerHTML =
-      '<div style="flex:1;min-width:0"><div class="tt">' + escHtml(n.title) + "</div>" +
+      '<div style="flex:1;min-width:0"><div class="tt">' + escHtml(translateOn && n.titleId ? n.titleId : n.title) + "</div>" +
       (n.desc ? '<div class="ds">' + escHtml(n.desc) + "</div>" : "") +
       '<div class="mt"><span class="src">' + escHtml(n.source) + "</span><span>" +
       relTime(n.time) + "</span></div></div>" +
@@ -1124,11 +1192,201 @@ function renderNews() {
       f.textContent = "📰";
       img.replaceWith(f);
     });
-    d.addEventListener("click", () => openNewsLink(n.link));
+    d.addEventListener("click", () => openReader(n));
     wrap.appendChild(d);
   });
 }
 renderChips();
+
+/* ================= Terjemahan Google EN→ID (v1.7.0) =================
+   Memakai endpoint publik Google Translate (client gtx) lewat jembatan
+   native — host translate.googleapis.com ada di daftar-izin. Variabel
+   translateOn dideklarasikan di blok Berita di atas. Semua kegagalan
+   diabaikan diam-diam: teks Inggris asli tetap tampil. */
+async function gTranslateChunk(q) {
+  const url = "https://translate.googleapis.com/translate_a/single?client=gtx" +
+    "&sl=en&tl=id&dt=t&q=" + encodeURIComponent(q);
+  const data = JSON.parse(await fetchText(url));
+  return (data[0] || []).map(seg => seg[0]).join("");
+}
+async function gTranslate(text) {
+  const t = String(text || "");
+  if (!t) return t;
+  if (t.length <= 1200) return gTranslateChunk(t);
+  const parts = t.match(/[^.!?]+[.!?]+\s*|[^.!?]+$/g) || [t];
+  let buf = "", out = "";
+  for (const s of parts) {
+    if ((buf + s).length > 1200) { out += await gTranslateChunk(buf); buf = ""; }
+    buf += s;
+  }
+  if (buf) out += await gTranslateChunk(buf);
+  return out;
+}
+/* Judul daftar berita diterjemahkan berkelompok (8 judul per panggilan,
+   dipisah penanda @@@; hanya dipakai bila jumlah hasil cocok). */
+async function translateListTitles() {
+  const SEP = "\n@@@\n";
+  const pending = newsItems.filter(n => !n.titleId);
+  for (let i = 0; i < pending.length && translateOn; i += 8) {
+    const batch = pending.slice(i, i + 8);
+    try {
+      const joined = batch.map(n => n.title.replace(/\s+/g, " ")).join(SEP);
+      const parts = (await gTranslate(joined)).split(/\s*@@@\s*/);
+      if (parts.length === batch.length) {
+        batch.forEach((n, j) => { n.titleId = parts[j].trim(); });
+      }
+    } catch (e) { /* biarkan judul Inggris */ }
+    if (currentTab === "berita" && translateOn) renderNews();
+  }
+}
+
+/* ================= Pemilih simbol di halaman detail (v1.7.0) ================= */
+function renderPicker() {
+  const q = $("pq").value.trim().toUpperCase();
+  const wrap = $("pickList");
+  wrap.innerHTML = "";
+  symbols
+    .filter(s => !q || s.symbol.includes(q))
+    .slice(0, 200)
+    .forEach(s => {
+      const d = document.createElement("div");
+      d.className = "sym";
+      d.dataset.symbol = s.symbol;
+      d.innerHTML = rowHtml(s);
+      d.addEventListener("click", () => {
+        closePicker();
+        if (s.symbol !== currentSymbol) openDetail(s.symbol);
+      });
+      wrap.appendChild(d);
+    });
+}
+function openPicker() {
+  $("pq").value = "";
+  renderPicker();
+  $("pickerView").classList.remove("hidden");
+}
+function closePicker() { $("pickerView").classList.add("hidden"); }
+$("btnPick").addEventListener("click", openPicker);
+$("dSymbol").addEventListener("click", openPicker);
+$("btnPickBack").addEventListener("click", closePicker);
+$("pq").addEventListener("input", renderPicker);
+
+/* ================= Pembaca berita dalam aplikasi (v1.7.0) =================
+   Artikel diambil dari host asal (sudah di daftar-izin bridge), lalu
+   diekstrak teksnya saja — tanpa skrip/iklan/navigasi situs — dan
+   ditampilkan bersih di dalam aplikasi. Bila ekstraksi gagal, tampilkan
+   ringkasan RSS + tombol baca di situs asal. */
+let readerItem = null, readerParas = null, readerParasId = null, readerHero = "", readerToken = 0;
+function openReader(item) {
+  readerItem = item;
+  readerParas = null;
+  readerParasId = null;
+  const my = ++readerToken;
+  Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
+  $("detailView").classList.remove("open");
+  $("readerView").classList.remove("hidden");
+  $("readerMeta").textContent = item.source + " · " + relTime(item.time);
+  $("btnTranslate").textContent = translateOn ? "ID" : "EN";
+  $("readerBody").innerHTML = '<h2 class="rtitle">' + escHtml(item.title) + "</h2>" +
+    '<div class="status" style="padding:0">Memuat artikel…</div>';
+  window.scrollTo(0, 0);
+  loadArticle(item, my);
+}
+function closeReader() {
+  readerToken++;
+  $("readerView").classList.add("hidden");
+}
+$("btnReaderBack").addEventListener("click", () => { closeReader(); showTab("berita"); });
+$("btnReaderExt").addEventListener("click", () => { if (readerItem) openNewsLink(readerItem.link); });
+$("btnTranslate").addEventListener("click", async () => {
+  translateOn = !translateOn;
+  try { localStorage.setItem("dtrade-tl", translateOn ? "on" : "off"); } catch (e) { /* abaikan */ }
+  $("btnTranslate").textContent = translateOn ? "ID" : "EN";
+  renderChips();
+  if (!readerItem || !readerParas) return;
+  if (!translateOn) {
+    renderReader(readerItem, readerHero, readerParas, false);
+  } else if (readerParasId) {
+    renderReader(readerItem, readerHero, readerParasId, true);
+  } else {
+    translateReader(readerItem, readerHero, ++readerToken);
+  }
+});
+async function loadArticle(item, my) {
+  let paras = [], hero = "";
+  try {
+    const html = await fetchText(item.link);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const og = doc.querySelector('meta[property="og:image"]');
+    if (og) hero = og.getAttribute("content") || "";
+    if (hero.indexOf("http://") === 0) hero = "https://" + hero.slice(7);
+    doc.querySelectorAll("script,style,noscript,iframe,form,nav,header,footer,aside,svg,button")
+      .forEach(e => e.remove());
+    let best = null, bestLen = 0;
+    doc.querySelectorAll("article, main, div, section").forEach(el => {
+      let len = 0;
+      el.querySelectorAll(":scope > p").forEach(p => { len += p.textContent.trim().length; });
+      if (len > bestLen) { bestLen = len; best = el; }
+    });
+    (best || doc.body).querySelectorAll("p, h2, h3, blockquote, li").forEach(el => {
+      const t = el.textContent.replace(/\s+/g, " ").trim();
+      if (t.length >= 40 || el.tagName === "H2" || el.tagName === "H3") {
+        paras.push({ tag: el.tagName, text: t });
+      }
+    });
+    paras = paras
+      .filter((p, i) => paras.findIndex(x => x.text === p.text) === i)
+      .slice(0, 60);
+  } catch (e) { /* jatuh ke ringkasan di bawah */ }
+  if (my !== readerToken) return;
+  if (paras.length < 2) {
+    $("readerBody").innerHTML = '<h2 class="rtitle">' + escHtml(item.title) + "</h2>" +
+      '<div class="article"><p>' +
+      escHtml(item.desc || "Artikel tidak dapat dimuat penuh di dalam aplikasi.") +
+      '</p></div><button class="menuitem" id="readerFallback"><span class="ic">↗</span>' +
+      "<span>Baca di situs asal<small>Artikel dibuka di browser ponsel</small></span></button>";
+    $("readerFallback").addEventListener("click", () => openNewsLink(item.link));
+    return;
+  }
+  readerParas = paras;
+  readerHero = hero;
+  renderReader(item, hero, paras, false);
+  if (translateOn) translateReader(item, hero, my);
+}
+function renderReader(item, hero, paras, translated) {
+  $("readerBody").innerHTML =
+    (hero ? '<img class="rhero" alt="" src="' + escHtml(hero) + '">' : "") +
+    '<h2 class="rtitle">' + escHtml(item.title) + "</h2>" +
+    '<div class="status" style="padding:0 0 10px">' + escHtml(item.source) + " · " +
+    relTime(item.time) + (translated ? " · diterjemahkan Google (EN→ID)" : "") + "</div>" +
+    '<div class="article">' + paras.map(p =>
+      (p.tag === "H2" || p.tag === "H3")
+        ? "<h3>" + escHtml(p.text) + "</h3>"
+        : "<p>" + escHtml(p.text) + "</p>"
+    ).join("") + "</div>";
+  const img = $("readerBody").querySelector("img.rhero");
+  if (img) img.addEventListener("error", () => img.remove());
+}
+async function translateReader(item, hero, my) {
+  $("readerMeta").textContent = item.source + " · menerjemahkan…";
+  try {
+    const titleId = await gTranslate(item.title);
+    const out = [];
+    for (const p of readerParas) {
+      if (my !== readerToken) return;
+      out.push({ tag: p.tag, text: await gTranslate(p.text) });
+    }
+    if (my !== readerToken) return;
+    readerParasId = out;
+    renderReader(Object.assign({}, item, { title: titleId }), hero, out, true);
+    $("readerMeta").textContent = item.source + " · " + relTime(item.time) + " · ID";
+  } catch (e) {
+    if (my === readerToken) {
+      $("readerMeta").textContent = item.source + " · " + relTime(item.time) +
+        " · terjemahan gagal, teks asli ditampilkan";
+    }
+  }
+}
 
 /* ================= Tab Lainnya ================= */
 if (window.AndroidBridge && window.AndroidBridge.openServer) {
