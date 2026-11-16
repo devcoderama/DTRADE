@@ -11,6 +11,11 @@ mengeksekusi order hanya setelah lolos **manajemen risiko** yang ketat.
 > trading. Fitur dapat berubah sewaktu-waktu, dan hasil analisisnya **belum
 > teruji untuk perdagangan dengan dana riil** — bawaan pabriknya berjalan di
 > **testnet + mode dry-run (simulasi)**. Jangan gunakan dengan dana riil.
+>
+> 🗺️ **Cakupan saat ini & roadmap.** Saat ini DTRADE hanya bisa dipakai untuk
+> trading **Binance Futures**. Ke depannya akan ditambahkan market lain:
+> **Spot, saham, forex, dan lainnya** — nama DTRADE dipilih agar tidak
+> terikat pada satu market saja.
 
 Tersedia dalam dua antarmuka di atas core yang sama:
 
