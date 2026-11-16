@@ -103,6 +103,10 @@
   .dside.neu{color:#c3cad4}
   .drow small{color:var(--muted);margin-left:auto}
   .dmore{font-size:.75rem;color:var(--muted);padding-top:5px}
+  /* ===== Tombol bagikan analisis (v1.19.0) ===== */
+  .sharebtn{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:12px;
+    background:var(--gold);color:#181a20;border:none;border-radius:10px;
+    font-size:.92rem;font-weight:800;cursor:pointer}
   .asfield{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:12px;color:var(--text);font-size:.95rem;margin:6px 0 14px}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
@@ -278,6 +282,7 @@
     <div id="plan"></div>
     <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
   </div>
+  <button class="sharebtn" id="btnShare"><i class="fa-solid fa-share-nodes"></i> Bagikan analisis — gambar + teks</button>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
   <div class="foot" id="dFoot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
   Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
@@ -358,7 +363,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.18.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.19.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1539,6 +1544,8 @@ $("digestList").addEventListener("click", ev2 => {
 let currentSymbol = null, currentInterval = "1h", detailTimer = null;
 let detailKlines = [];
 let tradePlan = null;   // {side, entry, tp, sl, atr} — dihitung ulang tiap candle ditutup
+let lastAnalysis = null;   // hasil renderAnalysis terakhir, untuk Bagikan (v1.19.0)
+let mtfLastData = null;    // data panel multi-timeframe terakhir, untuk Bagikan
 let ws = null, wsOpen = false, wsRetry = 0, wsTimer = null, drawQueued = false;
 
 const WS_BASES = {
@@ -1584,6 +1591,8 @@ async function openDetail(symbol, mkt) {
   /* Bersihkan panel multi-timeframe dari simbol sebelumnya (v1.17.0). */
   $("mtfRow").innerHTML = '<div class="status" style="padding:2px 0">Menghitung skor antar-timeframe…</div>';
   $("mtfNote").textContent = "";
+  lastAnalysis = null;
+  mtfLastData = null;
   window.scrollTo(0, 0);
   await loadDetail(false, true);
   startDetailTimer();
@@ -1729,6 +1738,7 @@ async function loadMtf() {
   if (!row) return;
   const paint = data => {
     if (my !== mtfToken || currentSymbol !== sym) return;
+    mtfLastData = { key, data: Object.assign({}, data) };
     const activeTf = mkt === "stock" ? stockInterval : currentInterval;
     row.innerHTML = tfs.map(tf => {
       const o = data[tf];
@@ -1788,6 +1798,199 @@ async function loadMtf() {
   }
 }
 
+/* ================= Bagikan analisis — gambar + teks (v1.19.0) =================
+   Tombol Bagikan merender kartu sinyal (canvas 1080×1350) dan teks
+   ringkasan dari analisis yang sedang tampil, lalu menyerahkannya ke
+   panel berbagi Android lewat jembatan — pengguna bebas memilih
+   WhatsApp, Telegram, atau aplikasi lain. */
+function shareSymbolLabel() {
+  if (detailMarket === "stock" && detailEntry) {
+    return detailEntry.ticker + " (" + detailEntry.symbol + ")";
+  }
+  return currentSymbol;
+}
+function shareMarketLabel() {
+  if (detailMarket === "stock") {
+    return lastMarket === "idx" ? "Bursa Indonesia (IDX)" : "Saham Global";
+  }
+  return "Binance Futures · " + network;
+}
+function shareTfLabel() { return detailMarket === "stock" ? stockInterval : currentInterval; }
+function emaPosisi(o, price) {
+  if (o.ema20 == null || o.ema50 == null) return null;
+  if (price >= o.ema20 && price >= o.ema50) return "Harga di atas EMA20 & EMA50";
+  if (price <= o.ema20 && price <= o.ema50) return "Harga di bawah EMA20 & EMA50";
+  return "Harga di antara EMA20 & EMA50";
+}
+function buildShareText() {
+  const a = lastAnalysis;
+  if (!a) return "";
+  const o = a.oc, raw = a.raw;
+  const panah = o.side === "LONG" ? "📈" : o.side === "SHORT" ? "📉" : "➡️";
+  const L = [];
+  L.push(panah + " " + shareSymbolLabel() + " — " + o.side +
+    " · skor " + (o.score > 0 ? "+" : "") + o.score);
+  L.push("🏛️ " + shareMarketLabel() + " · timeframe " + shareTfLabel());
+  L.push("💰 Harga: " + fmtActive(a.price));
+  L.push("");
+  L.push("Indikator:");
+  if (raw.rsi !== null) L.push("• RSI (14): " + raw.rsi.toFixed(1));
+  if (raw.macd) L.push("• MACD histogram: " + (raw.macd.hist >= 0 ? "positif (momentum naik)" : "negatif (momentum turun)"));
+  const ep = emaPosisi(raw, a.price);
+  if (ep) L.push("• " + ep);
+  if (a.adj && a.adj.volRatio !== null) L.push("• Volume: " + a.adj.volRatio.toFixed(2) + "× rataan 20 candle");
+  if (tradePlan && o.side !== "NETRAL") {
+    const dir = tradePlan.side === "SHORT" ? -1 : 1;
+    const tpP = dir * (tradePlan.tp - tradePlan.entry) / tradePlan.entry * 100;
+    const slP = dir * (tradePlan.sl - tradePlan.entry) / tradePlan.entry * 100;
+    L.push("");
+    L.push("Rencana indikatif (ATR):");
+    L.push("• Entry: " + fmtActive(tradePlan.entry));
+    L.push("• TP: " + fmtActive(tradePlan.tp) + " (" + (tpP >= 0 ? "+" : "") + tpP.toFixed(1) + "%)");
+    L.push("• SL: " + fmtActive(tradePlan.sl) + " (" + (slP >= 0 ? "+" : "") + slP.toFixed(1) + "%) · R:R 1:1.67");
+  }
+  if (mtfLastData && mtfLastData.key === detailMarket + ":" + currentSymbol) {
+    const tfs = detailMarket === "stock" ? MTF_STOCK : MTF_CRYPTO;
+    const parts = tfs.map(tf => {
+      const mo = mtfLastData.data[tf];
+      return mo ? tf + " " + mo.side + " " + (mo.score > 0 ? "+" : "") + mo.score : null;
+    }).filter(Boolean);
+    if (parts.length) { L.push(""); L.push("Multi-timeframe: " + parts.join(" · ")); }
+  }
+  if (o.reasons && o.reasons.length) {
+    L.push("");
+    L.push("Alasan utama:");
+    o.reasons.slice(0, 3).forEach(r => L.push("• " + r));
+  }
+  L.push("");
+  L.push("Sinyal teknikal murni — bukan saran keuangan.");
+  L.push("Dibuat dengan D TRADE · " + new Date().toLocaleString("id-ID",
+    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB");
+  return L.join("\n");
+}
+function rrPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawShareCard() {
+  const a = lastAnalysis;
+  if (!a) return "";
+  const o = a.oc, raw = a.raw;
+  const W = 1080, H = 1480;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const gold = "#f0b90b", green = "#0ecb81", red = "#f6465d",
+    mut = "#8a93a3", panel = "#151a21", line = "#2a3038";
+  const sideCol = o.side === "LONG" ? green : o.side === "SHORT" ? red : "#5b6472";
+  ctx.fillStyle = "#0b0e13"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = gold; ctx.fillRect(0, 0, W, 10);
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = gold; ctx.font = "800 46px sans-serif";
+  ctx.fillText("D TRADE", 64, 96);
+  ctx.fillStyle = mut; ctx.font = "30px sans-serif"; ctx.textAlign = "right";
+  ctx.fillText(new Date().toLocaleString("id-ID",
+    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), W - 64, 96);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffffff"; ctx.font = "800 96px sans-serif";
+  ctx.fillText(detailMarket === "stock" && detailEntry ? detailEntry.ticker :
+    currentSymbol.replace("USDT", ""), 64, 236);
+  ctx.fillStyle = mut; ctx.font = "34px sans-serif";
+  ctx.fillText(shareMarketLabel() + " · timeframe " + shareTfLabel() +
+    (detailMarket === "stock" && detailEntry ? " · " + detailEntry.name : " · /USDT"), 64, 292);
+  /* Lencana sisi + batang skor */
+  rrPath(ctx, 64, 340, 460, 118, 18);
+  ctx.fillStyle = sideCol; ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.font = "800 58px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(o.side + "  " + (o.score > 0 ? "+" : "") + o.score, 64 + 230, 420);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#1c2129"; ctx.fillRect(64, 492, W - 128, 24);
+  ctx.fillStyle = sideCol;
+  ctx.fillRect(64, 492, Math.max(8, Math.abs(o.score) / 100 * (W - 128)), 24);
+  ctx.fillStyle = mut; ctx.font = "28px sans-serif";
+  ctx.fillText("Skor teknikal −100 … +100", 64, 556);
+  /* Harga */
+  ctx.fillStyle = mut; ctx.font = "30px sans-serif";
+  ctx.fillText("Harga terakhir", 64, 640);
+  ctx.fillStyle = "#ffffff"; ctx.font = "800 72px sans-serif";
+  ctx.fillText(fmtActive(a.price), 64, 716);
+  /* Kotak indikator 2×2 */
+  const inds = [
+    ["RSI (14)", raw.rsi !== null ? raw.rsi.toFixed(1) : "—"],
+    ["MACD hist.", raw.macd ? (raw.macd.hist >= 0 ? "Positif" : "Negatif") : "—"],
+    ["EMA20", raw.ema20 != null ? fmtActive(raw.ema20) : "—"],
+    ["EMA50", raw.ema50 != null ? fmtActive(raw.ema50) : "—"]
+  ];
+  inds.forEach((it, i) => {
+    const x = 64 + (i % 2) * 484, y = 764 + Math.floor(i / 2) * 118;
+    rrPath(ctx, x, y, 468, 102, 14);
+    ctx.fillStyle = panel; ctx.fill();
+    ctx.strokeStyle = line; ctx.stroke();
+    ctx.fillStyle = mut; ctx.font = "26px sans-serif";
+    ctx.fillText(it[0], x + 24, y + 40);
+    ctx.fillStyle = "#ffffff"; ctx.font = "700 36px sans-serif";
+    ctx.fillText(it[1], x + 24, y + 84);
+  });
+  let y = 764 + 2 * 118 + 30;
+  /* Rencana */
+  if (tradePlan && o.side !== "NETRAL") {
+    rrPath(ctx, 64, y, W - 128, 120, 14);
+    ctx.fillStyle = panel; ctx.fill();
+    ctx.strokeStyle = gold; ctx.stroke();
+    ctx.fillStyle = "#ffffff"; ctx.font = "700 34px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("Entry " + fmtActive(tradePlan.entry) + "   ·   TP " +
+      fmtActive(tradePlan.tp) + "   ·   SL " + fmtActive(tradePlan.sl), W / 2, y + 74);
+    ctx.textAlign = "left";
+    y += 150;
+  }
+  /* Multi-timeframe */
+  if (mtfLastData && mtfLastData.key === detailMarket + ":" + currentSymbol) {
+    const tfs = detailMarket === "stock" ? MTF_STOCK : MTF_CRYPTO;
+    ctx.fillStyle = mut; ctx.font = "28px sans-serif";
+    ctx.fillText("Multi-timeframe", 64, y + 28);
+    tfs.forEach((tf, i) => {
+      const mo = mtfLastData.data[tf];
+      const x = 64 + i * 244;
+      rrPath(ctx, x, y + 48, 228, 96, 12);
+      ctx.fillStyle = panel; ctx.fill();
+      ctx.strokeStyle = line; ctx.stroke();
+      ctx.fillStyle = mut; ctx.font = "700 26px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(tf, x + 114, y + 82);
+      ctx.fillStyle = !mo ? mut : mo.side === "LONG" ? green : mo.side === "SHORT" ? red : "#c3cad4";
+      ctx.font = "800 30px sans-serif";
+      ctx.fillText(mo ? mo.side + " " + (mo.score > 0 ? "+" : "") + mo.score : "…", x + 114, y + 120);
+    });
+    ctx.textAlign = "left";
+    y += 48 + 96 + 30;
+  }
+  /* Kaki */
+  ctx.fillStyle = mut; ctx.font = "27px sans-serif";
+  ctx.fillText("Sinyal teknikal murni — bukan saran keuangan.", 64, H - 84);
+  ctx.fillStyle = gold; ctx.font = "700 27px sans-serif";
+  ctx.fillText("D TRADE · mode mandiri multi-market", 64, H - 44);
+  return cv.toDataURL("image/png");
+}
+$("btnShare").addEventListener("click", () => {
+  if (!lastAnalysis) return;
+  const text = buildShareText();
+  let img = "";
+  try { img = drawShareCard(); } catch (e) { /* bagikan teks saja */ }
+  if (window.AndroidBridge && window.AndroidBridge.shareAnalysis) {
+    AndroidBridge.shareAnalysis(text, img);
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => {});
+    const b = $("btnShare");
+    const lama = b.innerHTML;
+    b.innerHTML = "Teks analisis disalin ✓";
+    setTimeout(() => { b.innerHTML = lama; }, 2200);
+  }
+});
+
 function renderAnalysis() {
   if (!detailKlines.length) return;
   const s = detailMarket === "stock" ? detailEntry :
@@ -1843,6 +2046,8 @@ function renderAnalysis() {
     '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
   $("reasons").innerHTML = oc.reasons.map(r => "<li>" + r + "</li>").join("");
   buildPlan(oc, closes[closes.length - 1]);
+  /* Simpan hasil analisis terakhir untuk fitur Bagikan (v1.19.0). */
+  lastAnalysis = { oc, raw: o, price: closes[closes.length - 1], adj };
   drawChart(detailKlines);
 }
 

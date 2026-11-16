@@ -621,6 +621,53 @@ class MainActivity : Activity() {
             navDepth = depth
         }
 
+        /**
+         * Bagikan analisis (v1.19.0): teks ringkasan + gambar kartu
+         * (PNG base64 dari canvas halaman) lewat panel berbagi Android
+         * — pengguna bebas memilih WhatsApp, Telegram, atau aplikasi
+         * lain. Gambar disajikan ShareProvider dari cache aplikasi.
+         * Bila gambar gagal dibuat, teks saja yang dibagikan.
+         */
+        @JavascriptInterface
+        fun shareAnalysis(text: String, imageDataUrl: String) {
+            var uri: android.net.Uri? = null
+            if (imageDataUrl.startsWith("data:image/png;base64,")) {
+                try {
+                    val bytes = android.util.Base64.decode(
+                        imageDataUrl.substringAfter("base64,"),
+                        android.util.Base64.DEFAULT
+                    )
+                    val dir = java.io.File(cacheDir, "share")
+                    dir.mkdirs()
+                    java.io.File(dir, "analisis.png").writeBytes(bytes)
+                    uri = android.net.Uri.parse(
+                        "content://com.devcoderama.dtrade.share/analisis.png")
+                } catch (e: Exception) {
+                    uri = null
+                }
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                if (uri != null) {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } else {
+                    type = "text/plain"
+                }
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            runOnUiThread {
+                try {
+                    startActivity(Intent.createChooser(intent, "Bagikan analisis"))
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this@MainActivity, "Tidak ada aplikasi untuk berbagi",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
         @JavascriptInterface
         fun openServer() {
             webView.post { loadHome() }

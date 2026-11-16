@@ -21,6 +21,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Berbagi kartu analisis sebagai gambar (v1.19.0) -->
+        <provider
+            android:name=".ShareProvider"
+            android:authorities="com.devcoderama.dtrade.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 
 </manifest>
