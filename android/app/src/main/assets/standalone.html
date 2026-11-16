@@ -78,6 +78,17 @@
   .favtog.on{color:var(--gold);border-color:var(--gold)}
   .favbtn.on{color:var(--gold)}
   .favempty{padding:22px 18px;color:var(--muted);font-size:13px;text-align:center;line-height:1.55}
+  /* ===== Ringkasan multi-timeframe (v1.17.0) ===== */
+  .mtfrow{display:flex;gap:8px;flex-wrap:wrap}
+  .mtfchip{flex:1;min-width:70px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:8px 6px;text-align:center}
+  .mtfchip .tf{font-size:.7rem;color:var(--muted);font-weight:700;letter-spacing:.04em}
+  .mtfchip .sd{font-size:.86rem;font-weight:800;margin:2px 0}
+  .mtfchip .sc{font-size:.72rem;color:var(--muted)}
+  .mtfchip.long .sd{color:var(--green)}
+  .mtfchip.short .sd{color:var(--red)}
+  .mtfchip.neu .sd{color:#c3cad4}
+  .mtfchip.act{border-color:var(--gold)}
   .asfield{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:12px;color:var(--text);font-size:.95rem;margin:6px 0 14px}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
@@ -236,6 +247,10 @@
   </div>
   <div class="chartbox"><canvas id="chart" height="340"></canvas></div>
   <div class="verdict" id="verdict"></div>
+  <div class="reasons" id="mtfBox"><h4>Multi-Timeframe</h4>
+    <div class="mtfrow" id="mtfRow"><div class="status" style="padding:2px 0">Menghitung skor antar-timeframe…</div></div>
+    <div class="lbl" id="mtfNote" style="font-size:.78rem;color:var(--muted);margin-top:6px"></div>
+  </div>
   <div class="stats" id="stats"></div>
   <div class="reasons hidden" id="obBox"><h4>Orderbook — Bid / Offer teratas</h4>
     <div id="obBody"><div class="status" style="padding:2px 0">Memuat antrean…</div></div>
@@ -324,7 +339,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.16.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.17.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1457,6 +1472,9 @@ async function openDetail(symbol, mkt) {
   $("detailView").classList.add("open");
   syncNavDepth();
   paintDetailFav();
+  /* Bersihkan panel multi-timeframe dari simbol sebelumnya (v1.17.0). */
+  $("mtfRow").innerHTML = '<div class="status" style="padding:2px 0">Menghitung skor antar-timeframe…</div>';
+  $("mtfNote").textContent = "";
   window.scrollTo(0, 0);
   await loadDetail(false, true);
   startDetailTimer();
@@ -1507,6 +1525,7 @@ function renderDetailTabs() {
 }
 function teardownDetail() {
   currentSymbol = null;
+  mtfToken++;
   if (detailTimer) clearInterval(detailTimer);
   stopWs();
   $("detailView").classList.remove("open");
@@ -1553,6 +1572,7 @@ async function loadDetail(keepScroll, restartWs) {
       drawChart(detailKlines);
       renderAnalysis();
       renderRelatedNews();
+      loadMtf();
       refreshStockQuote();
       if (!keepScroll) window.scrollTo(0, 0);
     } catch (err) {
@@ -1574,12 +1594,91 @@ async function loadDetail(keepScroll, restartWs) {
     drawChart(detailKlines);
     renderAnalysis();
     renderRelatedNews();
+    loadMtf();
     if (restartWs) connectWs();
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (e) {
     $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + e.message + "</div>";
   }
 }
+/* ================= Ringkasan multi-timeframe (v1.17.0) =================
+   Skor teknikal yang sama dihitung untuk 4 timeframe sekaligus agar
+   keselarasan arah terlihat tanpa ganti-ganti tab. Hasil disimpan
+   per simbol selama 5 menit; timeframe aktif memakai candle yang
+   sudah dimuat halaman. */
+const MTF_CRYPTO = ["15m", "1h", "4h", "1d"];
+const MTF_STOCK = ["1h", "1d", "1wk", "1mo"];
+const mtfCache = {};   // "pasar:simbol" -> { ts, data: {tf: scoreObj|null} }
+let mtfToken = 0;
+async function loadMtf() {
+  const my = ++mtfToken;
+  const sym = currentSymbol, mkt = detailMarket;
+  if (!sym) return;
+  const tfs = mkt === "stock" ? MTF_STOCK : MTF_CRYPTO;
+  const key = mkt + ":" + sym;
+  const row = $("mtfRow"), note = $("mtfNote");
+  if (!row) return;
+  const paint = data => {
+    if (my !== mtfToken || currentSymbol !== sym) return;
+    const activeTf = mkt === "stock" ? stockInterval : currentInterval;
+    row.innerHTML = tfs.map(tf => {
+      const o = data[tf];
+      const cls = !o ? "neu" : o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+      return '<div class="mtfchip ' + cls + (tf === activeTf ? " act" : "") + '">' +
+        '<div class="tf">' + tf + (tf === activeTf ? " · aktif" : "") + "</div>" +
+        '<div class="sd">' + (o ? o.side : "…") + "</div>" +
+        '<div class="sc">' + (o ? "skor " + (o.score > 0 ? "+" : "") + o.score : "menghitung") +
+        "</div></div>";
+    }).join("");
+    const got = tfs.map(tf => data[tf]).filter(Boolean);
+    if (!got.length) { note.textContent = ""; return; }
+    const L = got.filter(o => o.side === "LONG").length;
+    const S = got.filter(o => o.side === "SHORT").length;
+    note.textContent =
+      L >= 3 ? "Selaras: " + L + " dari " + tfs.length + " timeframe mengarah LONG." :
+      S >= 3 ? "Selaras: " + S + " dari " + tfs.length + " timeframe mengarah SHORT." :
+      (L && S) ? "Terbelah: " + L + " LONG vs " + S + " SHORT antar-timeframe — sinyal campuran, lebih hati-hati." :
+      L > S ? "Cenderung LONG: " + L + " dari " + tfs.length + " timeframe LONG, sisanya NETRAL." :
+      S > L ? "Cenderung SHORT: " + S + " dari " + tfs.length + " timeframe SHORT, sisanya NETRAL." :
+      "Mayoritas NETRAL antar-timeframe — belum ada arah yang dominan.";
+  };
+  const hit = mtfCache[key];
+  if (hit && Date.now() - hit.ts < 300000) { paint(hit.data); return; }
+  const data = {};
+  paint(data);
+  const scoreOf = kl => kl && kl.length >= 55 ? scoreSymbol(
+    kl.map(k => parseFloat(k[4])), kl.map(k => parseFloat(k[2])),
+    kl.map(k => parseFloat(k[3]))) : null;
+  await Promise.all(tfs.map(async tf => {
+    try {
+      if (mkt === "stock") {
+        const activeTf = stockInterval;
+        if (tf === activeTf && detailKlines.length >= 55) {
+          data[tf] = scoreOf(detailKlines);
+        } else {
+          const def = STOCK_TFS.find(t => t.id === tf);
+          const got = await fetchYahoo(detailEntry, def.iv, def.range);
+          let kl = got.candles;
+          if (def.agg) kl = aggregateCandles(kl, def.agg);
+          data[tf] = scoreOf(kl.slice(-KLINE_LIMIT));
+        }
+      } else {
+        if (tf === currentInterval && detailKlines.length >= 55) {
+          data[tf] = scoreOf(detailKlines);
+        } else {
+          const kl = await api("/fapi/v1/klines?symbol=" + sym +
+            "&interval=" + tf + "&limit=" + KLINE_LIMIT);
+          data[tf] = scoreOf(kl);
+        }
+      }
+    } catch (e) { data[tf] = null; }
+    paint(data);
+  }));
+  if (my === mtfToken && currentSymbol === sym) {
+    mtfCache[key] = { ts: Date.now(), data };
+  }
+}
+
 function renderAnalysis() {
   if (!detailKlines.length) return;
   const s = detailMarket === "stock" ? detailEntry :
