@@ -502,7 +502,7 @@
     <button data-tool="hline" class="dtool"><i class="fa-solid fa-minus"></i> Datar</button>
     <button data-tool="rect" class="dtool"><i class="fa-regular fa-square"></i> Kotak</button>
     <button data-tool="free" class="dtool"><i class="fa-solid fa-pen"></i> Bebas</button>
-    <button data-tool="move" class="dtool"><i class="fa-solid fa-arrows-up-down-left-right"></i> Geser</button>
+    <button data-tool="cursor" class="dtool"><i class="fa-solid fa-arrow-pointer"></i> Kursor</button>
     <button data-tool="erase" class="dtool"><i class="fa-solid fa-eraser"></i> Hapus</button>
     <button id="drawColorBtn" class="dtool"><span id="drawColorDot"></span> Warna</button>
     <button id="drawUndo" class="dtool" title="Urungkan gambar terakhir"><i class="fa-solid fa-rotate-left"></i></button>
@@ -4184,13 +4184,14 @@ let chartGeom = { main: null, fs: null };
 let fsOpen = false;
 let drawMode = false, drawTool = "trend", drawColor = "#f0b90b";
 let drawings = [], drawPending = null, drawPreview = null, drawKeyCur = "";
+let drawSel = -1; // indeks gambar terpilih (alat Kursor, v1.32.3)
 const DRAW_COLORS = ["#f0b90b", "#4f8ff7", "#0ecb81", "#f6465d", "#e8ecf1"];
 const DRAW_HINTS = {
   trend: "Garis tren: ketuk titik awal, lalu ketuk titik akhir pada grafik.",
   hline: "Garis datar: ketuk sekali pada level harga yang diinginkan.",
   rect: "Kotak zona: ketuk sudut pertama, lalu ketuk sudut berlawanan.",
   free: "Gambar bebas: sentuh dan geser jari di atas grafik.",
-  move: "Geser: sentuh gambar lalu seret untuk memindahkannya; seret titik ujung garis/kotak untuk mengubah bentuknya.",
+  cursor: "Kursor: ketuk gambar untuk memilihnya. Seret badannya untuk memindah, seret titik ujung untuk mengubah bentuk, seret gagang putar di atas titik tengah untuk memutar (menempel tiap 15°). Garis datar tidak bisa diputar.",
   erase: "Hapus: ketuk gambar yang ingin dihapus (satu saja)."
 };
 
@@ -4260,6 +4261,7 @@ function loadDrawings() {
   catch (e) { drawings = []; }
   if (!Array.isArray(drawings)) drawings = [];
   drawPending = null; drawPreview = null;
+  drawSel = -1;
 }
 function saveDrawings() {
   try { localStorage.setItem(drawKeyCur, JSON.stringify(drawings)); } catch (e) {}
@@ -4326,12 +4328,24 @@ function paintDrawLayer(ov, base, g) {
       ctx.lineTo(xForT(g, d.pts[1].t), g.y(d.pts[1].p));
       ctx.stroke();
     } else if (d.type === "rect" && d.pts.length >= 2) {
-      const x1 = xForT(g, d.pts[0].t), x2 = xForT(g, d.pts[1].t);
-      const y1 = g.y(d.pts[0].p), y2 = g.y(d.pts[1].p);
-      ctx.globalAlpha = 0.13;
-      ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
-      ctx.globalAlpha = 1;
-      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      if (d.pts.length === 4) {
+        // Kotak yang sudah diputar: poligon 4 sudut (v1.32.3).
+        ctx.beginPath();
+        d.pts.forEach((pt, i) => {
+          const xx = xForT(g, pt.t), yy = g.y(pt.p);
+          if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+        });
+        ctx.closePath();
+        ctx.globalAlpha = 0.13; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.stroke();
+      } else {
+        const x1 = xForT(g, d.pts[0].t), x2 = xForT(g, d.pts[1].t);
+        const y1 = g.y(d.pts[0].p), y2 = g.y(d.pts[1].p);
+        ctx.globalAlpha = 0.13;
+        ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+        ctx.globalAlpha = 1;
+        ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      }
     } else if (d.type === "free" && d.pts.length >= 2) {
       ctx.beginPath();
       d.pts.forEach((pt, i) => {
@@ -4349,6 +4363,83 @@ function paintDrawLayer(ov, base, g) {
       }
     }
   }
+  /* Pilihan alat Kursor (v1.32.3): gambar terpilih diberi cahaya
+     penanda, titik pegangan, titik tengah, dan gagang putar. */
+  if (drawMode && drawTool === "cursor" && drawSel >= 0 && drawings[drawSel]) {
+    const d = drawings[drawSel];
+    const ps = d.pts.map(pt => ({ x: xForT(g, pt.t), y: g.y(pt.p) }));
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 6;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    if (d.type === "hline") {
+      ctx.moveTo(0, ps[0].y); ctx.lineTo(g.W - g.labelW, ps[0].y);
+    } else if (d.type === "rect" && ps.length === 2) {
+      ctx.rect(Math.min(ps[0].x, ps[1].x), Math.min(ps[0].y, ps[1].y),
+        Math.abs(ps[1].x - ps[0].x), Math.abs(ps[1].y - ps[0].y));
+    } else {
+      ps.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+      if (d.type === "rect") ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.restore();
+    const hp = rotHandlePos(g, d);
+    if (d.type !== "hline") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(240,185,11,.85)";
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(hp.cx, hp.cy); ctx.lineTo(hp.x, hp.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(hp.x, hp.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "#151a21"; ctx.fill();
+      ctx.lineWidth = 1.8; ctx.strokeStyle = "#f0b90b"; ctx.stroke();
+      ctx.beginPath(); ctx.arc(hp.x, hp.y, 4.6, -0.4, Math.PI * 1.25); ctx.stroke();
+      const ax = hp.x + Math.cos(Math.PI * 1.25) * 4.6, ay = hp.y + Math.sin(Math.PI * 1.25) * 4.6;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay); ctx.lineTo(ax - 1, ay - 5); ctx.lineTo(ax + 5, ay - 2); ctx.closePath();
+      ctx.fillStyle = "#f0b90b"; ctx.fill();
+      ctx.restore();
+      if (drawDrag && drawDrag.mode === "rotate") {
+        ctx.save();
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillStyle = "#f0b90b";
+        ctx.textAlign = "center";
+        ctx.fillText(Math.round(drawDrag.angle || 0) + "°", hp.cx, hp.cy - 46);
+        ctx.restore();
+      }
+    }
+    const handlePts = d.type === "free" ? [] : ps;
+    for (const p of handlePts) {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff"; ctx.fill();
+      ctx.lineWidth = 1.6; ctx.strokeStyle = "#0b0e11"; ctx.stroke();
+    }
+    if (d.type === "hline") {
+      const p = { x: (g.W - g.labelW) / 2, y: ps[0].y };
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff"; ctx.fill();
+      ctx.lineWidth = 1.6; ctx.strokeStyle = "#0b0e11"; ctx.stroke();
+    }
+    ctx.fillStyle = "#f0b90b";
+    ctx.fillRect(hp.cx - 3.5, hp.cy - 3.5, 7, 7);
+    ctx.lineWidth = 1.2; ctx.strokeStyle = "#0b0e11";
+    ctx.strokeRect(hp.cx - 3.5, hp.cy - 3.5, 7, 7);
+  }
+}
+/* Posisi gagang putar alat Kursor (v1.32.3): 30px di atas titik
+   tengah gambar (di bawahnya bila terlalu dekat tepi atas). Satu
+   fungsi dipakai lukisan dan uji ketuk agar selalu sama. */
+function rotHandlePos(g, d) {
+  const ps = d.pts.map(pt => ({ x: xForT(g, pt.t), y: g.y(pt.p) }));
+  let cx, cy;
+  if (d.type === "hline") { cx = (g.W - g.labelW) / 2; cy = ps[0].y; }
+  else {
+    cx = ps.reduce((s, p) => s + p.x, 0) / ps.length;
+    cy = ps.reduce((s, p) => s + p.y, 0) / ps.length;
+  }
+  return { cx, cy, x: cx, y: cy - 30 >= 6 ? cy - 30 : cy + 30 };
 }
 /* Uji ketuk untuk alat Geser/Hapus (v1.26.0): jarak piksel dari
    titik ketuk ke gambar terdekat; titik ujung garis/kotak bisa
@@ -4376,6 +4467,13 @@ function hitDrawing(g, x, y) {
       if (epd <= 13) cand = { idx, ptIdx: ep, dist: epd };
       else if (d.type === "trend") {
         cand = { idx, ptIdx: null, dist: segDist(x, y, ps[0].x, ps[0].y, ps[1].x, ps[1].y) };
+      } else if (d.type === "rect" && ps.length === 4) {
+        let md = Infinity;
+        for (let i = 0; i < 4; i++) {
+          const a = ps[i], b = ps[(i + 1) % 4];
+          md = Math.min(md, segDist(x, y, a.x, a.y, b.x, b.y));
+        }
+        cand = { idx, ptIdx: null, dist: md };
       } else {
         const inX = x >= Math.min(ps[0].x, ps[1].x) - 4 && x <= Math.max(ps[0].x, ps[1].x) + 4;
         const inY = y >= Math.min(ps[0].y, ps[1].y) - 4 && y <= Math.max(ps[0].y, ps[1].y) + 4;
@@ -4409,12 +4507,65 @@ function attachDrawHandlers(ov, which) {
     const tp = { t: tForX(g, p0.x), p: priceForY(g, p0.y) };
     if (drawTool === "erase") {
       const hit = hitDrawing(g, p0.x, p0.y);
-      if (hit) { drawings.splice(hit.idx, 1); saveDrawings(); renderDrawings(); }
+      if (hit) {
+        drawings.splice(hit.idx, 1);
+        if (drawSel === hit.idx) drawSel = -1;
+        else if (drawSel > hit.idx) drawSel--;
+        saveDrawings(); renderDrawings();
+      }
       return;
     }
-    if (drawTool === "move") {
+    if (drawTool === "cursor") {
+      const sel = drawSel >= 0 ? drawings[drawSel] : null;
+      if (sel && sel.type !== "hline") {
+        // Gagang putar gambar terpilih didahulukan.
+        const hp = rotHandlePos(g, sel);
+        if (Math.hypot(p0.x - hp.x, p0.y - hp.y) <= 13) {
+          if (sel.type === "rect" && sel.pts.length === 2) {
+            // Kotak sumbu-sejajar diperluas menjadi 4 sudut agar
+            // hasil putarannya tergambar dengan benar.
+            const ax = xForT(g, sel.pts[0].t), ay = g.y(sel.pts[0].p);
+            const bx = xForT(g, sel.pts[1].t), by = g.y(sel.pts[1].p);
+            sel.pts = [
+              { t: tForX(g, ax), p: priceForY(g, ay) },
+              { t: tForX(g, bx), p: priceForY(g, ay) },
+              { t: tForX(g, bx), p: priceForY(g, by) },
+              { t: tForX(g, ax), p: priceForY(g, by) }
+            ];
+          }
+          const hp2 = rotHandlePos(g, sel);
+          drawDrag = {
+            mode: "rotate", idx: drawSel, cx: hp2.cx, cy: hp2.cy,
+            a0: Math.atan2(p0.y - hp2.cy, p0.x - hp2.cx),
+            snap: sel.pts.map(pt => ({ x: xForT(g, pt.t), y: g.y(pt.p) })),
+            angle: 0
+          };
+          renderDrawings();
+          return;
+        }
+        // Titik pegangan gambar terpilih: ubah bentuk.
+        if (sel.type !== "free") {
+          const selPs = sel.pts.map(pt => ({ x: xForT(g, pt.t), y: g.y(pt.p) }));
+          for (let i = 0; i < selPs.length; i++) {
+            if (Math.hypot(p0.x - selPs[i].x, p0.y - selPs[i].y) <= 12) {
+              drawDrag = { idx: drawSel, ptIdx: i, last: tp };
+              return;
+            }
+          }
+        }
+      }
+      if (sel && sel.type === "hline" && Math.abs(p0.y - g.y(sel.pts[0].p)) <= 11) {
+        drawDrag = { idx: drawSel, ptIdx: 0, last: tp };
+        return;
+      }
       const hit = hitDrawing(g, p0.x, p0.y);
-      if (hit) drawDrag = { idx: hit.idx, ptIdx: hit.ptIdx, last: tp };
+      if (hit) {
+        drawSel = hit.idx;
+        drawDrag = { idx: hit.idx, ptIdx: null, last: tp };
+      } else {
+        drawSel = -1;
+      }
+      renderDrawings();
       return;
     }
     if (drawTool === "hline") {
@@ -4442,7 +4593,21 @@ function attachDrawHandlers(ov, which) {
     if (drawDrag) {
       const d = drawings[drawDrag.idx];
       if (d) {
-        if (drawDrag.ptIdx !== null && drawDrag.ptIdx !== undefined) {
+        if (drawDrag.mode === "rotate") {
+          let ang = Math.atan2(p0.y - drawDrag.cy, p0.x - drawDrag.cx) - drawDrag.a0;
+          const deg = ang * 180 / Math.PI;
+          const snapped = Math.round(deg / 15) * 15;
+          if (Math.abs(deg - snapped) <= 3.5) ang = snapped * Math.PI / 180;
+          drawDrag.angle = ang * 180 / Math.PI;
+          const cos = Math.cos(ang), sin = Math.sin(ang);
+          d.pts = drawDrag.snap.map(sp => {
+            const dx = sp.x - drawDrag.cx, dy = sp.y - drawDrag.cy;
+            return {
+              t: tForX(g, drawDrag.cx + dx * cos - dy * sin),
+              p: priceForY(g, drawDrag.cy + dx * sin + dy * cos)
+            };
+          });
+        } else if (drawDrag.ptIdx !== null && drawDrag.ptIdx !== undefined) {
           d.pts[drawDrag.ptIdx] = tp;
         } else {
           const dt = tp.t - drawDrag.last.t, dp = tp.p - drawDrag.last.p;
@@ -4600,6 +4765,15 @@ $("btnZoomOut").addEventListener("click", () => setZoom(viewN * 1.4, 1));
 $("btnZoomInFs").addEventListener("click", () => setZoom(viewN / 1.4, 1));
 $("btnZoomOutFs").addEventListener("click", () => setZoom(viewN * 1.4, 1));
 
+function selectDrawTool(name) {
+  drawTool = name;
+  drawPending = null; drawPreview = null;
+  if (name !== "cursor") drawSel = -1;
+  document.querySelectorAll("#drawTools [data-tool]").forEach(x =>
+    x.classList.toggle("on", x.dataset.tool === name));
+  $("drawHint").textContent = DRAW_HINTS[name];
+  renderDrawings();
+}
 function setDrawMode(on) {
   drawMode = on;
   drawPending = null; drawPreview = null;
@@ -4608,20 +4782,15 @@ function setDrawMode(on) {
   $("chartBox").classList.toggle("drawing", on);
   $("chartFs").classList.toggle("drawing", on);
   $("drawTools").classList.toggle("hidden", !on);
+  if (on) selectDrawTool("cursor");
+  else { drawSel = -1; drawDrag = null; }
   renderDrawings();
 }
 $("btnDraw").addEventListener("click", () => setDrawMode(!drawMode));
 $("btnDrawFs").addEventListener("click", () => setDrawMode(!drawMode));
 $("btnIndFs").addEventListener("click", openIndPanel);
 document.querySelectorAll("#drawTools [data-tool]").forEach(b => {
-  b.addEventListener("click", () => {
-    drawTool = b.dataset.tool;
-    drawPending = null; drawPreview = null;
-    document.querySelectorAll("#drawTools [data-tool]").forEach(x =>
-      x.classList.toggle("on", x === b));
-    $("drawHint").textContent = DRAW_HINTS[drawTool];
-    renderDrawings();
-  });
+  b.addEventListener("click", () => selectDrawTool(b.dataset.tool));
 });
 $("drawColorBtn").addEventListener("click", () => {
   const i = DRAW_COLORS.indexOf(drawColor);
@@ -4631,10 +4800,11 @@ $("drawColorBtn").addEventListener("click", () => {
 $("drawUndo").addEventListener("click", () => {
   if (drawPending) { drawPending = null; drawPreview = null; }
   else { drawings.pop(); saveDrawings(); }
+  if (drawSel >= drawings.length) drawSel = -1;
   renderDrawings();
 });
 $("drawClear").addEventListener("click", () => {
-  drawings = []; drawPending = null; drawPreview = null;
+  drawings = []; drawPending = null; drawPreview = null; drawSel = -1;
   saveDrawings(); renderDrawings();
 });
 /* Orientasi layar penuh (v1.26.0): potret atau lanskap (dirotasi

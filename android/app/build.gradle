@@ -20,8 +20,8 @@ android {
         applicationId "com.devcoderama.dtrade"
         minSdk 24
         targetSdk 34
-        versionCode 56
-        versionName "1.32.2"
+        versionCode 57
+        versionName "1.32.3"
     }
 
     signingConfigs {
