@@ -314,7 +314,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.13.2</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.14.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -872,11 +872,16 @@ function stockAdjustments() {
     }
   }
   const vols = detailKlines.map(k => parseFloat(k[5]) || 0);
-  if (vols.length >= 21) {
-    const avg = vols.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
+  if (vols.length >= 22) {
+    /* v1.14.0: candle terakhir yang masih berjalan sering bervolume 0
+       di data Yahoo (intraday IDX) sehingga rasio tampil 0.00× —
+       pakai candle sebelumnya yang sudah lengkap. */
+    let li = vols.length - 1;
+    if (vols[li] === 0) li -= 1;
+    const avg = vols.slice(li - 20, li).reduce((a, b) => a + b, 0) / 20;
     if (avg > 0) {
-      volRatio = vols[vols.length - 1] / avg;
-      const lk = detailKlines[detailKlines.length - 1];
+      volRatio = vols[li] / avg;
+      const lk = detailKlines[li];
       const up = parseFloat(lk[4]) >= parseFloat(lk[1]);
       if (volRatio >= 1.3) {
         const pts = up ? 5 : -5;
@@ -1247,7 +1252,10 @@ let lastMarket = "crypto";
 async function openDetail(symbol, mkt) {
   currentSymbol = symbol;
   lastSymbol = symbol;
-  lastMarket = mkt || "crypto";
+  /* v1.14.0: tanpa argumen pasar (mis. tab Analisis di navigasi bawah),
+     PERTAHANKAN pasar terakhir — sebelumnya saham selalu dibuka ulang
+     sebagai crypto dan gagal dimuat. */
+  lastMarket = mkt || lastMarket || "crypto";
   detailMarket = lastMarket === "crypto" ? "crypto" : "stock";
   detailEntry = detailMarket === "stock"
     ? (stockLists[lastMarket] || []).find(e => e.symbol === symbol) || null
@@ -1267,6 +1275,7 @@ async function openDetail(symbol, mkt) {
   }
   renderDetailTabs();
   $("detailView").classList.add("open");
+  syncNavDepth();
   window.scrollTo(0, 0);
   await loadDetail(false, true);
   startDetailTimer();
@@ -1776,6 +1785,16 @@ if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
 let currentTab = "pasar";
 let lastSymbol = null;
 const TAB_VIEWS = { pasar: "listView", berita: "newsView", lainnya: "moreView" };
+/* v1.14.0: laporkan kedalaman navigasi ke aplikasi Android agar
+   tombol Back mengikuti alur halaman (pembaca → detail → daftar),
+   bukan langsung keluar aplikasi. */
+function syncNavDepth() {
+  if (!(window.AndroidBridge && window.AndroidBridge.setNavDepth)) return;
+  let d = 0;
+  if (!$("readerView").classList.contains("hidden")) d = 2;
+  else if ($("detailView").classList.contains("open")) d = 1;
+  try { window.AndroidBridge.setNavDepth(d); } catch (e) { /* abaikan */ }
+}
 function showTab(name) {
   if (name === "analisis") { openDetail(lastSymbol || "BTCUSDT"); return; }
   currentTab = name;
@@ -1786,6 +1805,7 @@ function showTab(name) {
     b.classList.toggle("on", b.dataset.tab === name));
   if (name === "berita" && !newsLoaded) loadNews(false);
   window.scrollTo(0, 0);
+  syncNavDepth();
 }
 $("bottomNav").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
@@ -2105,14 +2125,19 @@ $("pq").addEventListener("input", renderPicker);
    ditampilkan bersih di dalam aplikasi. Bila ekstraksi gagal, tampilkan
    ringkasan RSS + tombol baca di situs asal. */
 let readerItem = null, readerParas = null, readerParasId = null, readerHero = "", readerToken = 0;
+let readerReturnTab = "berita";
 function openReader(item) {
   readerItem = item;
   readerParas = null;
   readerParasId = null;
   const my = ++readerToken;
+  /* v1.14.0: tombol kembali pembaca menuju tab asal — artikel yang
+     dibuka dari berita pendukung di Analisis kembali ke Analisis. */
+  readerReturnTab = $("detailView").classList.contains("open") ? "analisis" : "berita";
   Object.values(TAB_VIEWS).forEach(id => $(id).classList.add("hidden"));
   teardownDetail();
   $("readerView").classList.remove("hidden");
+  syncNavDepth();
   $("readerMeta").textContent = item.source + " · " + relTime(item.time);
   $("btnTranslate").style.color = translateOn ? "var(--gold)" : "var(--muted)";
   $("readerBody").innerHTML = '<h2 class="rtitle">' + escHtml(item.title) + "</h2>" +
@@ -2123,8 +2148,11 @@ function openReader(item) {
 function closeReader() {
   readerToken++;
   $("readerView").classList.add("hidden");
+  syncNavDepth();
 }
-$("btnReaderBack").addEventListener("click", () => { closeReader(); showTab("berita"); });
+/* Dipanggil tombol Back Android lewat jembatan native (v1.14.0). */
+window.__readerBack = function () { closeReader(); showTab(readerReturnTab); };
+$("btnReaderBack").addEventListener("click", () => { closeReader(); showTab(readerReturnTab); });
 $("btnReaderExt").addEventListener("click", () => { if (readerItem) openNewsLink(readerItem.link); });
 $("btnTranslate").addEventListener("click", async () => {
   translateOn = !translateOn;

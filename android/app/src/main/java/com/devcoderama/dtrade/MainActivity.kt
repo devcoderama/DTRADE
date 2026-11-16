@@ -4,6 +4,9 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import java.security.MessageDigest
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
@@ -51,11 +54,35 @@ class MainActivity : Activity() {
     /** Dialog pembaruan yang sedang tampil (untuk dibersihkan di onDestroy). */
     private var updateDialog: AlertDialog? = null
 
+    /** true bila verifikasi tanda tangan gagal — aplikasi diblokir total. */
+    private var tampered = false
+
+    /** Kedalaman navigasi halaman mandiri (0 daftar, 1 detail, 2 pembaca). */
+    @Volatile
+    private var navDepth = 0
+
     /** Isi assets/standalone.html, dibaca sekali lalu disimpan di memori. */
     private var standaloneHtml: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // v1.14.0: verifikasi keaslian APK SEBELUM apa pun dimuat.
+        // Aplikasi yang dimodifikasi (mod/repack) pasti ditandatangani
+        // ulang dengan kunci orang lain — tanda tangan tidak akan cocok
+        // dengan sertifikat rilis resmi, dan aplikasi berhenti di sini
+        // dengan dialog unduh versi resmi. Build debug (yang bisa
+        // diinspeksi) juga ditolak.
+        if (!signatureOk() ||
+            (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        ) {
+            tampered = true
+            val tv = TextView(this)
+            tv.text = "Aplikasi tidak resmi — unduh versi resmi D TRADE dari GitHub."
+            tv.setPadding(48, 96, 48, 48)
+            setContentView(tv)
+            showTamperDialog()
+            return
+        }
         // Cookie bersama untuk koneksi jembatan (HttpURLConnection) —
         // dibutuhkan sesi quote Yahoo Finance (cookie → crumb → quote)
         // untuk data Bid/Offer saham. Hanya cookie pihak-pertama dari
@@ -292,6 +319,62 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /**
+     * SHA-256 sertifikat penanda tangan APK ini harus sama persis
+     * dengan sertifikat rilis resmi (v1.14.0). Gagal membaca tanda
+     * tangan = dianggap tidak resmi (fail-closed).
+     */
+    private fun signatureOk(): Boolean {
+        return try {
+            val infos = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                packageManager.getPackageInfo(
+                    packageName, PackageManager.GET_SIGNING_CERTIFICATES
+                ).signingInfo?.apkContentsSigners?.map { it.toByteArray() }
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(
+                    packageName, PackageManager.GET_SIGNATURES
+                ).signatures?.map { it.toByteArray() }
+            } ?: return false
+            infos.any { sig ->
+                val digest = MessageDigest.getInstance("SHA-256").digest(sig)
+                digest.joinToString("") { "%02x".format(it) } ==
+                    OFFICIAL_CERT_SHA256
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Dialog pemblokir untuk APK modifikasi — hanya jalan keluar resmi. */
+    private fun showTamperDialog() {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle("Versi Tidak Resmi Terdeteksi")
+            .setMessage(
+                "Tanda tangan aplikasi ini tidak cocok dengan rilis resmi " +
+                    "D TRADE. Aplikasi kemungkinan telah dimodifikasi " +
+                    "(mod/repack) — versi seperti ini berisiko disusupi " +
+                    "iklan, malware, atau pencuri data.\n\n" +
+                    "Unduh versi resmi dari GitHub untuk melanjutkan."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Unduh Versi Resmi") { _, _ ->
+                try {
+                    startActivity(
+                        Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OFFICIAL_RELEASES_URL))
+                    )
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this, "Tidak ada browser untuk membuka unduhan",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                showTamperDialog()
+            }
+            .show()
+    }
+
     private fun serverUrl(): String {
         var url = prefs.getString(KEY_URL, DEFAULT_URL) ?: DEFAULT_URL
         if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
@@ -407,11 +490,28 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (tampered) {
+            super.onBackPressed()
+            return
+        }
+        // v1.14.0: tombol Back Android mengikuti navigasi internal
+        // halaman mandiri (pembaca → detail → daftar), bukan langsung
+        // keluar aplikasi.
+        if (standaloneMode && navDepth >= 2) {
+            webView.evaluateJavascript(
+                "if (window.__readerBack) window.__readerBack();", null)
+            return
+        }
+        if (standaloneMode && navDepth == 1) {
+            webView.evaluateJavascript("closeDetail()", null)
+            return
+        }
         if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        if (tampered) return
         outState.putBoolean(KEY_STANDALONE, standaloneMode)
         webView.saveState(outState)
     }
@@ -512,6 +612,15 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun getServerUrl(): String = serverUrl()
 
+        /**
+         * Laporan kedalaman navigasi halaman mandiri untuk tombol Back
+         * Android (v1.14.0): 0 daftar, 1 detail grafik, 2 pembaca berita.
+         */
+        @JavascriptInterface
+        fun setNavDepth(depth: Int) {
+            navDepth = depth
+        }
+
         @JavascriptInterface
         fun openServer() {
             webView.post { loadHome() }
@@ -556,6 +665,18 @@ class MainActivity : Activity() {
         private const val KEY_STANDALONE = "standalone_mode"
 
         /**
+         * SHA-256 sertifikat penanda tangan rilis resmi D TRADE —
+         * APK modifikasi (ditandatangani ulang pihak lain) tidak akan
+         * pernah cocok dengan nilai ini (v1.14.0).
+         */
+        private const val OFFICIAL_CERT_SHA256 =
+            "6f199a57ad908109ffe7b8be3cdacd0af51c877b7c1b5600f87c4ba90c9f349c"
+
+        /** Halaman unduhan resmi untuk dialog aplikasi tidak resmi. */
+        private const val OFFICIAL_RELEASES_URL =
+            "https://github.com/devcoderama/binance-ai-future/releases/latest"
+
+        /**
          * Versi yang sudah dimunculkan dialog pembaruannya pada proses
          * ini — mencegah dialog menumpuk saat onCreate berjalan lagi
          * (v1.13.0).
@@ -583,7 +704,14 @@ class MainActivity : Activity() {
             "cryptoslate.com", "www.newsbtc.com",
             "nftplazas.com", "nftnow.com",
             "www.cnbcindonesia.com", "finance.detik.com", "www.idxchannel.com",
-            "news.google.com"
+            "news.google.com",
+            // Penerbit arus utama lain yang sering menjadi tujuan
+            // redirect Google News untuk berita pendukung sinyal
+            // (v1.14.0) — tanpa ini artikelnya gagal dibuka pembaca.
+            "www.kontan.co.id", "www.bisnis.com", "www.kompas.com",
+            "www.liputan6.com", "www.antaranews.com", "investor.id",
+            "www.katadata.co.id", "www.tempo.co",
+            "www.reuters.com", "www.investing.com"
         )
 
         /** Endpoint terjemahan Google (EN→ID) untuk tab Berita (v1.7.0). */
