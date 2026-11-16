@@ -583,6 +583,58 @@ def symbols() -> dict:
     return _guard(lambda: {"symbols": symbol_manager.all_symbols()})
 
 
+_tickers_cache: dict = {"ts": 0.0, "data": []}
+_tickers_lock = threading.Lock()
+
+
+def _normalize_tickers(raw: object, allowed: set) -> list:
+    """Ticker 24h mentah Binance → bentuk ringkas untuk halaman Pasar."""
+    out = []
+    for t in raw if isinstance(raw, list) else []:
+        if not isinstance(t, dict):
+            continue
+        sym = t.get("symbol")
+        if sym not in allowed:
+            continue
+        try:
+            out.append({
+                "symbol": sym,
+                "price": float(t.get("lastPrice", 0)),
+                "change_pct": float(t.get("priceChangePercent", 0)),
+                "quote_volume": float(t.get("quoteVolume", 0)),
+            })
+        except (TypeError, ValueError):
+            continue
+    out.sort(key=lambda x: x["quote_volume"], reverse=True)
+    return out
+
+
+@app.get("/api/tickers")
+def tickers() -> dict:
+    """Ticker 24 jam semua simbol perpetual USDT (cache server 20 detik)."""
+
+    def _load():
+        now = time.time()
+        with _tickers_lock:
+            if _tickers_cache["data"] and now - _tickers_cache["ts"] < 20:
+                return {"tickers": _tickers_cache["data"], "cached": True}
+        data = _normalize_tickers(
+            binance.tickers_24h_all(), set(symbol_manager.all_symbols()))
+        with _tickers_lock:
+            _tickers_cache.update(ts=now, data=data)
+        return {"tickers": data, "cached": False}
+
+    return _guard(_load)
+
+
+@app.get("/api/news")
+def news() -> dict:
+    """Berita crypto dari RSS publik (agregasi + cache di web.news)."""
+    from web import news as web_news
+
+    return _guard(lambda: {"items": web_news.get_news()})
+
+
 @app.get("/api/klines/{symbol}")
 def klines(symbol: str, interval: Optional[str] = None, limit: int = Query(120, ge=10, le=500)) -> dict:
     """Data OHLC untuk grafik candlestick Web UI."""

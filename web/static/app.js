@@ -322,6 +322,10 @@ async function analyze(symbol) {
     $("backtest-block").hidden = false;
     $("chart-title").textContent = "Grafik Candlestick — " + s.symbol;
     loadChart(s.symbol);
+    /* Paritas aplikasi Android: panel multi-timeframe + salin teks. */
+    lastSignalPayload = s;
+    $("btn-share-text").hidden = false;
+    loadMtfWeb(s.symbol);
   } catch (e) {
     box.innerHTML = '<span class="neg">Gagal menganalisis: ' + esc(e.message) + "</span>";
   }
@@ -921,3 +925,399 @@ loadConfig();
 loadAiPanel();
 loadSymbols();
 loadAccount();
+
+/* =====================================================================
+   Pasar · Multi-Timeframe · Salin Teks · Berita
+   Paritas fitur crypto dengan aplikasi Android D TRADE: daftar semua
+   simbol + skor teknikal 1h + favorit, panel MTF di analisis, teks
+   analisis siap tempel, dan agregasi berita RSS lewat backend.
+   ===================================================================== */
+
+/* --- mesin skor teknikal (port persis dari aplikasi Android) --- */
+function rsiLast(closes, period) {
+  period = period || 14;
+  if (closes.length < period + 1) return null;
+  let avgG = 0, avgL = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) avgG += d / period; else avgL -= d / period;
+  }
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    avgG = (avgG * (period - 1) + Math.max(d, 0)) / period;
+    avgL = (avgL * (period - 1) + Math.max(-d, 0)) / period;
+  }
+  if (avgL === 0) return 100;
+  return 100 - 100 / (1 + avgG / avgL);
+}
+function macdLast(closes) {
+  const fast = emaSeries(closes, 12), slow = emaSeries(closes, 26);
+  const line = closes.map((_, i) => (fast[i] !== null && slow[i] !== null) ? fast[i] - slow[i] : null);
+  const valid = line.filter((v) => v !== null);
+  const sig = emaSeries(valid, 9);
+  const m = valid[valid.length - 1], s = sig[sig.length - 1];
+  if (m === undefined || s === null || s === undefined) return null;
+  return { line: m, signal: s, hist: m - s };
+}
+function bollLast(closes, period) {
+  period = period || 20;
+  if (closes.length < period) return null;
+  const w = closes.slice(-period);
+  const mid = w.reduce((a, b) => a + b, 0) / period;
+  const sd = Math.sqrt(w.reduce((a, b) => a + (b - mid) * (b - mid), 0) / period);
+  const upper = mid + 2 * sd, lower = mid - 2 * sd;
+  const last = closes[closes.length - 1];
+  return { mid, upper, lower, pctB: upper === lower ? 0.5 : (last - lower) / (upper - lower) };
+}
+function scoreSymbolTech(closes, highs, lows) {
+  const reasons = [];
+  let score = 0;
+  const last = closes[closes.length - 1];
+  const e20s = emaSeries(closes, 20), e50s = emaSeries(closes, 50);
+  const e20 = e20s[e20s.length - 1], e50 = e50s[e50s.length - 1];
+  if (e20 !== null && e50 !== null) {
+    if (last > e20) { score += 6; reasons.push("Harga di atas EMA20 (+6)"); }
+    else { score -= 6; reasons.push("Harga di bawah EMA20 (−6)"); }
+    if (e20 > e50) { score += 10; reasons.push("EMA20 di atas EMA50 — tren naik (+10)"); }
+    else { score -= 10; reasons.push("EMA20 di bawah EMA50 — tren turun (−10)"); }
+    if (last > e50) { score += 8; reasons.push("Harga di atas EMA50 (+8)"); }
+    else { score -= 8; reasons.push("Harga di bawah EMA50 (−8)"); }
+  }
+  const m = macdLast(closes);
+  if (m) {
+    if (m.hist > 0) { score += 10; reasons.push("MACD histogram positif (+10)"); }
+    else { score -= 10; reasons.push("MACD histogram negatif (−10)"); }
+    if (m.line > 0) { score += 4; reasons.push("MACD di atas nol (+4)"); }
+    else { score -= 4; reasons.push("MACD di bawah nol (−4)"); }
+  }
+  const rsi = rsiLast(closes);
+  if (rsi !== null) {
+    let pts = Math.max(-12, Math.min(12, (rsi - 50) * 0.6));
+    if (rsi > 75) pts = Math.min(pts, 4);
+    if (rsi < 25) pts = Math.max(pts, -4);
+    pts = Math.round(pts);
+    score += pts;
+    reasons.push("RSI " + rsi.toFixed(1) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+  }
+  const b = bollLast(closes);
+  if (b) {
+    const pts = Math.round((b.pctB - 0.5) * 16);
+    score += pts;
+    reasons.push("Posisi Bollinger %B " + b.pctB.toFixed(2) + (pts >= 0 ? " (+" + pts + ")" : " (" + pts + ")"));
+  }
+  if (closes.length > 10) {
+    const mom = (last / closes[closes.length - 11] - 1) * 100;
+    const pts = Math.round(Math.max(-10, Math.min(10, mom * 2)));
+    score += pts;
+    reasons.push("Momentum 10 candle " + mom.toFixed(2) + "% (" + (pts >= 0 ? "+" + pts : pts) + ")");
+  }
+  score = Math.max(-100, Math.min(100, Math.round(score)));
+  const side = score >= 25 ? "LONG" : score <= -25 ? "SHORT" : "NETRAL";
+  return { score, side, rsi, macd: m, boll: b, ema20: e20, ema50: e50, reasons };
+}
+async function fetchScore(symbol, interval) {
+  const d = await api("/api/klines/" + encodeURIComponent(symbol) +
+    "?interval=" + interval + "&limit=100");
+  const cd = d.candles || [];
+  if (cd.length < 55) return null;
+  return scoreSymbolTech(cd.map((c) => c.close), cd.map((c) => c.high), cd.map((c) => c.low));
+}
+
+/* ---------------- Pasar ---------------- */
+const MKT_SCORE_LIMIT = 80;
+let mktRows = [];
+let mktFavs = new Set();
+try { mktFavs = new Set(JSON.parse(localStorage.getItem("baf-favs") || "[]")); } catch (e) { /* abaikan */ }
+let mktFavOnly = false;
+let mktScoresAt = 0;
+let mktBusy = false;
+
+function fmtVol(v) {
+  return Number(v || 0).toLocaleString("id-ID", { notation: "compact", maximumFractionDigits: 1 });
+}
+function mktChip(o) {
+  if (o) {
+    const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+    return '<span class="pill ' + cls + '">' + o.side + " · " + (o.score > 0 ? "+" : "") + o.score + "</span>";
+  }
+  return '<span class="muted">…</span>';
+}
+function mktVisible() {
+  const q = $("market-q").value.trim().toUpperCase();
+  let arr = mktRows.filter((r) => (!q || r.symbol.includes(q)) && (!mktFavOnly || mktFavs.has(r.symbol)));
+  const mode = $("market-sort").value;
+  if (mode === "signal") arr = arr.slice().sort((a, b) =>
+    Math.abs((b.scoreObj || { score: -1 }).score) - Math.abs((a.scoreObj || { score: -1 }).score));
+  else if (mode === "change") arr = arr.slice().sort((a, b) => b.change - a.change);
+  else arr = arr.slice().sort((a, b) => b.volume - a.volume);
+  return arr;
+}
+function renderMarket() {
+  const tb = document.querySelector("#market-table tbody");
+  const vis = mktVisible();
+  if (!vis.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="muted">' +
+      (mktFavOnly ? "Belum ada favorit — ketuk ☆ pada baris untuk menambahkan." : "Tidak ada simbol yang cocok.") +
+      "</td></tr>";
+    return;
+  }
+  tb.innerHTML = vis.map((r) =>
+    '<tr data-msym="' + esc(r.symbol) + '" class="mkt-row">' +
+    '<td><span class="mkt-star' + (mktFavs.has(r.symbol) ? " on" : "") + '" data-fav="' + esc(r.symbol) + '">' +
+    (mktFavs.has(r.symbol) ? "★" : "☆") + "</span></td>" +
+    "<td><b>" + esc(r.symbol.replace("USDT", "")) + '</b><span class="muted">/USDT</span></td>' +
+    '<td data-mc="price">' + fmtPrice(r.price) + "</td>" +
+    '<td data-mc="change" class="' + (r.change >= 0 ? "pos" : "neg") + '">' +
+    (r.change >= 0 ? "+" : "") + r.change.toFixed(2) + "%</td>" +
+    '<td data-mc="volume">' + fmtVol(r.volume) + "</td>" +
+    '<td data-mc="chip">' + mktChip(r.scoreObj) + "</td></tr>"
+  ).join("");
+}
+function paintMarketRow(r) {
+  const tr = document.querySelector('#market-table tr[data-msym="' + r.symbol + '"]');
+  if (!tr) return;
+  tr.querySelector('[data-mc="price"]').textContent = fmtPrice(r.price);
+  const ch = tr.querySelector('[data-mc="change"]');
+  ch.textContent = (r.change >= 0 ? "+" : "") + r.change.toFixed(2) + "%";
+  ch.className = r.change >= 0 ? "pos" : "neg";
+  tr.querySelector('[data-mc="volume"]').textContent = fmtVol(r.volume);
+  tr.querySelector('[data-mc="chip"]').innerHTML = mktChip(r.scoreObj);
+}
+function saveMarketCache() {
+  try {
+    localStorage.setItem("baf-market-cache", JSON.stringify({
+      ts: Date.now(),
+      rows: mktRows.map((r) => ({ symbol: r.symbol, price: r.price, change: r.change, volume: r.volume, scoreObj: r.scoreObj })),
+    }));
+  } catch (e) { /* abaikan */ }
+}
+function restoreMarketCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem("baf-market-cache") || "null");
+    if (c && c.rows && c.rows.length) {
+      mktRows = c.rows;
+      mktScoresAt = c.ts || 0;
+      renderMarket();
+      $("market-updated").textContent = "data tersimpan per " +
+        new Date(c.ts).toLocaleTimeString("id-ID") + " · memperbarui…";
+    }
+  } catch (e) { /* abaikan */ }
+}
+async function computeMarketScores() {
+  const targets = mktRows.slice().sort((a, b) => b.volume - a.volume).slice(0, MKT_SCORE_LIMIT);
+  const queue = targets.slice();
+  async function worker() {
+    while (queue.length) {
+      const r = queue.shift();
+      try { r.scoreObj = await fetchScore(r.symbol, "1h"); } catch (e) { /* biarkan kosong */ }
+      paintMarketRow(r);
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+  mktScoresAt = Date.now();
+  saveMarketCache();
+  if ($("market-sort").value === "signal") renderMarket();
+}
+async function loadMarket(forceScores) {
+  if (mktBusy) return;
+  mktBusy = true;
+  try {
+    const d = await api("/api/tickers");
+    const by = {};
+    (d.tickers || []).forEach((t) => { by[t.symbol] = t; });
+    const prev = {};
+    mktRows.forEach((r) => { prev[r.symbol] = r; });
+    mktRows = (d.tickers || []).map((t) => ({
+      symbol: t.symbol, price: t.price, change: t.change_pct, volume: t.quote_volume,
+      scoreObj: prev[t.symbol] ? prev[t.symbol].scoreObj : null,
+    }));
+    renderMarket();
+    $("market-updated").textContent = mktRows.length + " simbol · data per " +
+      new Date().toLocaleTimeString("id-ID");
+    saveMarketCache();
+    if (forceScores || Date.now() - mktScoresAt > 300000) await computeMarketScores();
+  } catch (e) {
+    if (!mktRows.length) {
+      document.querySelector("#market-table tbody").innerHTML =
+        '<tr><td colspan="6" class="muted">Gagal memuat pasar: ' + esc(e.message) + "</td></tr>";
+    } else {
+      $("market-updated").textContent = "gagal memperbarui · menampilkan data tersimpan";
+    }
+  } finally {
+    mktBusy = false;
+  }
+}
+document.querySelector("#market-table tbody").addEventListener("click", (ev) => {
+  const star = ev.target.closest("[data-fav]");
+  if (star) {
+    const sym = star.getAttribute("data-fav");
+    if (mktFavs.has(sym)) mktFavs.delete(sym); else mktFavs.add(sym);
+    try { localStorage.setItem("baf-favs", JSON.stringify([...mktFavs])); } catch (e) { /* abaikan */ }
+    if (mktFavOnly) renderMarket();
+    else {
+      star.classList.toggle("on", mktFavs.has(sym));
+      star.textContent = mktFavs.has(sym) ? "★" : "☆";
+    }
+    return;
+  }
+  const tr = ev.target.closest("[data-msym]");
+  if (tr) openDetail(tr.getAttribute("data-msym"));
+});
+$("market-q").addEventListener("input", renderMarket);
+$("market-sort").addEventListener("change", renderMarket);
+$("market-favtog").addEventListener("click", () => {
+  mktFavOnly = !mktFavOnly;
+  $("market-favtog").textContent = mktFavOnly ? "★ Favorit" : "☆ Favorit";
+  $("market-favtog").classList.toggle("on", mktFavOnly);
+  renderMarket();
+});
+$("market-refresh").addEventListener("click", () => loadMarket(true));
+restoreMarketCache();
+loadMarket(false);
+setInterval(() => { if (!document.hidden) loadMarket(false); }, 30000);
+
+/* ---------------- Multi-Timeframe di Analisis ---------------- */
+const MTF_TFS_WEB = ["15m", "1h", "4h", "1d"];
+const mtfCacheWeb = {};
+let mtfTokenWeb = 0;
+async function loadMtfWeb(symbol) {
+  const my = ++mtfTokenWeb;
+  const block = $("mtf-block");
+  block.hidden = false;
+  const key = symbol;
+  const hit = mtfCacheWeb[key];
+  const paint = (data) => {
+    if (my !== mtfTokenWeb) return;
+    const active = $("chart-interval").value;
+    $("mtf-row").innerHTML = MTF_TFS_WEB.map((tf) => {
+      const o = data[tf];
+      const cls = !o ? "neu" : o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+      return '<div class="mtf-chip ' + cls + (tf === active ? " act" : "") + '">' +
+        '<div class="tf">' + tf + (tf === active ? " · aktif" : "") + "</div>" +
+        '<div class="sd">' + (o ? o.side : "…") + "</div>" +
+        '<div class="sc">' + (o ? "skor " + (o.score > 0 ? "+" : "") + o.score : "menghitung") + "</div></div>";
+    }).join("");
+    const got = MTF_TFS_WEB.map((tf) => data[tf]).filter(Boolean);
+    if (!got.length) { $("mtf-note").textContent = ""; return; }
+    const L = got.filter((o) => o.side === "LONG").length;
+    const S = got.filter((o) => o.side === "SHORT").length;
+    $("mtf-note").textContent =
+      L >= 3 ? "Selaras: " + L + " dari 4 timeframe mengarah LONG." :
+      S >= 3 ? "Selaras: " + S + " dari 4 timeframe mengarah SHORT." :
+      (L && S) ? "Terbelah: " + L + " LONG vs " + S + " SHORT — sinyal campuran." :
+      L > S ? "Cenderung LONG: " + L + " dari 4 timeframe LONG, sisanya NETRAL." :
+      S > L ? "Cenderung SHORT: " + S + " dari 4 timeframe SHORT, sisanya NETRAL." :
+      "Mayoritas NETRAL antar-timeframe.";
+  };
+  if (hit && Date.now() - hit.ts < 300000) { paint(hit.data); return; }
+  const data = {};
+  paint(data);
+  await Promise.all(MTF_TFS_WEB.map(async (tf) => {
+    try { data[tf] = await fetchScore(symbol, tf); } catch (e) { data[tf] = null; }
+    paint(data);
+  }));
+  if (my === mtfTokenWeb) mtfCacheWeb[key] = { ts: Date.now(), data };
+}
+
+/* ---------------- Salin teks analisis ---------------- */
+let lastSignalPayload = null;
+$("btn-share-text").addEventListener("click", async () => {
+  const s = lastSignalPayload;
+  if (!s) return;
+  const snap = s.snapshot || {};
+  const panah = s.side === "LONG" ? "📈" : s.side === "SHORT" ? "📉" : "➡️";
+  const L = [];
+  L.push(panah + " " + s.symbol + " — " + s.side + " · keyakinan " + s.confidence +
+    "% · skor teknikal " + (s.technical_score > 0 ? "+" : "") + s.technical_score);
+  L.push("🏛️ Binance Futures · harga " + fmtPrice(s.price) +
+    (snap.change_24h_pct != null ? " · 24j " + (snap.change_24h_pct >= 0 ? "+" : "") + Number(snap.change_24h_pct).toFixed(2) + "%" : ""));
+  L.push("");
+  L.push("Indikator:");
+  if (snap.rsi14 != null) L.push("• RSI (14): " + Number(snap.rsi14).toFixed(1));
+  if (snap.macd_histogram != null) L.push("• MACD histogram: " + (snap.macd_histogram >= 0 ? "positif" : "negatif"));
+  if (snap.trend) L.push("• Tren: " + snap.trend);
+  if (s.side !== "NEUTRAL" && s.stop_loss && s.take_profit) {
+    L.push("");
+    L.push("Rencana mesin:");
+    L.push("• Entry: " + fmtPrice(s.price));
+    L.push("• TP: " + fmtPrice(s.take_profit));
+    L.push("• SL: " + fmtPrice(s.stop_loss));
+  }
+  if (s.ai) {
+    L.push("");
+    L.push("AI (" + (s.ai.model_used || "model") + "): " + s.ai.signal + " · " + s.ai.confidence + "%");
+    if (s.ai.reasoning) L.push(s.ai.reasoning);
+  }
+  if (s.reasons && s.reasons.length) {
+    L.push("");
+    L.push("Alasan utama:");
+    s.reasons.slice(0, 3).forEach((r) => L.push("• " + r));
+  }
+  L.push("");
+  L.push("Sinyal teknikal + AI — bukan saran keuangan.");
+  L.push("Dibuat dengan binance-ai-future · " + new Date().toLocaleString("id-ID",
+    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB");
+  try {
+    await navigator.clipboard.writeText(L.join("\n"));
+    toast("Teks analisis disalin — tempel di WhatsApp/Telegram/dll.");
+  } catch (e) {
+    toast("Gagal menyalin teks: " + e.message);
+  }
+});
+
+/* ---------------- Berita ---------------- */
+let newsItems = [];
+let newsLoaded = false;
+let newsSource = "Semua";
+function fmtRel(ts) {
+  if (!ts) return "";
+  const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+  if (m < 60) return m + " mnt lalu";
+  const j = Math.floor(m / 60);
+  if (j < 24) return j + " jam lalu";
+  return Math.floor(j / 24) + " hari lalu";
+}
+function renderNews() {
+  const q = $("news-q").value.trim().toLowerCase();
+  const arr = newsItems.filter((n) =>
+    (newsSource === "Semua" || n.source === newsSource) &&
+    (!q || (n.title + " " + n.desc).toLowerCase().includes(q)));
+  const grid = $("news-grid");
+  if (!arr.length) {
+    grid.innerHTML = '<p class="muted">Tidak ada berita yang cocok.</p>';
+    return;
+  }
+  grid.innerHTML = arr.map((n) =>
+    '<a class="news-card" href="' + esc(n.link) + '" target="_blank" rel="noopener">' +
+    (n.img ? '<img loading="lazy" src="' + esc(n.img) + '" alt="" onerror="this.remove()">' : "") +
+    '<div class="news-body"><div class="news-meta"><b>' + esc(n.source) + "</b> · " + fmtRel(n.ts) + "</div>" +
+    '<div class="news-title">' + esc(n.title) + "</div>" +
+    '<div class="news-desc">' + esc(n.desc) + "</div></div></a>"
+  ).join("");
+  const sources = ["Semua"].concat([...new Set(newsItems.map((n) => n.source))]);
+  $("news-chips").innerHTML = sources.map((s) =>
+    '<button class="news-chip' + (s === newsSource ? " on" : "") + '" data-source="' + esc(s) + '">' + esc(s) + "</button>"
+  ).join("");
+}
+async function loadNews() {
+  try {
+    const d = await api("/api/news");
+    newsItems = d.items || [];
+    newsLoaded = true;
+    renderNews();
+  } catch (e) {
+    $("news-grid").innerHTML = '<p class="muted">Gagal memuat berita: ' + esc(e.message) + "</p>";
+  }
+}
+$("news-q").addEventListener("input", renderNews);
+$("news-chips").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-source]");
+  if (b) { newsSource = b.getAttribute("data-source"); renderNews(); }
+});
+$("btn-news-refresh").addEventListener("click", loadNews);
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver((es) => {
+    if (es.some((e) => e.isIntersecting) && !newsLoaded) { loadNews(); io.disconnect(); }
+  }, { rootMargin: "200px" });
+  io.observe($("panel-news"));
+}

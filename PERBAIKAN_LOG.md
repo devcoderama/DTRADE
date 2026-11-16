@@ -507,3 +507,16 @@ skrip uji, bukan kode aplikasi.
 nol order biasa, nol algo order), mode One-way, `.env` lokal berisi
 kunci testnet DIHAPUS dari mesin agen. Saldo akhir 4.926,87 USDT
 (virtual testnet).
+
+---
+
+## Paritas Web UI dengan aplikasi Android (16 Nov 2026, atas permintaan Rams)
+
+Fokus Web UI tetap crypto futures Binance (tanpa saham); berita boleh ditambah.
+
+- **Backend:** `GET /api/tickers` (ticker 24j semua simbol perpetual USDT dari satu panggilan Binance, dinormalisasi `_normalize_tickers`, cache server 20 dtk) dan `GET /api/news` — modul baru `web/news.py`: agregasi RSS/Atom 11 sumber crypto (CoinDesk, Cointelegraph, Decrypt, Bitcoin Magazine, CryptoSlate, NewsBTC, AMBCrypto, BeInCrypto, U.Today, CryptoPotato, Blockworks) hanya dengan pustaka standar; `parse_feed` murni (RSS 2.0 + Atom, gambar dari media:content/thumbnail/enclosure/<img> deskripsi), pengambilan per sumber terisolasi, cache memori 5 menit, maks 90 artikel terbaru.
+- **Frontend Pasar:** panel + menu "Pasar" — 528 simbol dengan harga/24j/volume langsung (segar otomatis 30 dtk), skor teknikal 1h dihitung di peramban untuk 80 simbol tervolume dengan mesin skor yang sama persis seperti aplikasi Android (EMA/RSI/MACD/Bollinger −100…+100), favorit ★ (localStorage `baf-favs`) + filter, pencarian, urutan Volume/Sinyal/Perubahan, cache-pertama dari localStorage `baf-market-cache`, ketuk baris membuka analisis.
+- **Frontend Analisis:** panel Multi-Timeframe (15m/1h/4h/1d + catatan konfluensi, cache 5 menit) di bawah grafik, dan tombol "Salin teks analisis" (ringkasan siap tempel ke WhatsApp/Telegram/dll. dari payload analisis terakhir, termasuk penilaian AI bila ada).
+- **Frontend Berita:** panel + menu "Berita" — kartu berita dengan gambar, filter sumber (chip) + pencarian, dimuat malas saat panel terlihat; ketuk membuka situs penerbit.
+- **Navigasi bawah mobile** diselaraskan: Home · Pasar · Analysis · Signals · Berita.
+- **Verifikasi:** pytest 165/165 lulus (5 tes baru `tests/test_web_news.py`, tanpa jaringan); uji visual end-to-end pada server lokal testnet+dry-run: 528 baris pasar + chip skor terisi, klik BTCUSDT membuka analisis dengan 4 chip MTF selesai ("Selaras: 4 dari 4 timeframe mengarah SHORT" saat pengujian), 90 kartu berita tampil. Tidak ada perubahan pada RiskManager/executor; tidak ada order ditempatkan.

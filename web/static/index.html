@@ -32,7 +32,9 @@
 
     <nav class="side-nav">
       <button class="nav-item active" data-target="top"><span class="nav-ico"><i class="fa-solid fa-house"></i></span> Dashboard</button>
+      <button class="nav-item" data-target="panel-market"><span class="nav-ico"><i class="fa-solid fa-coins"></i></span> Pasar</button>
       <button class="nav-item" data-target="panel-analysis"><span class="nav-ico"><i class="fa-solid fa-chart-line"></i></span> Analysis</button>
+      <button class="nav-item" data-target="panel-news"><span class="nav-ico"><i class="fa-solid fa-newspaper"></i></span> Berita</button>
       <button class="nav-item" data-target="panel-scan"><span class="nav-ico"><i class="fa-solid fa-bolt"></i></span> Trade Signals</button>
       <button class="nav-item" data-target="panel-positions"><span class="nav-ico"><i class="fa-solid fa-globe"></i></span> Market Overview</button>
       <button class="nav-item" data-target="panel-ai"><span class="nav-ico"><i class="fa-solid fa-gear"></i></span> Settings</button>
@@ -120,6 +122,33 @@
         </div>
       </section>
 
+      <!-- Pasar: semua simbol ala aplikasi Android -->
+      <section class="panel" id="panel-market">
+        <div class="row space-between">
+          <h2><i class="fa-solid fa-coins title-ico"></i> Pasar — USDT Perpetual</h2>
+          <span class="muted small" id="market-updated">—</span>
+        </div>
+        <div class="row market-controls">
+          <input id="market-q" type="search" placeholder="Cari simbol… (cth: BTC)" autocomplete="off">
+          <select id="market-sort">
+            <option value="volume">Volume 24j</option>
+            <option value="signal">Sinyal terkuat</option>
+            <option value="change">Perubahan 24j</option>
+          </select>
+          <button class="ghost" id="market-favtog">☆ Favorit</button>
+          <button class="ghost" id="market-refresh"><i class="fa-solid fa-rotate-right"></i> Segarkan</button>
+        </div>
+        <p class="muted small-note">Skor teknikal 1h (EMA · RSI · MACD · Bollinger, −100…+100) dihitung di peramban untuk 80 simbol tervolume — mesin yang sama seperti aplikasi Android. Harga diperbarui otomatis tiap 30 detik. Ketuk baris untuk analisis; ketuk ★ untuk favorit.</p>
+        <div class="table-wrap">
+          <table id="market-table">
+            <thead>
+              <tr><th style="width:34px"></th><th>Simbol</th><th>Harga</th><th>24j</th><th>Volume</th><th>Sinyal 1h</th></tr>
+            </thead>
+            <tbody><tr><td colspan="6" class="muted">Memuat pasar…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
       <!-- Analisis simbol -->
       <section class="panel" id="panel-analysis">
         <div id="detail-loading" class="loading-overlay" hidden>
@@ -174,6 +203,15 @@
                 <div id="chart-legend" class="chart-legend"></div>
               </div>
               <p class="muted small-note">EMA20 emas · EMA50 abu-abu · panel bawah = volume · roda mouse: zoom · seret grafik: geser waktu · data langsung dari Binance Futures</p>
+            </div>
+
+            <div id="mtf-block" class="chart-block" hidden>
+              <div class="row space-between">
+                <h3>Multi-Timeframe</h3>
+                <span class="muted small" id="mtf-note"></span>
+              </div>
+              <div class="mtf-row" id="mtf-row"></div>
+              <p class="muted small-note">Skor teknikal murni per timeframe (mesin yang sama seperti aplikasi Android) — penanda emas = timeframe grafik saat ini.</p>
             </div>
 
             <div id="backtest-block" class="chart-block" hidden>
@@ -234,6 +272,9 @@
           <div class="rz-handle rz-v" id="rz-sig-2" title="Seret untuk mengubah lebar kartu eksekusi · klik ganda: ukuran bawaan"></div>
           <div class="execute-card" id="execute-card"></div>
         </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btn-share-text" hidden><i class="fa-solid fa-share-nodes"></i> Salin teks analisis — untuk WhatsApp / Telegram / lainnya</button>
+        </div>
       </section>
 
       <!-- Provider & model AI -->
@@ -272,6 +313,20 @@
         </div>
       </section>
 
+      <!-- Berita crypto -->
+      <section class="panel" id="panel-news">
+        <div class="row space-between">
+          <h2><i class="fa-solid fa-newspaper title-ico"></i> Berita Crypto</h2>
+          <button id="btn-news-refresh" class="ghost"><i class="fa-solid fa-rotate-right"></i> Muat Ulang</button>
+        </div>
+        <div class="row news-controls">
+          <input id="news-q" type="search" placeholder="Cari berita…" autocomplete="off">
+          <div class="news-chips" id="news-chips"></div>
+        </div>
+        <div class="news-grid" id="news-grid"><p class="muted">Berita dimuat saat panel ini pertama kali terlihat.</p></div>
+        <p class="muted small-note">Agregasi RSS publik (CoinDesk, Cointelegraph, Decrypt, dll.) lewat backend — ketuk kartu untuk membaca di situs penerbit.</p>
+      </section>
+
       <!-- Posisi -->
       <section class="panel" id="panel-positions">
         <div class="row space-between">
@@ -299,10 +354,10 @@
 <!-- Navigasi bawah (mobile) -->
 <nav class="bottom-nav">
   <button class="bnav-item active" data-target="top"><i class="fa-solid fa-house"></i>Home</button>
+  <button class="bnav-item" data-target="panel-market"><i class="fa-solid fa-coins"></i>Pasar</button>
   <button class="bnav-item" data-target="panel-analysis"><i class="fa-solid fa-chart-line"></i>Analysis</button>
   <button class="bnav-item" data-target="panel-scan"><i class="fa-solid fa-bolt"></i>Signals</button>
-  <button class="bnav-item" data-target="panel-positions"><i class="fa-solid fa-globe"></i>Market</button>
-  <button class="bnav-item" data-target="panel-ai"><i class="fa-solid fa-gear"></i>More</button>
+  <button class="bnav-item" data-target="panel-news"><i class="fa-solid fa-newspaper"></i>Berita</button>
 </nav>
 
 <div id="toast"></div>
