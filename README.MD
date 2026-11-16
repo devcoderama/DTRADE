@@ -356,6 +356,20 @@ mengubah gaya analisa AI; perubahan berlaku pada analisis berikutnya
 `GET /api/config` → `ai_skill` dan di log startup
 ("AI skill dimuat dari AI_SKILL.md").
 
+### AI Skill Mandiri — pengetahuan finance/trading untuk Chat AI aplikasi (`AI_SKILL_MANDIRI.md`)
+
+Chat AI di aplikasi Android (mode mandiri, AI web gratis) punya file skill
+sendiri: **`AI_SKILL_MANDIRI.md`** di root repo. Isinya — gaya & format
+jawaban, kejujuran data (AI tidak punya harga live; jangan mengarang angka),
+cara membaca teks analisis D TRADE dan membandingkannya dengan data terbaru,
+pengetahuan indikator (RSI/MACD/EMA/ADX/Bollinger/ATR/VWAP/volume/funding/OI),
+manajemen risiko, futures vs spot, saham IDX (lot, jam BEI, ARA/ARB,
+fundamental dasar, peringatan saham gorengan), saham global, dan jebakan
+trading — disematkan apa adanya sebagai prompt sistem (`AI_SYSTEM`) di halaman
+mandiri aplikasi. Sunting file itu lalu sematkan ulang isinya untuk mengubah
+perilaku AI mandiri. Chat AI aplikasi juga mendukung banyak **sesi**
+percakapan: mulai sesi baru atau kembali ke sesi sebelumnya kapan saja.
+
 ### Siaran sinyal ke Telegram (`broadcast`)
 
 Memindai semua simbol, menyaring sinyal teknikal terkuat

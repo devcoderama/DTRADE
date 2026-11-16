@@ -231,6 +231,21 @@
   /* ===== Chat AI (v1.30.0) — AI gratis dari web, tanpa kunci API ===== */
   #chatView{display:flex;flex-direction:column;height:calc(100vh - 122px);padding-bottom:0;overflow-x:hidden}
   #chatList{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+  /* Bar & panel sesi chat (v1.31.8) */
+  .chat-sess-bar{display:flex;align-items:center;gap:8px;padding:10px 14px 2px}
+  .chat-sess-title{flex:1;min-width:0;font-weight:700;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chat-sess-bar button{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
+    border-radius:999px;width:34px;height:34px;flex:none;font-size:.85rem;cursor:pointer}
+  .chat-sess-panel{margin:8px 14px 0;border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);max-height:42vh;overflow-y:auto}
+  .sess-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+  .sess-row:last-child{border-bottom:none}
+  .sess-row.on{background:rgba(240,185,11,.08)}
+  .sess-main{flex:1;min-width:0}
+  .sess-t{font-weight:600;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sess-m{color:var(--muted);font-size:.72rem;margin-top:2px}
+  .sess-del{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;width:30px;height:30px;flex:none;cursor:pointer}
   .cbub{max-width:86%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.55;
     white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
   .cbub.me{align-self:flex-end;background:var(--gold);color:#0b0e11;border-bottom-right-radius:4px;font-weight:600}
@@ -471,6 +486,12 @@
 </div>
 
 <div id="chatView" class="hidden">
+  <div class="chat-sess-bar">
+    <div class="chat-sess-title" id="chatSessTitle">Sesi baru</div>
+    <button id="chatSessListBtn" aria-label="Daftar sesi chat"><i class="fa-solid fa-clock-rotate-left"></i></button>
+    <button id="chatNewBtn" aria-label="Mulai sesi chat baru"><i class="fa-solid fa-plus"></i></button>
+  </div>
+  <div id="chatSessPanel" class="chat-sess-panel hidden"></div>
   <div id="chatList"></div>
   <div class="chips" id="chatChips" style="padding-bottom:8px">
     <button data-q="Jelaskan apa itu RSI dan cara membacanya untuk pemula">Apa itu RSI?</button>
@@ -3472,14 +3493,7 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
    ke satu endpoint tetap; di browser biasa memakai fetch langsung.
    Mode server TIDAK memakai ini — di sana AI memakai kunci API yang ada
    di backend (.env), sesuai pembagian yang diminta pemilik. */
-const AI_SYSTEM = "Kamu adalah asisten AI di aplikasi D TRADE (aplikasi analisis pasar crypto dan saham). " +
-  "Jawablah dalam Bahasa Indonesia yang jelas dan ringkas, dengan paragraf pendek dan poin-poin seperlunya — " +
-  "jangan memakai tabel. Kamu boleh membantu menjelaskan analisis teknikal, " +
-  "indikator, dan konsep trading, serta menjawab pertanyaan umum. Kamu BUKAN penasihat keuangan: jangan pernah " +
-  "menjanjikan profit atau menyuruh membeli/menjual secara pasti; ingatkan risiko secara singkat bila relevan. " +
-  "Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis KODE/simbolnya dengan huruf " +
-  "kapital penuh (mis. GOTO, AAPL, BTCUSDT, ETH) — di aplikasi kode itu bisa diketuk pengguna untuk " +
-  "membuka analisisnya.";
+const AI_SYSTEM = "Kamu adalah D TRADE AI, asisten AI di aplikasi D TRADE (aplikasi analisis pasar\ncrypto dan saham). Kamu berjalan di mode mandiri memakai layanan AI web gratis.\nTugasmu: membantu pengguna memahami pasar, analisis teknikal, dan konsep\nfinance/trading — dengan jujur, ringkas, dan aman.\n\n## Gaya & Format Jawaban\n\n- Jawab dalam Bahasa Indonesia yang jelas dan ringkas: paragraf pendek dan\n  poin-poin seperlunya. JANGAN memakai tabel.\n- Bila memberikan kode program, selalu bungkus dalam blok berpagar ``` agar\n  tampil sebagai blok kode tersendiri di aplikasi.\n- Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis\n  KODE/simbolnya dengan huruf kapital penuh (mis. GOTO, BBCA, AAPL, BTCUSDT,\n  ETH) — di aplikasi kode itu bisa diketuk pengguna untuk membuka analisisnya.\n- Kamu BUKAN penasihat keuangan: jangan menjanjikan profit, jangan menyuruh\n  membeli/menjual secara pasti. Boleh memberi penilaian bersyarat (\"cenderung\",\n  \"dengan syarat\") dan ingatkan risiko secara singkat bila relevan.\n- Akhiri jawaban analisis yang panjang dengan kesimpulan 1–2 kalimat.\n\n## Kejujuran Data (Penting)\n\n- Kamu TIDAK memiliki data harga live. Jangan pernah mengarang harga, persen\n  perubahan, atau angka indikator seolah-olah itu data saat ini.\n- Bila pengguna menanyakan harga/analisis terkini sebuah instrumen, katakan\n  kamu tidak bisa melihat harga live, lalu arahkan: ketuk kode instrumennya di\n  jawabanmu (akan tertaut ke analisis aplikasi), buka tab Pasar/Analisis, atau\n  pakai tombol \"Minta Pendapat AI\" dari halaman analisis agar kamu menerima\n  data aslinya.\n- Bila pengguna MENEMPEL data (teks analisis D TRADE, angka indikator, berita),\n  nilai HANYA dari data itu dan data \"terbaru\" yang ikut disertakan; sebutkan\n  angka yang kamu pakai.\n\n## Membaca Analisis D TRADE (saat pengguna meminta pendapat dari halaman Analisis)\n\nTeks analisis yang dikirim pengguna berisi: simbol & sinyal (LONG/SHORT/NETRAL)\ndengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai\nindikator, rencana indikatif ATR, ringkasan multi-timeframe, dan alasan utama.\nDi bawahnya disertakan bagian \"Data terbaru saat ini\" (harga & skor realtime,\nRSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:\n\n1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan\n   MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.\n2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —\n   jangan memaksakan arah pada sinyal lemah.\n3. Periksa keselarasan multi-timeframe: timeframe besar melawan arah sinyal\n   menurunkan keyakinan; searah menaikkannya.\n4. Periksa momentum & kejenuhan: RSI > 70 jenuh beli (rawan koreksi untuk\n   LONG), RSI < 30 jenuh jual (rawan pantulan untuk SHORT); MACD histogram\n   berubah tanda = momentum bergeser.\n5. Rencana ATR: SL 1,5×ATR dan TP 2,5×ATR (R:R 1:1,67). Nilai apakah harga\n   realtime masih memberi ruang R:R yang masuk akal menuju TP sebelum SL.\n6. Tutup dengan: faktor pendukung utama, risiko utama, dan kesimpulan singkat.\n   Tetap bukan perintah beli/jual.\n\n## Pengetahuan Indikator Teknikal\n\n- **Tren**: EMA20/50/200 — harga di atas EMA yang naik = uptrend; EMA20\n  memotong ke atas EMA50 (golden cross mini) = momentum membaik, sebaliknya\n  death cross. ADX > 25 tren kuat, < 20 pasar cenderung sideways.\n- **RSI(14)**: 30/70 ambang jenuh; divergensi RSI terhadap harga adalah sinyal\n  pelemahan tren. RSI 45–55 = netral.\n- **MACD**: histogram positif & membesar = momentum naik; persilangan signal\n  line mengonfirmasi perubahan momentum.\n- **Bollinger Bands**: %B mendekati 1 = harga di tepi atas (rentan mean\n  reversion kecuali tren sangat kuat); band menyempit (squeeze) mendahului\n  gerakan besar.\n- **ATR**: ukuran volatilitas; dasar penentuan SL/TP. ATR% tinggi = gerakan\n  liar, kecilkan ukuran posisi.\n- **VWAP**: harga di atas VWAP = bias intraday pembeli; di bawahnya penjual.\n- **Volume**: breakout tanpa volume di atas rata-rata 20 periode mudah gagal\n  (false breakout). Volume ratio > 1,5 mengonfirmasi gerakan.\n- **Funding rate (futures)**: ≥ +0,1% per interval = long terlalu padat\n  (rawan long squeeze); ≤ −0,1% = short padat (rawan short squeeze).\n- **Open interest**: OI naik + harga naik = tren didukung uang baru; OI naik +\n  harga turun = short agresif; OI turun = posisi ditutup (tren melemah).\n\n## Manajemen Risiko (selalu tekankan bila relevan)\n\n- Risiko per transaksi idealnya 1–2% dari modal; tentukan ukuran posisi dari\n  jarak stop loss, BUKAN dari rasa yakin.\n- Rasio risk:reward minimal 1:1,5; jangan memindahkan SL menjauh (\"berharap\")\n  dan jangan averaging down membabi buta pada posisi futures berlevrage.\n- Leverage memperbesar risiko likuidasi: di futures, pahami harga likuidasi,\n  mode margin (cross vs isolated), dan biaya funding sebelum membuka posisi.\n- Diversifikasi seperlunya, siapkan rencana keluar sebelum masuk, dan jangan\n  memakai dana kebutuhan hidup. Catat jurnal trading untuk evaluasi.\n\n## Crypto — Futures vs Spot\n\n- Spot: membeli aset sungguhan, hanya untung dari kenaikan, tanpa likuidasi.\n- Futures: kontrak derivatif; bisa LONG maupun SHORT, ada leverage, funding\n  rate berkala, dan risiko likuidasi bila margin tak cukup.\n- Istilah: mark price (acuan likuidasi), maintenance margin, unrealized PnL.\n- Pasar crypto bergerak 24/7 dan sangat volatil; altcoin berkapitalisasi kecil\n  mudah dimanipulasi dan spread-nya lebar.\n\n## Saham Indonesia (IDX)\n\n- Satuan transaksi 1 lot = 100 lembar. Jam perdagangan Bursa Efek Indonesia\n  Senin–Jumat (sesi pagi & siang WIB), tutup akhir pekan dan hari libur.\n- Harga bergerak mengikuti fraksi harga (tick size) dan dibatasi auto rejection\n  atas/bawah (ARA/ARB) harian.\n- Kode saham 4 huruf (mis. BBCA, GOTO); di data internasional berakhiran .JK.\n- Konsep fundamental dasar: PER (harga terhadap laba), PBV (harga terhadap\n  nilai buku), ROE (efisiensi laba terhadap ekuitas), DER (beban utang),\n  dividen & dividend yield. Saham lapis dua/tiga (\"gorengan\") berisiko tinggi:\n  likuiditas tipis, volatilitas ekstrem, rawan bandar — ingatkan ini bila\n  pengguna menanyakan saham kecil yang naik tidak wajar.\n- Untuk permintaan rekomendasi berbasis rentang harga (mis. Rp 100–500):\n  jelaskan kamu tidak bisa memindai harga live; kamu BOLEH menyebut contoh\n  emiten yang secara umum dikenal berada di kisaran itu dari pengetahuanmu,\n  dengan peringatan harga bisa sudah berubah, dan sarankan memverifikasi lewat\n  tab Pasar atau mengetuk kodenya untuk analisis live.\n\n## Saham Global\n\n- Simbol bursa AS seperti AAPL, MSFT, NVDA, TSLA; pasar reguler AS malam hari\n  WIB. Indeks utama: S&P 500, Nasdaq, Dow Jones.\n- Perhatikan laporan earnings, suku bunga The Fed, dan data inflasi AS sebagai\n  penggerak utama; harga dalam USD sehingga ada faktor kurs bagi investor\n  Indonesia.\n\n## Jebakan yang Harus Diperingatkan\n\n- FOMO mengejar harga yang sudah terbang jauh dari EMA20 (> 2×ATR = meregang).\n- Sinyal dari satu indikator saja tanpa konfirmasi tren/volume/timeframe lain.\n- Revenge trading setelah rugi, overtrading, dan memakai leverage maksimal.\n- Janji profit pasti dari pihak mana pun, grup sinyal berbayar, dan skema\n  ponzi berkedok trading — selalu ingatkan untuk waspada.\n- Berita/rumor tanpa sumber jelas; verifikasi ke pengumuman resmi emiten/bursa.\n\n## Batasan Topik\n\nFokusmu finance, pasar, dan trading. Untuk pertanyaan umum di luar itu, jawab\nseperlunya dengan singkat lalu arahkan kembali dengan sopan. Bila diminta\nmembuat gambar/video atau hal di luar kemampuanmu di aplikasi ini, jelaskan\ndengan jujur bahwa kamu adalah asisten teks.";
 
 /* Renderer markdown ringan (v1.31.0): jawaban AI mentah berisi ###, **,
    --- dll. Diubah menjadi tampilan rapi bergaya chatbot sungguhan —
@@ -3536,12 +3550,130 @@ function mdLite(t) {
   return html;
 }
 let chatMsgs = [];
-try { chatMsgs = JSON.parse(localStorage.getItem("dtrade-chat-v1") || "[]"); } catch (e) { chatMsgs = []; }
-if (!Array.isArray(chatMsgs)) chatMsgs = [];
 let chatBusy = false;
 
+/* ===== Sesi chat (v1.31.8): banyak percakapan tersimpan, bisa memulai
+   sesi baru atau kembali ke sesi sebelumnya. Kunci baru dtrade-chats-v2;
+   riwayat lama satu sesi (dtrade-chat-v1) dimigrasikan menjadi sesi
+   pertama. chatMsgs selalu menunjuk pesan sesi aktif. ===== */
+const CHATS_KEY = "dtrade-chats-v2";
+let chatSessions = [];
+let chatActiveId = null;
+function newSessionObj(msgs) {
+  return {
+    id: "s" + Date.now().toString(36) + Math.floor(Math.random() * 1e5).toString(36),
+    created: Date.now(),
+    msgs: msgs || []
+  };
+}
+function activeSession() {
+  return chatSessions.find(s => s.id === chatActiveId) || chatSessions[0] || null;
+}
+function sessionTitle(s) {
+  const first = (s.msgs || []).find(m => m.role === "user");
+  const t = first ? (first.display || first.content || "").replace(/\s+/g, " ").trim() : "";
+  if (!t) return "Sesi baru";
+  return t.length > 42 ? t.slice(0, 42) + "…" : t;
+}
+function setChatMsgs(arr) {
+  chatMsgs = arr;
+  const s = activeSession();
+  if (s) s.msgs = arr;
+}
 function saveChat() {
-  try { localStorage.setItem("dtrade-chat-v1", JSON.stringify(chatMsgs.slice(-40))); } catch (e) { /* abaikan */ }
+  const s = activeSession();
+  if (s) s.msgs = chatMsgs.slice(-40);
+  try {
+    localStorage.setItem(CHATS_KEY, JSON.stringify({
+      sessions: chatSessions.slice(-30), activeId: chatActiveId
+    }));
+  } catch (e) { /* abaikan */ }
+}
+function loadChats() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CHATS_KEY) || "null");
+    if (raw && Array.isArray(raw.sessions)) {
+      chatSessions = raw.sessions.filter(x => x && Array.isArray(x.msgs));
+      chatActiveId = raw.activeId;
+    }
+  } catch (e) { /* abaikan */ }
+  if (!chatSessions.length) {
+    let old = [];
+    try { old = JSON.parse(localStorage.getItem("dtrade-chat-v1") || "[]"); } catch (e) { old = []; }
+    const s0 = newSessionObj(Array.isArray(old) ? old : []);
+    chatSessions = [s0];
+    chatActiveId = s0.id;
+  }
+  if (!chatSessions.some(s => s.id === chatActiveId)) chatActiveId = chatSessions[0].id;
+  chatMsgs = activeSession().msgs;
+}
+loadChats();
+function renderSessionBar() {
+  const s = activeSession();
+  const el = $("chatSessTitle");
+  if (el && s) el.textContent = sessionTitle(s);
+}
+function renderSessionList() {
+  const panel = $("chatSessPanel");
+  if (!panel) return;
+  panel.innerHTML = "";
+  const rows = chatSessions.slice().reverse();
+  rows.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "sess-row" + (s.id === chatActiveId ? " on" : "");
+    const when = new Date(s.created || Date.now());
+    const meta = when.toLocaleDateString("id-ID", { day: "numeric", month: "short" }) + " " +
+      when.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) +
+      " · " + (s.msgs || []).length + " pesan";
+    row.innerHTML = '<div class="sess-main"><div class="sess-t"></div>' +
+      '<div class="sess-m"></div></div>' +
+      '<button class="sess-del" aria-label="Hapus sesi"><i class="fa-solid fa-trash"></i></button>';
+    row.querySelector(".sess-t").textContent = sessionTitle(s);
+    row.querySelector(".sess-m").textContent = meta;
+    row.addEventListener("click", () => switchChatSession(s.id));
+    row.querySelector(".sess-del").addEventListener("click", e => {
+      e.stopPropagation();
+      deleteChatSession(s.id);
+    });
+    panel.appendChild(row);
+  });
+}
+function closeSessionPanel() { $("chatSessPanel").classList.add("hidden"); }
+function newChatSession() {
+  if (chatBusy) return;
+  cancelChatEdit();
+  const s = newSessionObj([]);
+  chatSessions.push(s);
+  chatActiveId = s.id;
+  chatMsgs = s.msgs;
+  saveChat();
+  closeSessionPanel();
+  renderChat();
+  $("chatInput").focus();
+}
+function switchChatSession(id) {
+  if (chatBusy) return;
+  cancelChatEdit();
+  if (id !== chatActiveId) {
+    chatActiveId = id;
+    chatMsgs = activeSession().msgs;
+    saveChat();
+  }
+  closeSessionPanel();
+  renderChat();
+}
+function deleteChatSession(id) {
+  if (chatBusy) return;
+  chatSessions = chatSessions.filter(s => s.id !== id);
+  if (!chatSessions.length) chatSessions = [newSessionObj([])];
+  if (!chatSessions.some(s => s.id === chatActiveId)) {
+    chatActiveId = chatSessions[chatSessions.length - 1].id;
+    chatMsgs = activeSession().msgs;
+    renderChat();
+  }
+  saveChat();
+  renderSessionBar();
+  renderSessionList();
 }
 /* Kode saham/crypto yang disebut dalam jawaban AI menjadi tombol menuju
    analisisnya (v1.31.6 IDX; v1.31.7 + saham global & crypto futures/spot).
@@ -3621,6 +3753,7 @@ function linkifyTickers(root) {
 }
 
 function renderChat() {
+  renderSessionBar();
   const box = $("chatList");
   box.innerHTML = "";
   if (!chatMsgs.length) {
@@ -3769,7 +3902,7 @@ function chatAct(act, idx) {
   if (act === "resend") {
     // Potong percakapan sampai pesan ini, lalu kirim ulang isinya persis.
     const content = m.content, display = m.display;
-    chatMsgs = chatMsgs.slice(0, idx);
+    setChatMsgs(chatMsgs.slice(0, idx));
     saveChat();
     renderChat();
     sendChat(content, display);
@@ -3819,7 +3952,7 @@ $("chatSend").addEventListener("click", () => {
     const idx = chatEditIdx;
     cancelChatEdit();
     if (!v.trim()) return;
-    chatMsgs = chatMsgs.slice(0, idx);
+    setChatMsgs(chatMsgs.slice(0, idx));
     saveChat();
     sendChat(v);
     return;
@@ -3834,9 +3967,15 @@ $("chatChips").querySelectorAll("button[data-q]").forEach(b =>
   b.addEventListener("click", () => sendChat(b.dataset.q)));
 $("chatClear").addEventListener("click", () => {
   cancelChatEdit();
-  chatMsgs = [];
+  setChatMsgs([]);
   saveChat();
   renderChat();
+});
+$("chatNewBtn").addEventListener("click", newChatSession);
+$("chatSessListBtn").addEventListener("click", () => {
+  const p = $("chatSessPanel");
+  if (p.classList.contains("hidden")) { renderSessionList(); p.classList.remove("hidden"); }
+  else p.classList.add("hidden");
 });
 renderChat();
 
