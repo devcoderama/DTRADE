@@ -70,6 +70,14 @@
   .delsym{flex:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);
     background:var(--panel2);color:var(--muted);display:flex;align-items:center;
     justify-content:center;font-size:.7rem;margin-left:8px;cursor:pointer}
+  /* ===== Watchlist / Favorit (v1.15.0) ===== */
+  .favstar{font-size:19px;color:#5b6472;padding:2px 0 2px 8px;cursor:pointer;flex:none;line-height:1}
+  .favstar.on{color:var(--gold)}
+  .favtog{background:#1c2129;color:#c3cad4;border:1px solid var(--line);border-radius:8px;
+    padding:0 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+  .favtog.on{color:var(--gold);border-color:var(--gold)}
+  .favbtn.on{color:var(--gold)}
+  .favempty{padding:22px 18px;color:var(--muted);font-size:13px;text-align:center;line-height:1.55}
   .asfield{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;padding:12px;color:var(--text);font-size:.95rem;margin:6px 0 14px}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
@@ -187,6 +195,7 @@
       <option value="signal">Sinyal terkuat</option>
       <option value="change">Perubahan 24j</option>
     </select>
+    <button class="favtog" id="favTog" title="Tampilkan favorit saja">☆ Favorit</button>
   </div>
   <button class="addsym hidden" id="btnAddSym"><i class="fa-solid fa-plus"></i> Tambah simbol saham</button>
   <div class="status" id="status">Memuat daftar simbol…</div>
@@ -208,6 +217,7 @@
       <div class="chg" id="dChange">—</div>
     </div>
     <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+    <button class="iconbtn favbtn" id="btnFav" aria-label="Favorit" title="Tambah/hapus dari favorit"><i class="fa-regular fa-star"></i></button>
   </div>
   <div class="tabs" id="tabs">
     <button data-iv="1m">1m</button>
@@ -314,7 +324,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.14.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.15.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -962,7 +972,8 @@ function stockRowHtml(e) {
     '<div class="chg ' + (e.change >= 0 ? "up" : "dn") + '">' +
     (e.change >= 0 ? "+" : "") + e.change.toFixed(2) + '%</div></div>' + chipHtml(e) +
     (e.custom ? '<span class="delsym" data-del="' + escHtml(e.symbol) +
-      '" title="Hapus simbol kustom"><i class="fa-solid fa-xmark"></i></span>' : "");
+      '" title="Hapus simbol kustom"><i class="fa-solid fa-xmark"></i></span>' : "") +
+    favStarHtml(e.market, e.symbol);
 }
 function renderStocks() {
   const list = $("list");
@@ -970,6 +981,7 @@ function renderStocks() {
   const q = $("q").value.trim().toUpperCase();
   let arr = stockLists[market].filter(e =>
     !q || e.ticker.includes(q) || e.name.toUpperCase().includes(q));
+  if (favOnly) arr = arr.filter(e => isFav(e.market, e.symbol));
   const mode = $("sort").value;
   if (mode === "signal") {
     arr = arr.slice().sort((a, b) =>
@@ -994,6 +1006,7 @@ function renderStocks() {
     });
     list.appendChild(d);
   });
+  if (favOnly && arr.length === 0) list.innerHTML = FAV_EMPTY_HTML;
 }
 function removeCustomSymbol(mkt, symbol) {
   saveCustomDefs(mkt, customDefs(mkt).filter(d => d.symbol !== symbol));
@@ -1186,11 +1199,13 @@ function rowHtml(s) {
     '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small></div>' +
     '<div class="pr"><div class="p">' + fmtPrice(s.price) + '</div>' +
     '<div class="chg ' + (s.change >= 0 ? "up" : "dn") + '">' +
-    (s.change >= 0 ? "+" : "") + s.change.toFixed(2) + '%</div></div>' + chipHtml(s);
+    (s.change >= 0 ? "+" : "") + s.change.toFixed(2) + '%</div></div>' + chipHtml(s) +
+    favStarHtml("crypto", s.symbol);
 }
 function visibleSymbols() {
   const q = $("q").value.trim().toUpperCase();
   let arr = symbols.filter(s => !q || s.symbol.includes(q));
+  if (favOnly) arr = arr.filter(s => isFav("crypto", s.symbol));
   const mode = $("sort").value;
   if (mode === "signal") {
     arr = arr.slice().sort((a, b) =>
@@ -1203,13 +1218,15 @@ function visibleSymbols() {
 function renderList() {
   const list = $("list");
   list.innerHTML = "";
-  visibleSymbols().forEach(s => {
+  const vis = visibleSymbols();
+  vis.forEach(s => {
     const d = document.createElement("div");
     d.className = "sym"; d.dataset.symbol = s.symbol;
     d.innerHTML = rowHtml(s);
     d.addEventListener("click", () => openDetail(s.symbol));
     list.appendChild(d);
   });
+  if (favOnly && vis.length === 0) list.innerHTML = FAV_EMPTY_HTML;
 }
 function paintRow(s) {
   const d = $("list").querySelector('[data-symbol="' + s.symbol + '"]');
@@ -1230,6 +1247,69 @@ function scheduleTickerRefresh() {
     } catch (e) { /* abaikan kegagalan refresh */ }
   }, 60000);
 }
+
+/* ================= Watchlist / Favorit (v1.15.0) =================
+   Favorit disimpan lokal sebagai kunci "pasar:simbol" — bintang di
+   baris daftar & di kepala halaman Analisis, chip "☆ Favorit" di
+   Pasar menyaring daftar ke favorit pasar yang sedang tampil. */
+let favSet = new Set();
+try { favSet = new Set(JSON.parse(localStorage.getItem("dtrade-favs") || "[]")); }
+catch (e) { /* penyimpanan tidak tersedia */ }
+let favOnly = false;
+function favKey(mkt, symbol) { return mkt + ":" + symbol; }
+function isFav(mkt, symbol) { return favSet.has(favKey(mkt, symbol)); }
+function saveFavs() {
+  try { localStorage.setItem("dtrade-favs", JSON.stringify([...favSet])); }
+  catch (e) { /* abaikan */ }
+}
+function favStarHtml(mkt, symbol) {
+  const on = isFav(mkt, symbol);
+  return '<span class="favstar' + (on ? " on" : "") + '" data-fav="' +
+    escHtml(favKey(mkt, symbol)) + '" title="Favorit">' + (on ? "★" : "☆") + "</span>";
+}
+function paintFavStates() {
+  document.querySelectorAll("[data-fav]").forEach(el => {
+    const on = favSet.has(el.dataset.fav);
+    el.classList.toggle("on", on);
+    el.textContent = on ? "★" : "☆";
+  });
+  paintDetailFav();
+}
+function paintDetailFav() {
+  const b = $("btnFav");
+  if (!b || !currentSymbol) return;
+  const on = isFav(lastMarket, currentSymbol);
+  b.innerHTML = '<i class="fa-' + (on ? "solid" : "regular") + ' fa-star"></i>';
+  b.classList.toggle("on", on);
+}
+function renderCurrentList() { if (market === "crypto") renderList(); else renderStocks(); }
+function toggleFav(mkt, symbol) {
+  const k = favKey(mkt, symbol);
+  if (favSet.has(k)) favSet.delete(k); else favSet.add(k);
+  saveFavs();
+  paintFavStates();
+  if (favOnly) renderCurrentList();
+}
+$("favTog").addEventListener("click", () => {
+  favOnly = !favOnly;
+  $("favTog").classList.toggle("on", favOnly);
+  $("favTog").textContent = favOnly ? "★ Favorit" : "☆ Favorit";
+  renderCurrentList();
+});
+/* Klik bintang di baris: fase capture agar tidak ikut membuka detail. */
+$("list").addEventListener("click", ev2 => {
+  const st = ev2.target.closest("[data-fav]");
+  if (!st) return;
+  ev2.stopPropagation();
+  ev2.preventDefault();
+  const i = st.dataset.fav.indexOf(":");
+  toggleFav(st.dataset.fav.slice(0, i), st.dataset.fav.slice(i + 1));
+}, true);
+$("btnFav").addEventListener("click", () => {
+  if (currentSymbol) toggleFav(lastMarket, currentSymbol);
+});
+const FAV_EMPTY_HTML = '<div class="favempty">Belum ada favorit di pasar ini.<br>' +
+  "Ketuk ☆ pada baris daftar atau di halaman Analisis untuk menambahkan.</div>";
 
 /* ================= Detail & grafik (LIVE via WebSocket) ================= */
 let currentSymbol = null, currentInterval = "1h", detailTimer = null;
@@ -1276,6 +1356,7 @@ async function openDetail(symbol, mkt) {
   renderDetailTabs();
   $("detailView").classList.add("open");
   syncNavDepth();
+  paintDetailFav();
   window.scrollTo(0, 0);
   await loadDetail(false, true);
   startDetailTimer();
