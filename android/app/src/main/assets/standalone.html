@@ -363,7 +363,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.19.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.20.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1378,7 +1378,7 @@ function renderList() {
     const d = document.createElement("div");
     d.className = "sym"; d.dataset.symbol = s.symbol;
     d.innerHTML = rowHtml(s);
-    d.addEventListener("click", () => openDetail(s.symbol));
+    d.addEventListener("click", () => openDetail(s.symbol, "crypto"));
     list.appendChild(d);
   });
   if (favOnly && vis.length === 0) list.innerHTML = FAV_EMPTY_HTML;
@@ -1560,13 +1560,34 @@ function setLive(on, label) {
 }
 
 let lastMarket = "crypto";
+/* Pasar asal sebuah simbol menurut daftar yang sudah dimuat —
+   sumber kebenaran untuk menentukan pasar saat membuka detail. */
+function homeMarket(symbol) {
+  if (!symbol) return null;
+  if (symbols.some(s => s.symbol === symbol)) return "crypto";
+  if ((stockLists.idx || []).some(e => e.symbol === symbol)) return "idx";
+  if ((stockLists.global || []).some(e => e.symbol === symbol)) return "global";
+  return null;
+}
+function inMarket(mkt, symbol) {
+  if (mkt === "crypto") return symbols.some(s => s.symbol === symbol);
+  return (stockLists[mkt] || []).some(e => e.symbol === symbol);
+}
 async function openDetail(symbol, mkt) {
   currentSymbol = symbol;
   lastSymbol = symbol;
-  /* v1.14.0: tanpa argumen pasar (mis. tab Analisis di navigasi bawah),
-     PERTAHANKAN pasar terakhir — sebelumnya saham selalu dibuka ulang
-     sebagai crypto dan gagal dimuat. */
-  lastMarket = mkt || lastMarket || "crypto";
+  /* v1.20.0: pasar ditentukan dari SIMBOL-nya, bukan dari pasar
+     detail sebelumnya. Bug lama: baris daftar crypto memanggil
+     openDetail tanpa pasar, dan fallback lastMarket yang basi
+     (mis. "idx" dari detail BBRI sebelumnya) membuka BTCUSDT
+     sebagai saham IDX → "instrumen tidak ditemukan" + grafik lama
+     tertinggal. Sekarang: pasar eksplisit yang valid untuk simbol
+     itu menang; selain itu pasar asal simbol; terakhir pasar
+     detail saat ini / terakhir. */
+  const home = homeMarket(symbol);
+  let resolved = mkt || home || detailMarket || lastMarket || "crypto";
+  if (home && resolved !== home && !inMarket(resolved, symbol)) resolved = home;
+  lastMarket = resolved;
   detailMarket = lastMarket === "crypto" ? "crypto" : "stock";
   detailEntry = detailMarket === "stock"
     ? (stockLists[lastMarket] || []).find(e => e.symbol === symbol) || null
@@ -1653,6 +1674,28 @@ function closeDetail() {
   showTab(currentTab);
 }
 let detailLoadSeq = 0;
+/* Keadaan gagal muat (v1.20.0): jangan tinggalkan grafik/statistik/
+   rencana milik simbol sebelumnya di layar — menyesatkan. Bersihkan
+   semuanya dan selesaikan panel multi-timeframe dengan pesan jelas. */
+function paintDetailError(msg) {
+  $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + msg + "</div>";
+  detailKlines = [];
+  tradePlan = null;
+  lastAnalysis = null;
+  const canvas = $("chart");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  $("stats").innerHTML = "";
+  $("reasons").innerHTML = "";
+  $("plan").innerHTML = "";
+  $("planNote").textContent = "";
+  $("mtfRow").innerHTML = '<div class="status" style="padding:2px 0">Multi-timeframe tidak tersedia — data gagal dimuat.</div>';
+  $("mtfNote").textContent = "";
+  $("relNews").innerHTML = "";
+}
+
 async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
   /* Penjaga balapan (v1.13.0): ganti timeframe/simbol cepat bisa membuat
@@ -1694,7 +1737,7 @@ async function loadDetail(keepScroll, restartWs) {
       refreshStockQuote();
       if (!keepScroll) window.scrollTo(0, 0);
     } catch (err) {
-      $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + err.message + "</div>";
+      paintDetailError(err.message);
     }
     return;
   }
@@ -1716,7 +1759,7 @@ async function loadDetail(keepScroll, restartWs) {
     if (restartWs) connectWs();
     if (!keepScroll) window.scrollTo(0, 0);
   } catch (e) {
-    $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + e.message + "</div>";
+    paintDetailError(e.message);
   }
 }
 /* ================= Ringkasan multi-timeframe (v1.17.0) =================
@@ -2405,7 +2448,7 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
     const t = b.dataset.tab;
     if (t === "analisis") {
-      if (!currentSymbol) openDetail(lastSymbol || "BTCUSDT", lastMarket);
+      if (!currentSymbol) openDetail(lastSymbol || "BTCUSDT");
       return;
     }
     /* Pindah tab dari halaman detail/pembaca: bersihkan dulu dengan
@@ -2696,7 +2739,7 @@ function renderPicker() {
       d.innerHTML = rowHtml(s);
       d.addEventListener("click", () => {
         closePicker();
-        if (s.symbol !== currentSymbol) openDetail(s.symbol);
+        if (s.symbol !== currentSymbol) openDetail(s.symbol, "crypto");
       });
       wrap.appendChild(d);
     });
