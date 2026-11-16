@@ -55,6 +55,23 @@
   .coini{position:absolute;inset:0;width:100%;height:100%;border-radius:50%}
   .slogo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
     padding:16%;box-sizing:border-box;background:#fff;border-radius:50%}
+  /* ===== Orderbook Bid/Offer (v1.12.0) ===== */
+  .obgrid{display:flex;gap:10px}
+  .obside{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .obside .k{font-size:.72rem;color:var(--muted);letter-spacing:.02em}
+  .obside .v{font-size:1.08rem;font-weight:800;margin-top:2px}
+  .obside .s{font-size:.8rem;color:var(--muted);margin-top:1px}
+  .obbar{height:8px;border-radius:4px;background:rgba(246,70,93,.4);margin-top:10px;overflow:hidden}
+  .obfill{height:100%;background:var(--green)}
+  /* ===== Tambah simbol kustom (v1.12.0) ===== */
+  .addsym{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:10px;
+    background:var(--panel);border:1px dashed rgba(240,185,11,.5);border-radius:10px;
+    color:var(--gold);font-weight:700;font-size:.88rem;cursor:pointer}
+  .delsym{flex:none;width:26px;height:26px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);display:flex;align-items:center;
+    justify-content:center;font-size:.7rem;margin-left:8px;cursor:pointer}
+  .asfield{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:12px;color:var(--text);font-size:.95rem;margin:6px 0 14px}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
   .up{color:var(--green)} .dn{color:var(--red)}
   .chip{flex:none;min-width:86px;text-align:center;border-radius:9px;padding:6px 7px;
@@ -171,6 +188,7 @@
       <option value="change">Perubahan 24j</option>
     </select>
   </div>
+  <button class="addsym hidden" id="btnAddSym"><i class="fa-solid fa-plus"></i> Tambah simbol saham</button>
   <div class="status" id="status">Memuat daftar simbol…</div>
   <div class="list" id="list"></div>
   <div class="err hidden" id="listErr"></div>
@@ -209,6 +227,9 @@
   <div class="chartbox"><canvas id="chart" height="340"></canvas></div>
   <div class="verdict" id="verdict"></div>
   <div class="stats" id="stats"></div>
+  <div class="reasons hidden" id="obBox"><h4>Orderbook — Bid / Offer teratas</h4>
+    <div id="obBody"><div class="status" style="padding:2px 0">Memuat antrean…</div></div>
+  </div>
   <div class="reasons" style="margin-bottom:0"><h4>Rencana trade — Entry · TP · SL</h4>
     <div id="plan"></div>
     <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
@@ -249,6 +270,22 @@
   <div id="readerBody" style="padding:8px 16px 90px"></div>
 </div>
 
+<div id="addSymView" class="hidden" style="position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;padding:16px;overflow:auto">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <button class="iconbtn" id="btnAddSymBack" aria-label="Kembali"><i class="fa-solid fa-arrow-left"></i></button>
+    <div class="nm" style="font-size:1rem">Tambah Simbol Saham</div>
+  </div>
+  <div class="lbl">Pasar aktif: <b id="asMkt">—</b>. Simbol tersimpan di perangkat ini dan
+  muncul di daftar pasar tersebut. Untuk IDX cukup tulis kodenya (mis. BMRI) — akhiran .JK
+  ditambahkan otomatis. Untuk global tulis tickernya (mis. AAPL).</div>
+  <label style="margin-top:16px;font-weight:700">Kode saham</label>
+  <input class="asfield" id="asTicker" placeholder="cth: BMRI / AAPL" autocomplete="off" style="text-transform:uppercase">
+  <label style="font-weight:700">Nama perusahaan (opsional)</label>
+  <input class="asfield" id="asName" placeholder="cth: Bank Mandiri" autocomplete="off">
+  <button class="addsym" id="asAdd" style="width:100%;margin:4px 0 0;border-style:solid">Tambahkan ke daftar</button>
+  <div class="status" id="asStatus"></div>
+</div>
+
 <div id="newsView" class="hidden">
   <div class="controls" style="padding:12px 14px 0">
     <input id="nq" type="search" placeholder="Cari berita… (cth: Bitcoin, NFT, ETF)" autocomplete="off">
@@ -277,7 +314,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.11.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.12.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -526,7 +563,75 @@ const STOCK_DEFS = {
     { symbol: "MIKA.JK", ticker: "MIKA", name: "Mitra Keluarga Karyasehat", kw: ["mitra keluarga"] },
     { symbol: "CPIN.JK", ticker: "CPIN", name: "Charoen Pokphand", kw: ["charoen"] },
     { symbol: "SMGR.JK", ticker: "SMGR", name: "Semen Indonesia", kw: ["semen indonesia"] },
-    { symbol: "ITMG.JK", ticker: "ITMG", name: "Indo Tambangraya Megah", kw: ["indo tambangraya"] }
+    { symbol: "ITMG.JK", ticker: "ITMG", name: "Indo Tambangraya Megah", kw: ["indo tambangraya"] },
+    { symbol: "AALI.JK", ticker: "AALI", name: "Astra Agro Lestari", kw: ["astra agro"] },
+    { symbol: "ACES.JK", ticker: "ACES", name: "Ace Hardware Indonesia", kw: ["ace hardware"] },
+    { symbol: "ADMR.JK", ticker: "ADMR", name: "Adaro Minerals Indonesia", kw: ["adaro minerals"] },
+    { symbol: "AMMN.JK", ticker: "AMMN", name: "Amman Mineral Internasional", kw: ["amman mineral"] },
+    { symbol: "ASSA.JK", ticker: "ASSA", name: "Adi Sarana Armada", kw: ["adi sarana"] },
+    { symbol: "AVIA.JK", ticker: "AVIA", name: "Avia Avian", kw: ["avia avian"] },
+    { symbol: "BDMN.JK", ticker: "BDMN", name: "Bank Danamon Indonesia", kw: ["danamon"] },
+    { symbol: "BFIN.JK", ticker: "BFIN", name: "BFI Finance Indonesia", kw: ["bfi finance"] },
+    { symbol: "BJBR.JK", ticker: "BJBR", name: "Bank Pembangunan Daerah Jawa Barat", kw: ["bank bjb"] },
+    { symbol: "BJTM.JK", ticker: "BJTM", name: "Bank Pembangunan Daerah Jawa Timur", kw: ["bank jatim"] },
+    { symbol: "BMTR.JK", ticker: "BMTR", name: "Global Mediacom", kw: ["global mediacom"] },
+    { symbol: "BNGA.JK", ticker: "BNGA", name: "Bank CIMB Niaga", kw: ["cimb niaga"] },
+    { symbol: "BRPT.JK", ticker: "BRPT", name: "Barito Pacific", kw: ["barito pacific"] },
+    { symbol: "BSDE.JK", ticker: "BSDE", name: "Bumi Serpong Damai", kw: ["bumi serpong"] },
+    { symbol: "BTPS.JK", ticker: "BTPS", name: "Bank BTPN Syariah", kw: ["btpn syariah"] },
+    { symbol: "BUMI.JK", ticker: "BUMI", name: "Bumi Resources", kw: ["bumi resources"] },
+    { symbol: "BYAN.JK", ticker: "BYAN", name: "Bayan Resources", kw: ["bayan resources"] },
+    { symbol: "CLEO.JK", ticker: "CLEO", name: "Sariguna Primatirta", kw: ["cleo", "sariguna"] },
+    { symbol: "CTRA.JK", ticker: "CTRA", name: "Ciputra Development", kw: ["ciputra"] },
+    { symbol: "DOID.JK", ticker: "DOID", name: "Delta Dunia Makmur", kw: ["delta dunia"] },
+    { symbol: "DSNG.JK", ticker: "DSNG", name: "Dharma Satya Nusantara", kw: ["dharma satya"] },
+    { symbol: "ELSA.JK", ticker: "ELSA", name: "Elnusa", kw: ["elnusa"] },
+    { symbol: "ERAA.JK", ticker: "ERAA", name: "Erajaya Swasembada", kw: ["erajaya"] },
+    { symbol: "ESSA.JK", ticker: "ESSA", name: "ESSA Industries Indonesia", kw: ["essa industries", "surya esa"] },
+    { symbol: "FILM.JK", ticker: "FILM", name: "MD Pictures", kw: ["md pictures"] },
+    { symbol: "GGRM.JK", ticker: "GGRM", name: "Gudang Garam", kw: ["gudang garam"] },
+    { symbol: "GJTL.JK", ticker: "GJTL", name: "Gajah Tunggal", kw: ["gajah tunggal"] },
+    { symbol: "HEAL.JK", ticker: "HEAL", name: "Medikaloka Hermina", kw: ["hermina"] },
+    { symbol: "HMSP.JK", ticker: "HMSP", name: "HM Sampoerna", kw: ["sampoerna"] },
+    { symbol: "HRUM.JK", ticker: "HRUM", name: "Harum Energy", kw: ["harum energy"] },
+    { symbol: "INKP.JK", ticker: "INKP", name: "Indah Kiat Pulp & Paper", kw: ["indah kiat"] },
+    { symbol: "INTP.JK", ticker: "INTP", name: "Indocement Tunggal Prakarsa", kw: ["indocement"] },
+    { symbol: "JPFA.JK", ticker: "JPFA", name: "Japfa Comfeed Indonesia", kw: ["japfa"] },
+    { symbol: "JSMR.JK", ticker: "JSMR", name: "Jasa Marga", kw: ["jasa marga"] },
+    { symbol: "LPKR.JK", ticker: "LPKR", name: "Lippo Karawaci", kw: ["lippo karawaci"] },
+    { symbol: "LPPF.JK", ticker: "LPPF", name: "Matahari Department Store", kw: ["matahari department"] },
+    { symbol: "LSIP.JK", ticker: "LSIP", name: "PP London Sumatra Indonesia", kw: ["london sumatra"] },
+    { symbol: "MAPI.JK", ticker: "MAPI", name: "Mitra Adiperkasa", kw: ["mitra adiperkasa"] },
+    { symbol: "MAPA.JK", ticker: "MAPA", name: "Map Aktif Adiperkasa", kw: ["map aktif"] },
+    { symbol: "MBMA.JK", ticker: "MBMA", name: "Merdeka Battery Materials", kw: ["merdeka battery"] },
+    { symbol: "MDKA.JK", ticker: "MDKA", name: "Merdeka Copper Gold", kw: ["merdeka copper"] },
+    { symbol: "MNCN.JK", ticker: "MNCN", name: "Media Nusantara Citra", kw: ["media nusantara", "mncn"] },
+    { symbol: "MTEL.JK", ticker: "MTEL", name: "Dayamitra Telekomunikasi", kw: ["mitratel", "dayamitra"] },
+    { symbol: "MYOR.JK", ticker: "MYOR", name: "Mayora Indah", kw: ["mayora"] },
+    { symbol: "NCKL.JK", ticker: "NCKL", name: "Trimegah Bangun Persada", kw: ["trimegah bangun", "harita"] },
+    { symbol: "PANI.JK", ticker: "PANI", name: "Pantai Indah Kapuk Dua", kw: ["pantai indah kapuk"] },
+    { symbol: "PGEO.JK", ticker: "PGEO", name: "Pertamina Geothermal Energy", kw: ["pertamina geothermal"] },
+    { symbol: "PNLF.JK", ticker: "PNLF", name: "Panin Financial", kw: ["panin financial"] },
+    { symbol: "POWR.JK", ticker: "POWR", name: "Cikarang Listrindo", kw: ["cikarang listrindo"] },
+    { symbol: "PTPP.JK", ticker: "PTPP", name: "PP (Persero)", kw: ["pp persero", "ptpp"] },
+    { symbol: "PWON.JK", ticker: "PWON", name: "Pakuwon Jati", kw: ["pakuwon"] },
+    { symbol: "RAJA.JK", ticker: "RAJA", name: "Rukun Raharja", kw: ["rukun raharja"] },
+    { symbol: "SCMA.JK", ticker: "SCMA", name: "Surya Citra Media", kw: ["surya citra"] },
+    { symbol: "SIDO.JK", ticker: "SIDO", name: "Industri Jamu dan Farmasi Sido Muncul", kw: ["sido muncul"] },
+    { symbol: "SILO.JK", ticker: "SILO", name: "Siloam International Hospitals", kw: ["siloam"] },
+    { symbol: "SMDR.JK", ticker: "SMDR", name: "Samudera Indonesia", kw: ["samudera indonesia"] },
+    { symbol: "SMRA.JK", ticker: "SMRA", name: "Summarecon Agung", kw: ["summarecon"] },
+    { symbol: "SRTG.JK", ticker: "SRTG", name: "Saratoga Investama Sedaya", kw: ["saratoga"] },
+    { symbol: "SSIA.JK", ticker: "SSIA", name: "Surya Semesta Internusa", kw: ["surya semesta"] },
+    { symbol: "TAPG.JK", ticker: "TAPG", name: "Triputra Agro Persada", kw: ["triputra agro"] },
+    { symbol: "TBIG.JK", ticker: "TBIG", name: "Tower Bersama Infrastructure", kw: ["tower bersama"] },
+    { symbol: "TINS.JK", ticker: "TINS", name: "Timah", kw: ["timah tbk"] },
+    { symbol: "TKIM.JK", ticker: "TKIM", name: "Pabrik Kertas Tjiwi Kimia", kw: ["tjiwi kimia"] },
+    { symbol: "TOBA.JK", ticker: "TOBA", name: "TBS Energi Utama", kw: ["tbs energi"] },
+    { symbol: "TSPC.JK", ticker: "TSPC", name: "Tempo Scan Pacific", kw: ["tempo scan"] },
+    { symbol: "ULTJ.JK", ticker: "ULTJ", name: "Ultra Jaya Milk Industry", kw: ["ultra jaya", "ultrajaya"] },
+    { symbol: "UNTR.JK", ticker: "UNTR", name: "United Tractors", kw: ["united tractors"] },
+    { symbol: "WIKA.JK", ticker: "WIKA", name: "Wijaya Karya", kw: ["wijaya karya"] }
   ],
   global: [
     { symbol: "^GSPC", ticker: "SPX", name: "S&P 500 Index", index: true, kw: ["s&p 500", "sp 500"] },
@@ -560,7 +665,35 @@ const STOCK_DEFS = {
     { symbol: "PEP", ticker: "PEP", name: "PepsiCo", kw: ["pepsico", "pepsi"] },
     { symbol: "BAC", ticker: "BAC", name: "Bank of America", kw: ["bank of america"] },
     { symbol: "SPY", ticker: "SPY", name: "SPDR S&P 500 ETF", kw: ["s&p 500 etf"] },
-    { symbol: "QQQ", ticker: "QQQ", name: "Invesco QQQ (Nasdaq-100 ETF)", kw: ["qqq", "nasdaq-100"] }
+    { symbol: "QQQ", ticker: "QQQ", name: "Invesco QQQ (Nasdaq-100 ETF)", kw: ["qqq", "nasdaq-100"] },
+    { symbol: "BRK-B", ticker: "BRK-B", name: "Berkshire Hathaway B", kw: ["berkshire"] },
+    { symbol: "COIN", ticker: "COIN", name: "Coinbase Global", kw: ["coinbase"] },
+    { symbol: "PLTR", ticker: "PLTR", name: "Palantir Technologies", kw: ["palantir"] },
+    { symbol: "MSTR", ticker: "MSTR", name: "MicroStrategy (Strategy)", kw: ["microstrategy"] },
+    { symbol: "HOOD", ticker: "HOOD", name: "Robinhood Markets", kw: ["robinhood"] },
+    { symbol: "SMCI", ticker: "SMCI", name: "Super Micro Computer", kw: ["super micro"] },
+    { symbol: "ARM", ticker: "ARM", name: "Arm Holdings", kw: ["arm holdings"] },
+    { symbol: "UBER", ticker: "UBER", name: "Uber Technologies", kw: ["uber"] },
+    { symbol: "ABNB", ticker: "ABNB", name: "Airbnb", kw: ["airbnb"] },
+    { symbol: "SHOP", ticker: "SHOP", name: "Shopify", kw: ["shopify"] },
+    { symbol: "INTC", ticker: "INTC", name: "Intel", kw: ["intel"] },
+    { symbol: "MU", ticker: "MU", name: "Micron Technology", kw: ["micron"] },
+    { symbol: "QCOM", ticker: "QCOM", name: "Qualcomm", kw: ["qualcomm"] },
+    { symbol: "PYPL", ticker: "PYPL", name: "PayPal Holdings", kw: ["paypal"] },
+    { symbol: "SBUX", ticker: "SBUX", name: "Starbucks", kw: ["starbucks"] },
+    { symbol: "CRWD", ticker: "CRWD", name: "CrowdStrike Holdings", kw: ["crowdstrike"] },
+    { symbol: "PANW", ticker: "PANW", name: "Palo Alto Networks", kw: ["palo alto"] },
+    { symbol: "SNOW", ticker: "SNOW", name: "Snowflake", kw: ["snowflake"] },
+    { symbol: "DDOG", ticker: "DDOG", name: "Datadog", kw: ["datadog"] },
+    { symbol: "MRVL", ticker: "MRVL", name: "Marvell Technology", kw: ["marvell"] },
+    { symbol: "TSM", ticker: "TSM", name: "Taiwan Semiconductor", kw: ["tsmc", "taiwan semiconductor"] },
+    { symbol: "ASML", ticker: "ASML", name: "ASML Holding", kw: ["asml"] },
+    { symbol: "BABA", ticker: "BABA", name: "Alibaba Group", kw: ["alibaba"] },
+    { symbol: "NIO", ticker: "NIO", name: "NIO Inc", kw: ["nio inc"] },
+    { symbol: "PDD", ticker: "PDD", name: "PDD Holdings (Temu)", kw: ["pdd holdings", "temu"] },
+    { symbol: "NVO", ticker: "NVO", name: "Novo Nordisk", kw: ["novo nordisk"] },
+    { symbol: "DIS", ticker: "DIS", name: "Walt Disney", kw: ["disney"] },
+    { symbol: "BA", ticker: "BA", name: "Boeing", kw: ["boeing"] }
   ]
 };
 const stockLists = { idx: [], global: [] };
@@ -614,13 +747,157 @@ function aggregateCandles(candles, hours) {
   }
   return out;
 }
+/* ============ Simbol kustom (v1.12.0) ============
+   Emiten di luar daftar bawaan bisa ditambah pengguna; definisinya
+   disimpan di localStorage per pasar dan digabung saat daftar dimuat. */
+function customDefs(mkt) {
+  try { return JSON.parse(localStorage.getItem("dtrade-custom-" + mkt) || "[]"); }
+  catch (e) { return []; }
+}
+function saveCustomDefs(mkt, defs) {
+  try { localStorage.setItem("dtrade-custom-" + mkt, JSON.stringify(defs)); }
+  catch (e) { /* penyimpanan penuh — abaikan */ }
+}
+function mergedStockDefs(mkt) {
+  const base = STOCK_DEFS[mkt];
+  return base.concat(customDefs(mkt).filter(cd =>
+    !base.some(d => d.symbol === cd.symbol)));
+}
+
+/* ============ Quote Yahoo — Bid/Offer (v1.12.0) ============
+   Endpoint quote v7 butuh sesi cookie + crumb: fc.yahoo.com menanam
+   cookie (jembatan native menyimpan cookie antar panggilan), lalu
+   getcrumb, lalu quote. Harga bid/ask selalu tersedia; ukuran antrean
+   (bidSize/askSize) terisi hanya saat bursa buka. Kedalaman antrean
+   bertingkat + Freq per level adalah data berlisensi broker/IDX —
+   tidak tersedia dari sumber publik gratis — jadi yang dipakai adalah
+   antrean teratas (top of book) dari Yahoo. */
+let yahooCrumb = null;
+let stockQuote = null, stockQuoteSym = null, stockQuoteAt = 0;
+async function yahooQuote(symbol, retry) {
+  if (!yahooCrumb) {
+    try { await fetchText("https://fc.yahoo.com/"); } catch (e) { /* cookie tetap dicoba */ }
+    yahooCrumb = (await fetchText("https://query2.finance.yahoo.com/v1/test/getcrumb")).trim();
+    if (!yahooCrumb || yahooCrumb.length > 40) throw new Error("crumb Yahoo gagal");
+  }
+  const data = JSON.parse(await fetchText(
+    "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" +
+    encodeURIComponent(symbol) + "&crumb=" + encodeURIComponent(yahooCrumb)));
+  const r = data && data.quoteResponse && data.quoteResponse.result &&
+    data.quoteResponse.result[0];
+  if (!r) {
+    if (!retry) { yahooCrumb = null; return yahooQuote(symbol, true); }
+    throw new Error("quote kosong");
+  }
+  return r;
+}
+async function refreshStockQuote() {
+  if (detailMarket !== "stock" || !detailEntry) return;
+  const sym = detailEntry.symbol;
+  if (stockQuoteSym === sym && Date.now() - stockQuoteAt < 60000) {
+    renderOrderbook();
+    return;
+  }
+  try {
+    stockQuote = await yahooQuote(sym);
+    stockQuoteSym = sym;
+    stockQuoteAt = Date.now();
+  } catch (e) { stockQuote = null; stockQuoteSym = null; }
+  if (currentSymbol === sym && detailMarket === "stock") {
+    renderOrderbook();
+    renderAnalysis();
+  }
+}
+function obImbalance() {
+  if (!stockQuote || !detailEntry || stockQuoteSym !== detailEntry.symbol) return null;
+  const bs = stockQuote.bidSize || 0, as = stockQuote.askSize || 0;
+  if (bs + as <= 0) return null;
+  return (bs - as) / (bs + as);
+}
+function renderOrderbook() {
+  const box = $("obBody");
+  if (!box) return;
+  const e = detailEntry;
+  if (!stockQuote || stockQuoteSym !== (e && e.symbol)) {
+    box.innerHTML = '<div class="status" style="padding:2px 0">Memuat antrean…</div>';
+    return;
+  }
+  const q = stockQuote;
+  const isIdx = lastMarket === "idx";
+  const fmtSz = v => v ? (isIdx
+    ? Math.round(v / 100).toLocaleString("id-ID") + " lot"
+    : Math.round(v).toLocaleString("id-ID") + " lembar") : "—";
+  const bid = q.bid, ask = q.ask;
+  let h = '<div class="obgrid">' +
+    '<div class="obside"><div class="k">BID — antrean beli</div>' +
+    '<div class="v up">' + (bid != null ? fmtActive(bid) : "—") + '</div>' +
+    '<div class="s">' + fmtSz(q.bidSize) + '</div></div>' +
+    '<div class="obside"><div class="k">OFFER — antrean jual</div>' +
+    '<div class="v dn">' + (ask != null ? fmtActive(ask) : "—") + '</div>' +
+    '<div class="s">' + fmtSz(q.askSize) + '</div></div></div>';
+  if (bid != null && ask != null && bid > 0) {
+    h += '<div class="lbl" style="margin-top:8px">Spread ' + fmtActive(ask - bid) +
+      ' (' + ((ask - bid) / bid * 100).toFixed(2) + '%)</div>';
+  }
+  const imb = obImbalance();
+  if (imb !== null) {
+    const pct = Math.round((imb + 1) / 2 * 100);
+    h += '<div class="obbar"><div class="obfill" style="width:' + pct + '%"></div></div>' +
+      '<div class="lbl" style="margin-top:6px">Tekanan antrean: ' +
+      (imb >= 0 ? 'bid lebih besar ' : 'offer lebih besar ') +
+      Math.abs(Math.round(imb * 100)) + '% — ikut memperkuat skor (maks ±10).</div>';
+  } else {
+    h += '<div class="lbl" style="margin-top:8px">Ukuran antrean tampil saat bursa buka; ' +
+      'di luar jam bursa hanya harga bid/offer terakhir yang tersedia.</div>';
+  }
+  h += '<div class="lbl" style="margin-top:6px">Sumber: Yahoo Finance (tertunda). Antrean ' +
+    'bertingkat + Freq per level adalah data berlisensi broker/IDX dan tidak tersedia ' +
+    'dari sumber publik gratis.</div>';
+  box.innerHTML = h;
+}
+/* Penyesuaian skor saham (v1.12.0): tekanan orderbook ±10 dan rasio
+   volume ±5 di atas skor teknikal murni. Skor daftar tetap teknikal. */
+function stockAdjustments() {
+  const parts = [], reasons = [];
+  let total = 0, volRatio = null;
+  const imb = obImbalance();
+  if (imb !== null) {
+    const pts = Math.round(imb * 10);
+    if (pts !== 0) {
+      total += pts;
+      parts.push("orderbook " + (pts > 0 ? "+" : "") + pts);
+      reasons.push("Tekanan orderbook " + (pts > 0 ? "+" : "") + pts + " — antrean " +
+        (imb >= 0 ? "bid" : "offer") + " lebih besar " +
+        Math.abs(Math.round(imb * 100)) + "%");
+    }
+  }
+  const vols = detailKlines.map(k => parseFloat(k[5]) || 0);
+  if (vols.length >= 21) {
+    const avg = vols.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
+    if (avg > 0) {
+      volRatio = vols[vols.length - 1] / avg;
+      const lk = detailKlines[detailKlines.length - 1];
+      const up = parseFloat(lk[4]) >= parseFloat(lk[1]);
+      if (volRatio >= 1.3) {
+        const pts = up ? 5 : -5;
+        total += pts;
+        parts.push("volume " + (pts > 0 ? "+" : "") + pts);
+        reasons.push("Volume " + volRatio.toFixed(1) + "× rata-rata 20 candle — " +
+          (up ? "tekanan beli" : "tekanan jual") + " menguat " +
+          (pts > 0 ? "+" : "") + pts);
+      }
+    }
+  }
+  return { total, parts, reasons, volRatio };
+}
+
 async function loadStocks(mkt, force) {
   if (stocksLoaded[mkt] && !force) { renderStocks(); return; }
   $("listErr").classList.add("hidden");
   $("status").textContent = "Memuat saham " + (mkt === "idx" ? "IDX" : "global") +
     " dari Yahoo Finance…";
   $("list").innerHTML = "";
-  const entries = await Promise.all(STOCK_DEFS[mkt].map(async def => {
+  const entries = await Promise.all(mergedStockDefs(mkt).map(async def => {
     const e = Object.assign({}, def, {
       market: mkt, currency: mkt === "idx" ? "IDR" : "USD",
       price: 0, change: 0, volume: 0, scoreObj: null, loading: true, candles: null
@@ -678,7 +955,9 @@ function stockRowHtml(e) {
     (e.index ? e.price.toLocaleString("id-ID", { maximumFractionDigits: 2 })
              : fmtMoney(e.price, e.currency)) + '</div>' +
     '<div class="chg ' + (e.change >= 0 ? "up" : "dn") + '">' +
-    (e.change >= 0 ? "+" : "") + e.change.toFixed(2) + '%</div></div>' + chipHtml(e);
+    (e.change >= 0 ? "+" : "") + e.change.toFixed(2) + '%</div></div>' + chipHtml(e) +
+    (e.custom ? '<span class="delsym" data-del="' + escHtml(e.symbol) +
+      '" title="Hapus simbol kustom"><i class="fa-solid fa-xmark"></i></span>' : "");
 }
 function renderStocks() {
   const list = $("list");
@@ -699,9 +978,24 @@ function renderStocks() {
     const d = document.createElement("div");
     d.className = "sym"; d.dataset.symbol = e.symbol;
     d.innerHTML = stockRowHtml(e);
-    d.addEventListener("click", () => openDetail(e.symbol, e.market));
+    d.addEventListener("click", ev2 => {
+      const del = ev2.target.closest("[data-del]");
+      if (del) {
+        ev2.stopPropagation();
+        removeCustomSymbol(e.market, e.symbol);
+        return;
+      }
+      openDetail(e.symbol, e.market);
+    });
     list.appendChild(d);
   });
+}
+function removeCustomSymbol(mkt, symbol) {
+  saveCustomDefs(mkt, customDefs(mkt).filter(d => d.symbol !== symbol));
+  stockLists[mkt] = (stockLists[mkt] || []).filter(e => e.symbol !== symbol);
+  renderStocks();
+  $("status").textContent = "Simbol kustom " + symbol + " dihapus · " +
+    stockLists[mkt].length + " instrumen";
 }
 function renderActiveList() {
   if (market === "crypto") renderList(); else renderStocks();
@@ -709,6 +1003,7 @@ function renderActiveList() {
 $("mktSeg").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
     market = b.dataset.mkt;
+    $("btnAddSym").classList.toggle("hidden", market === "crypto");
     $("mktSeg").querySelectorAll("button").forEach(x =>
       x.classList.toggle("on", x === b));
     if (market === "crypto") {
@@ -722,6 +1017,48 @@ $("mktSeg").querySelectorAll("button").forEach(b =>
         " instrumen · sinyal 1d · data Yahoo Finance";
     }
   }));
+
+/* ============ Modal tambah simbol kustom (v1.12.0) ============ */
+$("btnAddSym").addEventListener("click", () => {
+  $("asMkt").textContent = market === "idx" ? "Saham IDX" : "Saham Global";
+  $("asStatus").textContent = "";
+  $("addSymView").classList.remove("hidden");
+});
+$("btnAddSymBack").addEventListener("click", () =>
+  $("addSymView").classList.add("hidden"));
+$("asAdd").addEventListener("click", async () => {
+  const mkt = market;
+  const t = $("asTicker").value.trim().toUpperCase().replace(/\s+/g, "");
+  const nm = $("asName").value.trim();
+  if (!t) { $("asStatus").textContent = "Isi dulu kode sahamnya."; return; }
+  let symbol = t;
+  if (mkt === "idx" && !symbol.includes(".")) symbol += ".JK";
+  const ticker = symbol.replace(/\.JK$/, "");
+  const defs = customDefs(mkt);
+  if (defs.some(d => d.symbol === symbol) ||
+      STOCK_DEFS[mkt].some(d => d.symbol === symbol)) {
+    $("asStatus").textContent = symbol + " sudah ada di daftar.";
+    return;
+  }
+  const def = { symbol, ticker, name: nm || ticker,
+    kw: [(nm || ticker).toLowerCase()], custom: true };
+  $("asStatus").textContent = "Memeriksa " + symbol + " di Yahoo Finance…";
+  try {
+    const got = await fetchYahoo(def);
+    if (!got.candles || got.candles.length < 30) throw new Error("data kurang");
+  } catch (e) {
+    $("asStatus").textContent = "Simbol " + symbol +
+      " tidak ditemukan di Yahoo Finance. Periksa lagi kodenya.";
+    return;
+  }
+  defs.push(def);
+  saveCustomDefs(mkt, defs);
+  $("addSymView").classList.add("hidden");
+  $("asTicker").value = "";
+  $("asName").value = "";
+  stocksLoaded[mkt] = false;
+  loadStocks(mkt, true);
+});
 
 async function loadList() {
   const myRun = ++signalAbort;
@@ -993,13 +1330,20 @@ async function loadDetail(keepScroll, restartWs) {
   if (detailMarket === "stock") {
     const e = detailEntry;
     const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
+    $("obBox").classList.remove("hidden");
+    if (e && stockQuoteSym !== e.symbol) {
+      stockQuote = null;
+      stockQuoteSym = null;
+      renderOrderbook();
+    }
     $("dSymbol").textContent = e ? e.ticker : currentSymbol;
     $("dCoin").innerHTML = e ? stockIconHtml(e, 38) : "";
     $("dSub").textContent = (lastMarket === "idx" ? "Bursa Indonesia (IDX)" : "Saham Global") +
       " · " + stockInterval + " · Yahoo Finance · live (polling " +
       Math.round(tf.poll / 1000) + " dtk)";
-    $("dFoot").textContent = "Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir. " +
-      "Sinyal teknikal murni — bukan saran keuangan. Data: Yahoo Finance (publik).";
+    $("dFoot").textContent = "Skor saham = teknikal (EMA, RSI, MACD, Bollinger Bands) + tekanan " +
+      "orderbook Bid/Offer (±10) + rasio volume (±5) bila datanya tersedia. Bukan saran keuangan. " +
+      "Data: Yahoo Finance (publik).";
     try {
       if (!e) throw new Error("instrumen tidak ditemukan");
       const got = await fetchYahoo(e, tf.iv, tf.range);
@@ -1013,12 +1357,14 @@ async function loadDetail(keepScroll, restartWs) {
       drawChart(detailKlines);
       renderAnalysis();
       renderRelatedNews();
+      refreshStockQuote();
       if (!keepScroll) window.scrollTo(0, 0);
     } catch (err) {
       $("verdict").innerHTML = '<div style="color:var(--red)">Gagal memuat grafik: ' + err.message + "</div>";
     }
     return;
   }
+  $("obBox").classList.add("hidden");
   $("dSymbol").textContent = currentSymbol;
   $("dCoin").innerHTML = coinHtml(
     symbols.find(x => x.symbol === currentSymbol) || { symbol: currentSymbol }, 38);
@@ -1054,13 +1400,29 @@ function renderAnalysis() {
     s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s);
   }
   updatePriceHeader();
+  /* Saham (v1.12.0): skor gabungan = teknikal + tekanan orderbook +
+     rasio volume. Yang tersimpan di entri daftar tetap teknikal murni. */
+  let oc = o, adj = null, adjLbl = "";
+  if (detailMarket === "stock") {
+    adj = stockAdjustments();
+    if (adj.total !== 0) {
+      const total = Math.max(-100, Math.min(100, o.score + adj.total));
+      oc = Object.assign({}, o, {
+        score: total,
+        side: total >= 25 ? "LONG" : total <= -25 ? "SHORT" : "NETRAL",
+        reasons: o.reasons.concat(adj.reasons)
+      });
+      adjLbl = " · teknikal " + (o.score > 0 ? "+" : "") + o.score + " · " +
+        adj.parts.join(" · ");
+    }
+  }
   const v = $("verdict");
-  const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
+  const cls = oc.side === "LONG" ? "long" : oc.side === "SHORT" ? "short" : "neu";
   v.innerHTML = '<div class="chip ' + cls + '" style="min-width:104px;font-size:.95rem">' +
-    o.side + '<small>skor teknikal</small></div>' +
-    '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
+    oc.side + '<small>' + (adjLbl ? "skor gabungan" : "skor teknikal") + '</small></div>' +
+    '<div><div class="big">' + (oc.score > 0 ? "+" : "") + oc.score + '</div>' +
     '<div class="lbl">dari rentang −100 … +100 · interval ' +
-    (detailMarket === "stock" ? stockInterval : currentInterval) + '</div></div>';
+    (detailMarket === "stock" ? stockInterval : currentInterval) + adjLbl + '</div></div>';
   const stats = [
     ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
     ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
@@ -1069,10 +1431,13 @@ function renderAnalysis() {
     ["Bollinger atas", o.boll ? fmtActive(o.boll.upper) : "—"],
     ["Bollinger bawah", o.boll ? fmtActive(o.boll.lower) : "—"]
   ];
+  if (adj && adj.volRatio !== null) {
+    stats.push(["Volume vs rataan 20", adj.volRatio.toFixed(2) + "×"]);
+  }
   $("stats").innerHTML = stats.map(x =>
     '<div class="stat"><div class="k">' + x[0] + '</div><div class="v">' + x[1] + '</div></div>').join("");
-  $("reasons").innerHTML = o.reasons.map(r => "<li>" + r + "</li>").join("");
-  buildPlan(o, closes[closes.length - 1]);
+  $("reasons").innerHTML = oc.reasons.map(r => "<li>" + r + "</li>").join("");
+  buildPlan(oc, closes[closes.length - 1]);
   drawChart(detailKlines);
 }
 

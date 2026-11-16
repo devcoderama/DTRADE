@@ -53,6 +53,12 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Cookie bersama untuk koneksi jembatan (HttpURLConnection) —
+        // dibutuhkan sesi quote Yahoo Finance (cookie → crumb → quote)
+        // untuk data Bid/Offer saham. Hanya cookie pihak-pertama dari
+        // host yang diizinkan jembatan yang pernah diminta halaman.
+        java.net.CookieHandler.setDefault(
+            java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL))
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -457,7 +463,8 @@ class MainActivity : Activity() {
 
         /** Yahoo Finance — data harian saham IDX & global (v1.9.0). */
         private val STOCK_HOSTS = setOf(
-            "query1.finance.yahoo.com", "query2.finance.yahoo.com"
+            "query1.finance.yahoo.com", "query2.finance.yahoo.com",
+            "fc.yahoo.com"
         )
 
         private const val MENU_HOME = 1
