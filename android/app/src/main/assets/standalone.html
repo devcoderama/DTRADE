@@ -228,6 +228,25 @@
   /* Ruang gulir di bawah konten tab agar teks terakhir tidak tertutup
      navigasi bawah yang tetap (v1.24.0 — dilaporkan dari tab Lainnya). */
   #listView, #newsView, #moreView, #readerView{padding-bottom:96px}
+  /* ===== Chat AI (v1.30.0) — AI gratis dari web, tanpa kunci API ===== */
+  #chatView{display:flex;flex-direction:column;height:calc(100vh - 122px);padding-bottom:0}
+  #chatList{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+  .cbub{max-width:86%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.55;
+    white-space:pre-wrap;word-break:break-word}
+  .cbub.me{align-self:flex-end;background:var(--gold);color:#0b0e11;border-bottom-right-radius:4px;font-weight:600}
+  .cbub.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
+    color:var(--text);border-bottom-left-radius:4px}
+  .cbub.typing{color:var(--muted);font-style:italic}
+  .chatbar{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg)}
+  .chatbar input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    padding:11px 16px;color:var(--text);font-size:.92rem;outline:none}
+  .chatbar input:focus{border-color:rgba(240,185,11,.55)}
+  .chatbar button{flex:none;width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
+    background:var(--gold);color:#0b0e11;font-size:1rem}
+  .chatbar button:disabled{opacity:.45;cursor:default}
+  .aibtn{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:12px;border-radius:12px;
+    background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.5);color:var(--gold);
+    font-weight:700;font-size:.92rem;cursor:pointer}
 </style>
 <link rel="stylesheet" href="fa/css/all.min.css">
 </head>
@@ -334,6 +353,7 @@
     <div class="lbl" id="planNote" style="font-size:.78rem;color:var(--muted);margin-top:8px"></div>
   </div>
   <button class="sharebtn" id="btnShare"><i class="fa-solid fa-share-nodes"></i> Bagikan analisis — gambar + teks</button>
+  <button class="aibtn" id="btnAskAi"><i class="fa-solid fa-robot"></i> Minta Pendapat AI — gratis dari web</button>
   <div class="reasons"><h4>Alasan sinyal</h4><ul id="reasons"></ul></div>
   <div class="foot" id="dFoot">Skor = gabungan 12 komponen teknikal dari candle terakhir.
   Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
@@ -410,6 +430,24 @@
   <div class="status" id="asStatus"></div>
 </div>
 
+<div id="chatView" class="hidden">
+  <div class="info" style="margin:12px 14px 0">🤖 <b>Chat AI gratis dari web</b> (tanpa kunci API, tanpa akun) —
+  untuk tanya jawab umum dan membantu membaca analisis teknikal. Jawaban bisa lambat dan terbatas,
+  dan <b>bukan nasihat keuangan</b>. Riwayat chat hanya tersimpan di HP ini.
+  Di mode server, AI memakai kunci API backend Anda sendiri.</div>
+  <div id="chatList"></div>
+  <div class="chips" id="chatChips" style="padding-bottom:8px">
+    <button data-q="Jelaskan apa itu RSI dan cara membacanya untuk pemula">Apa itu RSI?</button>
+    <button data-q="Apa beda sinyal LONG dan SHORT di trading futures?">LONG vs SHORT</button>
+    <button data-q="Tips manajemen risiko trading futures untuk pemula">Manajemen risiko</button>
+    <button id="chatClear">🗑 Hapus riwayat</button>
+  </div>
+  <div class="chatbar">
+    <input id="chatInput" type="text" placeholder="Tulis pesan untuk AI…" autocomplete="off">
+    <button id="chatSend" aria-label="Kirim pesan"><i class="fa-solid fa-paper-plane"></i></button>
+  </div>
+</div>
+
 <div id="newsView" class="hidden">
   <div class="controls" style="padding:12px 14px 0">
     <input id="nq" type="search" placeholder="Cari berita… (cth: Bitcoin, NFT, ETF)" autocomplete="off">
@@ -429,8 +467,9 @@
     </div>
   </div>
   <div class="info" style="margin:0 14px 10px">Mode mandiri: aplikasi tidak terhubung ke server DTRADE, jadi yang
-  ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita</b> dari
-  API publik Binance, Yahoo Finance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
+  ditampilkan adalah <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita</b> dari
+  API publik Binance, Yahoo Finance &amp; RSS — tanpa eksekusi order. Satu-satunya AI di mode ini adalah
+  <b>Chat AI gratis dari web</b> (tab Chat AI, tanpa kunci API) — AI dari kunci API backend hanya ada di mode server.</div>
   <div class="serverbar" id="serverBar" style="margin:0 14px 10px">
     <div>Server: <b id="serverUrl">—</b></div>
     <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
@@ -449,7 +488,7 @@
   <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
   <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
   Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.29.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.30.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -462,6 +501,7 @@
 <nav class="bottomnav" id="bottomNav">
   <button data-tab="pasar" class="on"><i class="fa-solid fa-house ic"></i>Pasar</button>
   <button data-tab="analisis"><i class="fa-solid fa-chart-line ic"></i>Analisis</button>
+  <button data-tab="chat"><i class="fa-solid fa-robot ic"></i>Chat AI</button>
   <button data-tab="berita"><i class="fa-solid fa-newspaper ic"></i>Berita</button>
   <button data-tab="lainnya"><i class="fa-solid fa-bars ic"></i>Lainnya</button>
 </nav>
@@ -3348,7 +3388,7 @@ if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
 /* ================= Navigasi bawah (v1.6.0) ================= */
 let currentTab = "pasar";
 let lastSymbol = null;
-const TAB_VIEWS = { pasar: "listView", berita: "newsView", lainnya: "moreView" };
+const TAB_VIEWS = { pasar: "listView", chat: "chatView", berita: "newsView", lainnya: "moreView" };
 /* v1.14.0: laporkan kedalaman navigasi ke aplikasi Android agar
    tombol Back mengikuti alur halaman (pembaca → detail → daftar),
    bukan langsung keluar aplikasi. */
@@ -3384,6 +3424,123 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
     closeReader();
     showTab(t);
   }));
+
+/* ================= Chat AI (v1.30.0) =================
+   AI gratis dari web (layanan Pollinations — tanpa kunci API, tanpa akun)
+   khusus mode mandiri: chat umum + membantu membaca analisis teknikal.
+   Di dalam aplikasi, panggilan lewat jembatan native aiChat() yang POST
+   ke satu endpoint tetap; di browser biasa memakai fetch langsung.
+   Mode server TIDAK memakai ini — di sana AI memakai kunci API yang ada
+   di backend (.env), sesuai pembagian yang diminta pemilik. */
+const AI_SYSTEM = "Kamu adalah asisten AI di aplikasi D TRADE (aplikasi analisis pasar crypto dan saham). " +
+  "Jawablah dalam Bahasa Indonesia yang jelas dan ringkas. Kamu boleh membantu menjelaskan analisis teknikal, " +
+  "indikator, dan konsep trading, serta menjawab pertanyaan umum. Kamu BUKAN penasihat keuangan: jangan pernah " +
+  "menjanjikan profit atau menyuruh membeli/menjual secara pasti; ingatkan risiko secara singkat bila relevan.";
+let chatMsgs = [];
+try { chatMsgs = JSON.parse(localStorage.getItem("dtrade-chat-v1") || "[]"); } catch (e) { chatMsgs = []; }
+if (!Array.isArray(chatMsgs)) chatMsgs = [];
+let chatBusy = false;
+
+function saveChat() {
+  try { localStorage.setItem("dtrade-chat-v1", JSON.stringify(chatMsgs.slice(-40))); } catch (e) { /* abaikan */ }
+}
+function renderChat() {
+  const box = $("chatList");
+  box.innerHTML = "";
+  if (!chatMsgs.length) {
+    box.innerHTML = '<div class="status" style="padding:16px 4px">Halo! Saya AI gratis dari web. ' +
+      'Tanyakan apa saja — misalnya konsep indikator — atau buka tab Analisis lalu ketuk ' +
+      '"Minta Pendapat AI" agar saya membantu membaca analisis sebuah simbol.</div>';
+    return;
+  }
+  chatMsgs.forEach(m => {
+    const d = document.createElement("div");
+    d.className = "cbub " + (m.role === "user" ? "me" : "ai");
+    d.textContent = m.display || m.content;
+    box.appendChild(d);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+function aiAsk(messages) {
+  const payload = JSON.stringify({ messages: messages, model: "openai" });
+  if (window.AndroidBridge && window.AndroidBridge.aiChat) {
+    return new Promise((resolve, reject) => {
+      const id = ++cbSeq;
+      cbs[id] = { resolve, reject };
+      window.AndroidBridge.aiChat(id, payload);
+    });
+  }
+  return fetch("https://text.pollinations.ai/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload
+  }).then(r => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  });
+}
+async function sendChat(content, display) {
+  content = (content || "").trim();
+  if (chatBusy || !content) return;
+  chatBusy = true;
+  $("chatSend").disabled = true;
+  chatMsgs.push({ role: "user", content: content, display: display || content });
+  renderChat();
+  saveChat();
+  const typing = document.createElement("div");
+  typing.className = "cbub ai typing";
+  typing.textContent = "AI sedang berpikir…";
+  $("chatList").appendChild(typing);
+  $("chatList").scrollTop = $("chatList").scrollHeight;
+  try {
+    const convo = [{ role: "system", content: AI_SYSTEM }].concat(
+      chatMsgs.slice(-16).map(m => ({ role: m.role, content: m.content })));
+    const reply = (await aiAsk(convo)).trim();
+    chatMsgs.push({ role: "assistant", content: reply || "(AI mengembalikan jawaban kosong)" });
+  } catch (e) {
+    chatMsgs.push({
+      role: "assistant",
+      content: "⚠️ AI web tidak terjangkau (" + e.message + "). Periksa koneksi internet, lalu coba lagi."
+    });
+  }
+  typing.remove();
+  renderChat();
+  saveChat();
+  chatBusy = false;
+  $("chatSend").disabled = false;
+}
+$("chatSend").addEventListener("click", () => {
+  const v = $("chatInput").value;
+  $("chatInput").value = "";
+  sendChat(v);
+});
+$("chatInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); $("chatSend").click(); }
+});
+$("chatChips").querySelectorAll("button[data-q]").forEach(b =>
+  b.addEventListener("click", () => sendChat(b.dataset.q)));
+$("chatClear").addEventListener("click", () => {
+  chatMsgs = [];
+  saveChat();
+  renderChat();
+});
+renderChat();
+
+/* Minta pendapat AI dari halaman Analisis: kirim ringkasan teknikal —
+   teks yang sama dengan fitur Bagikan — sebagai konteks pertanyaan. */
+$("btnAskAi").addEventListener("click", () => {
+  if (!lastAnalysis) return;
+  const text = buildShareText();
+  if (!text) return;
+  const label = "📊 Minta pendapat AI — " + shareSymbolLabel();
+  if (currentSymbol) teardownDetail();
+  showTab("chat");
+  const prompt = "Berikut data analisis teknikal dari aplikasi D TRADE:\n\n" + text +
+    "\n\nTolong: (1) jelaskan arti analisis ini dengan bahasa sederhana, " +
+    "(2) sebutkan faktor pendukung dan faktor risikonya, (3) hal apa yang sebaiknya " +
+    "diperhatikan sebelum mengambil keputusan. Jangan memberi rekomendasi beli/jual yang pasti.";
+  sendChat(prompt, label);
+});
 
 /* ================= Berita crypto — agregator RSS 11 sumber =================
    Feed diambil lewat jembatan native (daftar-izin host di MainActivity)

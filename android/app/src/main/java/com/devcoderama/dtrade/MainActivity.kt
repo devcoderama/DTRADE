@@ -797,6 +797,9 @@ class MainActivity : Activity() {
      *   ponsel — WebView sendiri tetap terkunci ke host server.
      * - downloadQris(): menyimpan gambar QRIS terbundel ke galeri
      *   pengguna (satu-satunya penulisan, hanya atas ketukan pengguna).
+     * - aiChat(): POST JSON ke SATU endpoint tetap AI web gratis
+     *   (text.pollinations.ai, tanpa kunci API) untuk Chat AI mode
+     *   mandiri (v1.30.0) — host & metode dikunci, bukan fetch bebas.
      * Tidak ada kredensial dan tidak ada host lain.
      */
     inner class ApiBridge {
@@ -840,6 +843,52 @@ class MainActivity : Activity() {
                             done = true
                         }
                     }
+                } catch (e: Exception) {
+                    error = e.message ?: "network error"
+                }
+                val payload = JSONObject()
+                    .put("id", callbackId)
+                    .put("body", body)
+                    .put("error", error ?: JSONObject.NULL)
+                webView.post {
+                    webView.evaluateJavascript("window.__apiResolve($payload)", null)
+                }
+            }.start()
+        }
+
+        /**
+         * Chat AI gratis mode mandiri (v1.30.0): POST JSON ke SATU endpoint
+         * tetap (Pollinations — AI web gratis, tanpa kunci API dan tanpa
+         * akun). Ini BUKAN fetch bebas: host dan metode dikunci di sini;
+         * isi pesan berasal dari kotak chat pengguna sendiri. Balasan teks
+         * diteruskan lewat mekanisme __apiResolve yang sama dengan fetch().
+         * Mode server tidak memakai ini (AI server dari kunci API backend).
+         */
+        @JavascriptInterface
+        fun aiChat(callbackId: Int, payloadJson: String) {
+            Thread {
+                var body = ""
+                var error: String? = null
+                try {
+                    if (payloadJson.length > 48_000) {
+                        throw SecurityException("pesan terlalu panjang")
+                    }
+                    val conn = URL("https://text.pollinations.ai/")
+                        .openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 90000
+                    conn.doOutput = true
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
+                    conn.outputStream.use {
+                        it.write(payloadJson.toByteArray(Charsets.UTF_8))
+                    }
+                    val code = conn.responseCode
+                    val stream =
+                        if (code in 200..299) conn.inputStream else conn.errorStream
+                    body = stream?.bufferedReader()?.readText() ?: ""
+                    if (code !in 200..299) error = "HTTP $code"
                 } catch (e: Exception) {
                     error = e.message ?: "network error"
                 }
