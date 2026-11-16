@@ -142,7 +142,6 @@
   .mktseg button{flex:1;padding:9px 4px;border-radius:9px;border:1px solid var(--line);
     background:var(--panel);color:var(--muted);font-weight:700;font-size:.85rem;cursor:pointer}
   .mktseg button.on{background:var(--gold);color:#0b0e11;border-color:var(--gold)}
-  .sigsub{padding:14px 14px 4px;font-weight:800;font-size:.9rem;color:var(--text)}
   .hidden{display:none !important}
 </style>
 <link rel="stylesheet" href="fa/css/all.min.css">
@@ -248,11 +247,6 @@
   <div id="readerBody" style="padding:8px 16px 90px"></div>
 </div>
 
-<div id="signalsView" class="hidden">
-  <div class="status" id="sigStatus">Menghitung sinyal…</div>
-  <div class="list" id="sigList"></div>
-</div>
-
 <div id="newsView" class="hidden">
   <div class="controls" style="padding:12px 14px 0">
     <input id="nq" type="search" placeholder="Cari berita… (cth: Bitcoin, NFT, ETF)" autocomplete="off">
@@ -281,8 +275,9 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.9.0</b> — mode mandiri multi-market: crypto futures
-  Binance, saham Bursa Indonesia (IDX), dan saham global (data harian Yahoo Finance). Berita dikumpulkan
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.10.0</b> — mode mandiri multi-market: crypto futures
+  Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
+  1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
   U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, NewsBTC, dua sumber khusus
   NFT — NFT Plazas dan NFT Now — serta media pasar Indonesia: CNBC Indonesia, Detik Finance,
@@ -293,7 +288,6 @@
 <nav class="bottomnav" id="bottomNav">
   <button data-tab="pasar" class="on"><i class="fa-solid fa-house ic"></i>Pasar</button>
   <button data-tab="analisis"><i class="fa-solid fa-chart-line ic"></i>Analisis</button>
-  <button data-tab="sinyal"><i class="fa-solid fa-bolt ic"></i>Sinyal</button>
   <button data-tab="berita"><i class="fa-solid fa-newspaper ic"></i>Berita</button>
   <button data-tab="lainnya"><i class="fa-solid fa-bars ic"></i>Lainnya</button>
 </nav>
@@ -569,9 +563,10 @@ const STOCK_DEFS = {
 };
 const stockLists = { idx: [], global: [] };
 const stocksLoaded = { idx: false, global: false };
-async function fetchYahoo(def) {
+async function fetchYahoo(def, interval, range) {
   const url = "https://query1.finance.yahoo.com/v8/finance/chart/" +
-    encodeURIComponent(def.symbol) + "?interval=1d&range=6mo";
+    encodeURIComponent(def.symbol) + "?interval=" + (interval || "1d") +
+    "&range=" + (range || "6mo");
   const data = JSON.parse(await fetchText(url));
   const r = (data.chart && data.chart.result || [])[0];
   if (!r) throw new Error("data kosong");
@@ -584,6 +579,38 @@ async function fetchYahoo(def) {
       q.volume ? (q.volume[i] || 0) : 0]);
   }
   return { candles, meta: r.meta || {} };
+}
+/* Timeframe saham (v1.10.0): interval + range Yahoo per pilihan.
+   4h tidak disediakan Yahoo — diagregasi dari candle 60m. */
+const STOCK_TFS = [
+  { id: "1m", iv: "1m", range: "5d", poll: 15000 },
+  { id: "5m", iv: "5m", range: "5d", poll: 15000 },
+  { id: "15m", iv: "15m", range: "1mo", poll: 20000 },
+  { id: "30m", iv: "30m", range: "1mo", poll: 20000 },
+  { id: "1h", iv: "60m", range: "3mo", poll: 30000 },
+  { id: "4h", iv: "60m", range: "3mo", poll: 30000, agg: 4 },
+  { id: "1d", iv: "1d", range: "6mo", poll: 60000 },
+  { id: "1wk", iv: "1wk", range: "2y", poll: 300000 },
+  { id: "1mo", iv: "1mo", range: "5y", poll: 300000 }
+];
+let stockInterval = "1d";
+function aggregateCandles(candles, hours) {
+  const bucketMs = hours * 3600 * 1000;
+  const out = [];
+  let cur = null;
+  for (const c of candles) {
+    const b = Math.floor(c[0] / bucketMs) * bucketMs;
+    if (!cur || cur[0] !== b) {
+      cur = [b, c[1], c[2], c[3], c[4], c[5]];
+      out.push(cur);
+    } else {
+      cur[2] = Math.max(cur[2], parseFloat(c[2]));
+      cur[3] = Math.min(cur[3], parseFloat(c[3]));
+      cur[4] = c[4];
+      cur[5] = (parseFloat(cur[5]) || 0) + (parseFloat(c[5]) || 0);
+    }
+  }
+  return out;
 }
 async function loadStocks(mkt, force) {
   if (stocksLoaded[mkt] && !force) { renderStocks(); return; }
@@ -619,7 +646,6 @@ async function loadStocks(mkt, force) {
     $("status").textContent = entries.length + " instrumen · sinyal 1d terhitung untuk " +
       ok + " · " + new Date().toLocaleTimeString("id-ID") + " · data Yahoo Finance";
   }
-  renderSignals();
 }
 function stockIconHtml(e, size) {
   return '<div class="coin" style="width:' + size + "px;height:" + size + 'px">' +
@@ -746,7 +772,6 @@ async function computeSignals(run) {
       if (done === targets.length && run === signalAbort) {
         $("status").textContent = symbols.length + " simbol · sinyal 1h terhitung " +
           new Date().toLocaleTimeString("id-ID");
-        renderSignals();
         if ($("sort").value === "signal") renderList();
       }
     }
@@ -877,21 +902,62 @@ async function openDetail(symbol, mkt) {
      Analisis ditandai aktif selama grafik terbuka. */
   $("bottomNav").querySelectorAll("button").forEach(b =>
     b.classList.toggle("on", b.dataset.tab === "analisis"));
-  /* Saham: tanpa pemilih simbol Binance dan tanpa tab interval
-     (data harian saja); crypto: tampil seperti biasa. */
+  /* Saham: tanpa pemilih simbol Binance (pasarnya berbeda), tetapi tab
+     interval tampil — timeframe lengkap + polling live (v1.10.0). */
   $("btnPick").style.display = detailMarket === "stock" ? "none" : "";
-  $("tabs").style.display = detailMarket === "stock" ? "none" : "";
-  if (detailMarket === "stock") setLive(false, "data harian");
+  if (detailMarket === "stock") {
+    stockInterval = "1d";
+    setLive(true, "LIVE");
+  }
+  renderDetailTabs();
   $("detailView").classList.add("open");
   window.scrollTo(0, 0);
   await loadDetail(false, true);
+  startDetailTimer();
+}
+function startDetailTimer() {
   if (detailTimer) clearInterval(detailTimer);
   // Crypto: REST hanya cadangan selama WebSocket tersambung.
-  // Saham: data harian — segarkan tiap 5 menit.
-  const iv = detailMarket === "stock" ? 300000 : 30000;
+  // Saham: polling Yahoo sesuai timeframe — grafik bergerak realtime
+  // selama jam bursa; di luar jam bursa data terakhir tetap tampil.
+  let iv = 30000;
+  if (detailMarket === "stock") {
+    const tf = STOCK_TFS.find(t => t.id === stockInterval);
+    iv = tf ? tf.poll : 60000;
+  }
   detailTimer = setInterval(() => {
     if (!document.hidden && (detailMarket === "stock" || !wsOpen)) loadDetail(true, false);
   }, iv);
+}
+const CRYPTO_TABS_HTML = $("tabs").innerHTML;
+function renderDetailTabs() {
+  const wrap = $("tabs");
+  if (detailMarket === "stock") {
+    wrap.innerHTML = "";
+    STOCK_TFS.forEach(tf => {
+      const b = document.createElement("button");
+      b.textContent = tf.id;
+      b.classList.toggle("on", tf.id === stockInterval);
+      b.addEventListener("click", () => {
+        stockInterval = tf.id;
+        renderDetailTabs();
+        startDetailTimer();
+        loadDetail(false, false);
+      });
+      wrap.appendChild(b);
+    });
+    return;
+  }
+  wrap.innerHTML = CRYPTO_TABS_HTML;
+  wrap.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("on", b.dataset.iv === currentInterval);
+    b.addEventListener("click", () => {
+      wrap.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      currentInterval = b.dataset.iv;
+      loadDetail(false, true);
+    });
+  });
 }
 function teardownDetail() {
   currentSymbol = null;
@@ -907,16 +973,21 @@ async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
   if (detailMarket === "stock") {
     const e = detailEntry;
+    const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
     $("dSymbol").textContent = e ? e.ticker : currentSymbol;
     $("dCoin").innerHTML = e ? stockIconHtml(e, 38) : "";
     $("dSub").textContent = (lastMarket === "idx" ? "Bursa Indonesia (IDX)" : "Saham Global") +
-      " · 1d · Yahoo Finance";
-    $("dFoot").textContent = "Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle harian terakhir. " +
+      " · " + stockInterval + " · Yahoo Finance · live (polling " +
+      Math.round(tf.poll / 1000) + " dtk)";
+    $("dFoot").textContent = "Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir. " +
       "Sinyal teknikal murni — bukan saran keuangan. Data: Yahoo Finance (publik).";
     try {
       if (!e) throw new Error("instrumen tidak ditemukan");
-      const { candles, meta } = await fetchYahoo(e);
-      e.candles = candles;
+      const got = await fetchYahoo(e, tf.iv, tf.range);
+      let candles = got.candles;
+      const meta = got.meta;
+      if (tf.agg) candles = aggregateCandles(candles, tf.agg);
+      if (stockInterval === "1d") e.candles = candles;
       if (meta && meta.regularMarketPrice != null) e.price = meta.regularMarketPrice;
       if (meta && meta.regularMarketChangePercent != null) e.change = meta.regularMarketChangePercent;
       detailKlines = candles.slice(-KLINE_LIMIT);
@@ -957,7 +1028,12 @@ function renderAnalysis() {
     detailKlines.map(k => parseFloat(k[2])),
     detailKlines.map(k => parseFloat(k[3]))
   );
-  if (s) { s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s); }
+  /* Untuk saham, skor intraday hanya untuk halaman Analisis ini —
+     skor daftar tetap berbasis 1d, jadi entri daftar hanya diperbarui
+     saat timeframe 1d yang aktif. */
+  if (s && (detailMarket !== "stock" || stockInterval === "1d")) {
+    s.scoreObj = o; s.price = closes[closes.length - 1]; paintRow(s);
+  }
   updatePriceHeader();
   const v = $("verdict");
   const cls = o.side === "LONG" ? "long" : o.side === "SHORT" ? "short" : "neu";
@@ -965,7 +1041,7 @@ function renderAnalysis() {
     o.side + '<small>skor teknikal</small></div>' +
     '<div><div class="big">' + (o.score > 0 ? "+" : "") + o.score + '</div>' +
     '<div class="lbl">dari rentang −100 … +100 · interval ' +
-    (detailMarket === "stock" ? "1d" : currentInterval) + '</div></div>';
+    (detailMarket === "stock" ? stockInterval : currentInterval) + '</div></div>';
   const stats = [
     ["RSI (14)", o.rsi !== null ? o.rsi.toFixed(1) : "—"],
     ["MACD hist.", o.macd ? o.macd.hist.toPrecision(3) : "—"],
@@ -1217,14 +1293,8 @@ $("btnRefresh").addEventListener("click", () => {
 $("q").addEventListener("input", renderActiveList);
 $("sort").addEventListener("change", renderActiveList);
 $("btnBack").addEventListener("click", closeDetail);
-$("tabs").querySelectorAll("button").forEach(b => {
-  b.addEventListener("click", () => {
-    $("tabs").querySelectorAll("button").forEach(x => x.classList.remove("on"));
-    b.classList.add("on");
-    currentInterval = b.dataset.iv;
-    loadDetail(false, true);
-  });
-});
+/* Tombol interval di #tabs kini dibangun oleh renderDetailTabs()
+   (crypto: tombol statis bawaan; saham: STOCK_TFS) — lihat openDetail. */
 function setNetwork(n) {
   network = n;
   $("btnMainnet").classList.toggle("on", n === "mainnet");
@@ -1253,7 +1323,7 @@ if (window.AndroidBridge && window.AndroidBridge.getServerUrl) {
 /* ================= Navigasi bawah (v1.6.0) ================= */
 let currentTab = "pasar";
 let lastSymbol = null;
-const TAB_VIEWS = { pasar: "listView", sinyal: "signalsView", berita: "newsView", lainnya: "moreView" };
+const TAB_VIEWS = { pasar: "listView", berita: "newsView", lainnya: "moreView" };
 function showTab(name) {
   if (name === "analisis") { openDetail(lastSymbol || "BTCUSDT"); return; }
   currentTab = name;
@@ -1262,7 +1332,6 @@ function showTab(name) {
   $("readerView").classList.add("hidden");
   $("bottomNav").querySelectorAll("button").forEach(b =>
     b.classList.toggle("on", b.dataset.tab === name));
-  if (name === "sinyal") renderSignals();
   if (name === "berita" && !newsLoaded) loadNews(false);
   window.scrollTo(0, 0);
 }
@@ -1279,49 +1348,6 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
     closeReader();
     showTab(t);
   }));
-
-/* ================= Tab Sinyal ================= */
-function renderSignals() {
-  const wrap = $("sigList");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-  const arr = symbols
-    .filter(s => s.scoreObj && s.scoreObj.side !== "NETRAL")
-    .sort((a, b) => Math.abs(b.scoreObj.score) - Math.abs(a.scoreObj.score));
-  const stockArr = ["idx", "global"].flatMap(m =>
-    stockLists[m].filter(e => e.scoreObj && e.scoreObj.side !== "NETRAL" && !e.index))
-    .sort((a, b) => Math.abs(b.scoreObj.score) - Math.abs(a.scoreObj.score));
-  $("sigStatus").textContent =
-    (arr.length
-      ? arr.length + " sinyal crypto LONG/SHORT (interval 1h)"
-      : "Belum ada sinyal crypto LONG/SHORT") +
-    (stockArr.length
-      ? " · " + stockArr.length + " sinyal saham LONG/SHORT (interval 1d)"
-      : stocksLoaded.idx || stocksLoaded.global
-        ? " · belum ada sinyal saham"
-        : " · saham dimuat saat tab Saham IDX/Global dibuka") +
-    " — diurutkan dari skor terkuat.";
-  arr.forEach(s => {
-    const d = document.createElement("div");
-    d.className = "sym"; d.dataset.symbol = s.symbol;
-    d.innerHTML = rowHtml(s);
-    d.addEventListener("click", () => openDetail(s.symbol));
-    wrap.appendChild(d);
-  });
-  if (stockArr.length) {
-    const h = document.createElement("div");
-    h.className = "sigsub";
-    h.textContent = "Saham — sinyal harian (1d)";
-    wrap.appendChild(h);
-    stockArr.forEach(e => {
-      const d = document.createElement("div");
-      d.className = "sym"; d.dataset.symbol = e.symbol;
-      d.innerHTML = stockRowHtml(e);
-      d.addEventListener("click", () => openDetail(e.symbol, e.market));
-      wrap.appendChild(d);
-    });
-  }
-}
 
 /* ================= Berita crypto — agregator RSS 11 sumber =================
    Feed diambil lewat jembatan native (daftar-izin host di MainActivity)
@@ -1499,6 +1525,22 @@ function openNewsLink(url) {
     window.open(url, "_blank");
   }
 }
+/* Thumbnail berita: gambar feed bila ada, ikon surat kabar bila tidak /
+   gagal dimuat. Dipakai daftar Berita dan Berita pendukung di Analisis. */
+function thumbHtml(n) {
+  return n.img
+    ? '<img class="nthumb" loading="lazy" alt="" src="' + escHtml(n.img) + '">'
+    : '<div class="nthumbf"><i class="fa-solid fa-newspaper"></i></div>';
+}
+function fixThumb(d) {
+  const img = d.querySelector("img.nthumb");
+  if (img) img.addEventListener("error", () => {
+    const f = document.createElement("div");
+    f.className = "nthumbf";
+    f.innerHTML = '<i class="fa-solid fa-newspaper"></i>';
+    img.replaceWith(f);
+  });
+}
 function renderNews() {
   const wrap = $("newsList");
   wrap.innerHTML = "";
@@ -1522,17 +1564,8 @@ function renderNews() {
       '<div style="flex:1;min-width:0"><div class="tt">' + escHtml(translateOn && n.titleId ? n.titleId : n.title) + "</div>" +
       (n.desc ? '<div class="ds">' + escHtml(n.desc) + "</div>" : "") +
       '<div class="mt"><span class="src">' + escHtml(n.source) + "</span><span>" +
-      relTime(n.time) + "</span></div></div>" +
-      (n.img
-        ? '<img class="nthumb" loading="lazy" alt="" src="' + escHtml(n.img) + '">'
-        : '<div class="nthumbf"><i class="fa-solid fa-newspaper"></i></div>');
-    const img = d.querySelector("img.nthumb");
-    if (img) img.addEventListener("error", () => {
-      const f = document.createElement("div");
-      f.className = "nthumbf";
-      f.innerHTML = '<i class="fa-solid fa-newspaper"></i>';
-      img.replaceWith(f);
-    });
+      relTime(n.time) + "</span></div></div>" + thumbHtml(n);
+    fixThumb(d);
     d.addEventListener("click", () => openReader(n));
     wrap.appendChild(d);
   });
@@ -1817,7 +1850,8 @@ async function renderRelatedNews() {
     d.innerHTML = '<div style="flex:1;min-width:0"><div class="tt">' +
       escHtml(translateOn && n.titleId ? n.titleId : n.title) + '</div>' +
       '<div class="mt"><span class="src">' + escHtml(n.source) + "</span><span>" +
-      relTime(n.time) + "</span></div></div>";
+      relTime(n.time) + "</span></div></div>" + thumbHtml(n);
+    fixThumb(d);
     d.addEventListener("click", () => openReader(n));
     box.appendChild(d);
   });
