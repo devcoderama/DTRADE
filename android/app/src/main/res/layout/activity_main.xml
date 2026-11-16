@@ -18,6 +18,39 @@
         android:max="100"
         android:visibility="gone" />
 
+    <!-- Layar pemuatan bermerek (v1.31.0): menutup jeda probe server /
+         pemuatan halaman agar pengguna tidak menatap layar hitam. -->
+    <LinearLayout
+        android:id="@+id/loading_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#0B0E11"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="D TRADE"
+            android:textColor="#F0B90B"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Memuat…"
+            android:textColor="#B7BDC6"
+            android:textSize="14sp" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/error_view"
         android:layout_width="match_parent"

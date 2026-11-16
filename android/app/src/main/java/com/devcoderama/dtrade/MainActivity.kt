@@ -53,11 +53,17 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var errorView: TextView
+    private lateinit var loadingOverlay: View
     private lateinit var fabMenu: Button
     private lateinit var prefs: SharedPreferences
 
     /** true selama halaman mode mandiri yang sedang ditampilkan. */
     private var standaloneMode = false
+
+    // v1.31.0: nomor generasi navigasi — probe keterjangkauan server yang
+    // basi (sudah ada navigasi lebih baru) tidak boleh menimpa tampilan.
+    @Volatile
+    private var navGen = 0
 
     /** Dialog pembaruan yang sedang tampil (untuk dibersihkan di onDestroy). */
     private var updateDialog: Dialog? = null
@@ -107,6 +113,10 @@ class MainActivity : Activity() {
         webView = findViewById(R.id.webview)
         progressBar = findViewById(R.id.progress)
         errorView = findViewById(R.id.error_view)
+        loadingOverlay = findViewById(R.id.loading_overlay)
+        // v1.31.0: layar pemuatan bermerek sejak frame pertama — tidak
+        // ada lagi layar hitam polos selama aplikasi membuka halaman.
+        loadingOverlay.visibility = View.VISIBLE
         // Sejak v1.3.0 tidak ada action bar (tema NoActionBar) — menu
         // aplikasi hidup di tombol melayang ini (PopupMenu). Sejak v1.6.0
         // tombol disembunyikan selama mode mandiri tampil, karena halaman
@@ -166,6 +176,8 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                // v1.31.0: halaman tampil → sembunyikan layar pemuatan.
+                loadingOverlay.visibility = View.GONE
                 // v1.29.0: tandai bahwa perangkat ini pernah berhasil
                 // membuka Web UI server — prasyarat gerbang sidik jari
                 // pada pembukaan berikutnya.
@@ -516,7 +528,30 @@ class MainActivity : Activity() {
             )
             return
         }
-        webView.loadUrl(url)
+        // v1.31.0: PROBE keterjangkauan dulu (maks 2,5 detik). Sebelumnya
+        // WebView langsung memuat URL server; bila backend mati / IP LAN
+        // tidak menjawab, WebView menggantung di layar hitam 30–120 detik
+        // (kadang terasa stuck selamanya) sebelum jatuh ke mode mandiri.
+        // Kini: server menjawab (kode HTTP apa pun) → muat; tidak menjawab
+        // → langsung mode mandiri. Overlay pemuatan menutup jeda ini.
+        loadingOverlay.visibility = View.VISIBLE
+        val gen = ++navGen
+        Thread {
+            val reachable = try {
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 2500
+                conn.readTimeout = 2500
+                conn.instanceFollowRedirects = false
+                conn.setRequestProperty("User-Agent", "D-Trade-Android")
+                conn.responseCode != -1
+            } catch (e: Exception) {
+                false
+            }
+            runOnUiThread {
+                if (gen != navGen || standaloneMode) return@runOnUiThread
+                if (reachable) webView.loadUrl(url) else loadStandalone()
+            }
+        }.start()
     }
 
     /**
@@ -527,7 +562,9 @@ class MainActivity : Activity() {
      */
     private fun loadStandalone() {
         standaloneMode = true
+        navGen++
         fabMenu.visibility = View.GONE
+        loadingOverlay.visibility = View.VISIBLE
         val html = standaloneHtml ?: try {
             assets.open("standalone.html").bufferedReader().readText()
         } catch (e: Exception) {
@@ -548,6 +585,7 @@ class MainActivity : Activity() {
     }
 
     private fun showError(message: String? = null) {
+        loadingOverlay.visibility = View.GONE
         webView.visibility = View.GONE
         errorView.visibility = View.VISIBLE
         errorView.text = message ?:
@@ -869,28 +907,57 @@ class MainActivity : Activity() {
             Thread {
                 var body = ""
                 var error: String? = null
-                try {
-                    if (payloadJson.length > 48_000) {
-                        throw SecurityException("pesan terlalu panjang")
+                // v1.31.0: SATU kali percobaan ulang otomatis untuk
+                // kegagalan jaringan sementara (layanan gratis kadang
+                // memutus koneksi), dan pesan error BERSIH berbahasa
+                // Indonesia — teks exception mentah tidak lagi ditampilkan
+                // ke pengguna.
+                var attempt = 0
+                while (true) {
+                    try {
+                        if (payloadJson.length > 48_000) {
+                            error = "Pesan terlalu panjang."
+                            break
+                        }
+                        val conn = URL("https://text.pollinations.ai/")
+                            .openConnection() as HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.connectTimeout = 15000
+                        conn.readTimeout = 90000
+                        conn.doOutput = true
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
+                        conn.outputStream.use {
+                            it.write(payloadJson.toByteArray(Charsets.UTF_8))
+                        }
+                        val code = conn.responseCode
+                        val stream =
+                            if (code in 200..299) conn.inputStream else conn.errorStream
+                        body = stream?.bufferedReader()?.readText() ?: ""
+                        error = when {
+                            code in 200..299 -> null
+                            code == 429 ->
+                                "AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi."
+                            code in 500..599 ->
+                                "Server AI sedang bermasalah — coba lagi sebentar lagi."
+                            else -> "AI menolak permintaan (HTTP $code)."
+                        }
+                        break
+                    } catch (e: java.net.SocketTimeoutException) {
+                        if (attempt++ == 0) {
+                            Thread.sleep(2500)
+                            continue
+                        }
+                        error = "Koneksi ke AI timeout — jaringan lambat, coba lagi."
+                        break
+                    } catch (e: Exception) {
+                        if (attempt++ == 0) {
+                            Thread.sleep(2500)
+                            continue
+                        }
+                        error = "Koneksi ke AI terputus — periksa internet, lalu coba lagi."
+                        break
                     }
-                    val conn = URL("https://text.pollinations.ai/")
-                        .openConnection() as HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.connectTimeout = 15000
-                    conn.readTimeout = 90000
-                    conn.doOutput = true
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
-                    conn.outputStream.use {
-                        it.write(payloadJson.toByteArray(Charsets.UTF_8))
-                    }
-                    val code = conn.responseCode
-                    val stream =
-                        if (code in 200..299) conn.inputStream else conn.errorStream
-                    body = stream?.bufferedReader()?.readText() ?: ""
-                    if (code !in 200..299) error = "HTTP $code"
-                } catch (e: Exception) {
-                    error = e.message ?: "network error"
                 }
                 val payload = JSONObject()
                     .put("id", callbackId)

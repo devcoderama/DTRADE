@@ -229,14 +229,27 @@
      navigasi bawah yang tetap (v1.24.0 — dilaporkan dari tab Lainnya). */
   #listView, #newsView, #moreView, #readerView{padding-bottom:96px}
   /* ===== Chat AI (v1.30.0) — AI gratis dari web, tanpa kunci API ===== */
-  #chatView{display:flex;flex-direction:column;height:calc(100vh - 122px);padding-bottom:0}
-  #chatList{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+  #chatView{display:flex;flex-direction:column;height:calc(100vh - 122px);padding-bottom:0;overflow-x:hidden}
+  #chatList{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
   .cbub{max-width:86%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.55;
-    white-space:pre-wrap;word-break:break-word}
+    white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
   .cbub.me{align-self:flex-end;background:var(--gold);color:#0b0e11;border-bottom-right-radius:4px;font-weight:600}
   .cbub.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
-    color:var(--text);border-bottom-left-radius:4px}
+    color:var(--text);border-bottom-left-radius:4px;white-space:normal}
   .cbub.typing{color:var(--muted);font-style:italic}
+  /* Tampilan markdown ringan di balon AI (v1.31.0) */
+  .ai-tag{font-size:.64rem;letter-spacing:.09em;color:var(--gold);font-weight:800;margin-bottom:6px}
+  .md-p{margin:0 0 7px}
+  .md-p:last-child{margin-bottom:0}
+  .md-h{font-weight:800;color:#fff;font-size:.96rem;margin:11px 0 5px}
+  .md-h:first-child{margin-top:0}
+  .md-ul{margin:2px 0 8px;padding-left:18px}
+  .md-ul li{margin:3px 0}
+  .md-ul li::marker{color:var(--gold)}
+  .md-hr{border-top:1px solid var(--line);margin:10px 0}
+  .md-gap{height:5px}
+  .cbub.ai strong{color:#fff}
+  .cbub.ai code{background:#0d1117;border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:.85em}
   .chatbar{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg)}
   .chatbar input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:999px;
     padding:11px 16px;color:var(--text);font-size:.92rem;outline:none}
@@ -488,7 +501,7 @@
   <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
   <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
   Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.30.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.31.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -3433,9 +3446,45 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
    Mode server TIDAK memakai ini — di sana AI memakai kunci API yang ada
    di backend (.env), sesuai pembagian yang diminta pemilik. */
 const AI_SYSTEM = "Kamu adalah asisten AI di aplikasi D TRADE (aplikasi analisis pasar crypto dan saham). " +
-  "Jawablah dalam Bahasa Indonesia yang jelas dan ringkas. Kamu boleh membantu menjelaskan analisis teknikal, " +
+  "Jawablah dalam Bahasa Indonesia yang jelas dan ringkas, dengan paragraf pendek dan poin-poin seperlunya — " +
+  "jangan memakai tabel. Kamu boleh membantu menjelaskan analisis teknikal, " +
   "indikator, dan konsep trading, serta menjawab pertanyaan umum. Kamu BUKAN penasihat keuangan: jangan pernah " +
   "menjanjikan profit atau menyuruh membeli/menjual secara pasti; ingatkan risiko secara singkat bila relevan.";
+
+/* Renderer markdown ringan (v1.31.0): jawaban AI mentah berisi ###, **,
+   --- dll. Diubah menjadi tampilan rapi bergaya chatbot sungguhan —
+   judul, teks tebal, daftar poin, garis pemisah. Semua teks DI-ESCAPE
+   dulu, jadi tidak ada HTML dari jawaban AI yang bisa menyusup. */
+function mdLite(t) {
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = s => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+  const out = [];
+  let inList = false;
+  const closeList = () => { if (inList) { out.push("</ul>"); inList = false; } };
+  String(t == null ? "" : t).split(/\r?\n/).forEach(rawLine => {
+    const line = rawLine.trimEnd();
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      closeList(); out.push('<div class="md-hr"></div>'); return;
+    }
+    const h = line.match(/^\s{0,3}#{1,6}\s+(.*)$/);
+    if (h) { closeList(); out.push('<div class="md-h">' + inline(h[1]) + "</div>"); return; }
+    const li = line.match(/^\s*(?:[-*•]|\d{1,2}[.)])\s+(.*)$/);
+    if (li) {
+      if (!inList) { out.push('<ul class="md-ul">'); inList = true; }
+      out.push("<li>" + inline(li[1]) + "</li>");
+      return;
+    }
+    closeList();
+    if (!line.trim()) { out.push('<div class="md-gap"></div>'); return; }
+    out.push('<p class="md-p">' + inline(line) + "</p>");
+  });
+  closeList();
+  return out.join("");
+}
 let chatMsgs = [];
 try { chatMsgs = JSON.parse(localStorage.getItem("dtrade-chat-v1") || "[]"); } catch (e) { chatMsgs = []; }
 if (!Array.isArray(chatMsgs)) chatMsgs = [];
@@ -3456,7 +3505,13 @@ function renderChat() {
   chatMsgs.forEach(m => {
     const d = document.createElement("div");
     d.className = "cbub " + (m.role === "user" ? "me" : "ai");
-    d.textContent = m.display || m.content;
+    if (m.role === "user") {
+      d.textContent = m.display || m.content;
+    } else {
+      // Balon AI dirender dari markdown ringan (v1.31.0) + label AI.
+      d.innerHTML = '<div class="ai-tag"><i class="fa-solid fa-robot"></i> D TRADE AI</div>' +
+        '<div class="md">' + mdLite(m.content) + "</div>";
+    }
     box.appendChild(d);
   });
   box.scrollTop = box.scrollHeight;
@@ -3475,9 +3530,19 @@ function aiAsk(messages) {
     headers: { "Content-Type": "application/json" },
     body: payload
   }).then(r => {
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (r.status === 429) throw new Error("AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi.");
+    if (!r.ok) throw new Error("AI menolak permintaan (HTTP " + r.status + ").");
     return r.text();
   });
+}
+/* Pesan error bersih untuk pengguna (v1.31.0): pesan dari jembatan native
+   sudah berupa kalimat ramah; teks teknis panjang dipotong pendek. */
+function cleanAiError(msg) {
+  const m = String(msg || "").trim();
+  if (!m) return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
+  if (m.length <= 110 && !/exception|socket|abort|failed to fetch/i.test(m)) return m;
+  if (/429|ramai|batas/i.test(m)) return "AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi.";
+  return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
 }
 async function sendChat(content, display) {
   content = (content || "").trim();
@@ -3498,10 +3563,7 @@ async function sendChat(content, display) {
     const reply = (await aiAsk(convo)).trim();
     chatMsgs.push({ role: "assistant", content: reply || "(AI mengembalikan jawaban kosong)" });
   } catch (e) {
-    chatMsgs.push({
-      role: "assistant",
-      content: "⚠️ AI web tidak terjangkau (" + e.message + "). Periksa koneksi internet, lalu coba lagi."
-    });
+    chatMsgs.push({ role: "assistant", content: "⚠️ " + cleanAiError(e.message) });
   }
   typing.remove();
   renderChat();
@@ -3526,19 +3588,90 @@ $("chatClear").addEventListener("click", () => {
 });
 renderChat();
 
-/* Minta pendapat AI dari halaman Analisis: kirim ringkasan teknikal —
-   teks yang sama dengan fitur Bagikan — sebagai konteks pertanyaan. */
-$("btnAskAi").addEventListener("click", () => {
-  if (!lastAnalysis) return;
+/* Minta pendapat AI dari halaman Analisis (v1.31.0 — prompt terstruktur):
+   prompt disusun sebagai DUA blok data berlabel jelas agar AI tidak
+   bingung: (A) hasil analisis aplikasi saat dibuat, (B) situasi pasar
+   REALTIME yang baru saja diambil ulang detik ini juga. AI diperintah
+   MEMBANDINGKAN keduanya — apakah kesimpulan analisis masih berlaku
+   terhadap harga & indikator terbaru. */
+async function freshRealtimeText() {
+  try {
+    let candles;
+    if (detailMarket === "stock") {
+      const e = detailEntry;
+      if (!e) return "";
+      const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
+      const got = await fetchYahoo(e, tf.iv, tf.range);
+      candles = tf.agg ? aggregateCandles(got.candles, tf.agg) : got.candles;
+    } else {
+      candles = await klineFetch(detailKind, currentSymbol, currentInterval, DETAIL_LIMIT);
+    }
+    if (!candles || candles.length < 30) return "";
+    const closes = candles.map(k => parseFloat(k[4]));
+    const o = scoreSymbol(
+      closes,
+      candles.map(k => parseFloat(k[2])),
+      candles.map(k => parseFloat(k[3])),
+      candles.map(k => parseFloat(k[5])),
+      candles.map(k => parseFloat(k[1]))
+    );
+    const pNow = closes[closes.length - 1];
+    const pWas = lastAnalysis.price;
+    const dPct = pWas ? (pNow - pWas) / pWas * 100 : 0;
+    const L = [];
+    L.push("Harga realtime: " + fmtActive(pNow) + " (" + (dPct >= 0 ? "+" : "") +
+      dPct.toFixed(2) + "% sejak analisis dibuat pada harga " + fmtActive(pWas) + ")");
+    L.push("Skor teknikal realtime: " + (o.score > 0 ? "+" : "") + o.score + " (" + o.side + ")" +
+      " — saat analisis dibuat: " + (lastAnalysis.oc.score > 0 ? "+" : "") +
+      lastAnalysis.oc.score + " (" + lastAnalysis.oc.side + ")");
+    L.push("RSI realtime: " + (o.rsi !== null && o.rsi !== undefined ? o.rsi.toFixed(1) : "—") +
+      " | MACD hist realtime: " + (o.macd ? (o.macd.hist >= 0 ? "positif" : "negatif") : "—") +
+      " | EMA20: " + (o.ema20 !== null && o.ema20 !== undefined ? fmtActive(o.ema20) : "—") +
+      " | EMA50: " + (o.ema50 !== null && o.ema50 !== undefined ? fmtActive(o.ema50) : "—"));
+    if (detailMarket !== "stock" && currentSymbol !== "BTCUSDT") {
+      const btc = symbols.find(x => x.symbol === "BTCUSDT");
+      if (btc && btc.price) {
+        L.push("Konteks BTC saat ini: " + fmtActive(btc.price) +
+          (btc.change !== null && btc.change !== undefined
+            ? " (" + (btc.change >= 0 ? "+" : "") + Number(btc.change).toFixed(2) + "% / 24 jam)"
+            : ""));
+      }
+    }
+    return L.join("\n");
+  } catch (e) {
+    return "";
+  }
+}
+
+$("btnAskAi").addEventListener("click", async () => {
+  if (!lastAnalysis || chatBusy) return;
+  const btn = $("btnAskAi");
+  const label0 = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Mengambil data pasar realtime…';
   const text = buildShareText();
+  const realtime = await freshRealtimeText();
+  btn.disabled = false;
+  btn.innerHTML = label0;
   if (!text) return;
   const label = "📊 Minta pendapat AI — " + shareSymbolLabel();
   if (currentSymbol) teardownDetail();
   showTab("chat");
-  const prompt = "Berikut data analisis teknikal dari aplikasi D TRADE:\n\n" + text +
-    "\n\nTolong: (1) jelaskan arti analisis ini dengan bahasa sederhana, " +
-    "(2) sebutkan faktor pendukung dan faktor risikonya, (3) hal apa yang sebaiknya " +
-    "diperhatikan sebelum mengambil keputusan. Jangan memberi rekomendasi beli/jual yang pasti.";
+  const prompt =
+    "Kamu menerima dua blok data tentang simbol yang sama dari aplikasi D TRADE. " +
+    "Blok A adalah HASIL ANALISIS APLIKASI pada saat analisis dibuat. Blok B adalah " +
+    "SITUASI PASAR REALTIME yang baru saja diambil ulang sekarang. Tugasmu menilai " +
+    "Blok A DENGAN MEMBANDINGKANNYA terhadap Blok B.\n\n" +
+    "=== A. HASIL ANALISIS APLIKASI ===\n" + text + "\n\n" +
+    "=== B. SITUASI PASAR REALTIME ===\n" +
+    (realtime || "(Data realtime gagal diambil — nilai hanya dari Blok A dan sebutkan keterbatasan ini.)") +
+    "\n\n=== TUGASMU ===\n" +
+    "1. Jelaskan arti analisis aplikasi (Blok A) dengan bahasa sederhana.\n" +
+    "2. BANDINGKAN dengan situasi realtime (Blok B): apakah harga dan skor sudah bergerak sejak analisis dibuat? " +
+    "Apakah kesimpulan analisis MASIH BERLAKU, MENGUAT, atau justru BATAL karena pergerakan terbaru? Sebutkan angka perbandingannya.\n" +
+    "3. Sebutkan faktor pendukung dan faktor risiko terpenting saat ini.\n" +
+    "4. Akhiri dengan kesimpulan singkat: masih layak diperhatikan, lebih baik menunggu, atau hindari dulu — " +
+    "tanpa rekomendasi beli/jual yang pasti.";
   sendChat(prompt, label);
 });
 
