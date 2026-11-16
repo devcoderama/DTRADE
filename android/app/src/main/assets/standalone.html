@@ -389,11 +389,19 @@
   .att-meta{font-size:.7rem;color:var(--muted);margin-top:1px}
   .attbar button{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);
     background:var(--panel2);color:var(--muted);cursor:pointer}
-  /* Chat AI mengambang (v1.31.16) */
+  /* Chat AI mengambang (v1.31.16; bisa digeser + menempel tepi +
+     tidur transparan setelah 5 detik diam — v1.32.2) */
   #chatFab{position:fixed;right:16px;bottom:88px;width:54px;height:54px;border-radius:50%;
     background:var(--gold);color:#0b0e11;border:none;font-size:1.3rem;z-index:65;cursor:pointer;
-    box-shadow:0 6px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
+    box-shadow:0 6px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;
+    touch-action:none;-webkit-tap-highlight-color:transparent;
+    transition:left .28s cubic-bezier(.2,.9,.3,1.15), top .28s cubic-bezier(.2,.9,.3,1.15),
+      transform .3s ease, opacity .35s ease}
   #chatFab.hidden{display:none}
+  #chatFab.drag{transition:none;transform:scale(1.1);opacity:1;box-shadow:0 12px 26px rgba(0,0,0,.6)}
+  #chatFab.idle{opacity:.42}
+  #chatFab.idle.tuck-r{transform:translateX(26px)}
+  #chatFab.idle.tuck-l{transform:translateX(-26px)}
   #chatOverlay{position:fixed;left:0;right:0;top:0;bottom:0;background:var(--bg);z-index:60;
     display:flex;flex-direction:column}
   #chatOverlay.hidden{display:none}
@@ -5594,6 +5602,60 @@ $("chatAttach").addEventListener("click", async () => {
    sembunyi; di halaman detail/pembaca juga sembunyi agar tidak menutupi
    konten. */
 var chatFloatState = { floated: false, parent: null, next: null };
+/* ===== Gerakan tombol Chat AI (v1.32.2) =====
+   Tombol bisa diseret ke mana pun; saat dilepas ia menempel ke tepi
+   terdekat (kiri/kanan) dan posisinya diingat. Diam 5 detik tanpa
+   disentuh → tombol "tidur": transparan dan menyusut ke tepi layar
+   agar tidak mengganggu; sentuhan apa pun membangunkannya. Ketuk
+   (tanpa seret) tetap membuka/menutup panel chat. */
+const FAB_SIZE = 54, FAB_MARGIN = 12, FAB_TOP_MIN = 72, FAB_BOT_KEEP = 140;
+let fabSide = "right";
+let fabYFrac = null;
+let fabIdleTimer = null;
+let fabDrag = null;
+try {
+  const savedFab = JSON.parse(localStorage.getItem("dtrade-fab-pos") || "null");
+  if (savedFab && (savedFab.side === "left" || savedFab.side === "right") &&
+      typeof savedFab.yFrac === "number") {
+    fabSide = savedFab.side;
+    fabYFrac = savedFab.yFrac;
+  }
+} catch (e) { /* abaikan */ }
+function fabClampTop(px) {
+  const maxTop = Math.max(FAB_TOP_MIN, window.innerHeight - FAB_BOT_KEEP);
+  return Math.max(FAB_TOP_MIN, Math.min(maxTop, px));
+}
+function applyFabPos() {
+  const fab = $("chatFab");
+  if (!fab) return;
+  const vh = window.innerHeight, vw = window.innerWidth;
+  if (fabYFrac === null) fabYFrac = (vh - 88 - FAB_SIZE) / vh;
+  const top = fabClampTop(Math.round(fabYFrac * vh));
+  fabYFrac = top / vh;
+  fab.style.right = "auto";
+  fab.style.bottom = "auto";
+  fab.style.top = top + "px";
+  fab.style.left = (fabSide === "left" ? FAB_MARGIN : vw - FAB_MARGIN - FAB_SIZE) + "px";
+  fab.classList.toggle("tuck-r", fabSide === "right");
+  fab.classList.toggle("tuck-l", fabSide === "left");
+}
+function saveFabPos() {
+  try {
+    localStorage.setItem("dtrade-fab-pos",
+      JSON.stringify({ side: fabSide, yFrac: fabYFrac }));
+  } catch (e) { /* abaikan */ }
+}
+function fabWake() {
+  const fab = $("chatFab");
+  if (fab) fab.classList.remove("idle");
+  clearTimeout(fabIdleTimer);
+  fabIdleTimer = setTimeout(fabSleep, 5000);
+}
+function fabSleep() {
+  const fab = $("chatFab");
+  if (!fab || fab.classList.contains("hidden") || chatFloatState.floated || fabDrag) return;
+  fab.classList.add("idle");
+}
 function syncChatFab() {
   const fab = $("chatFab");
   if (!fab) return;
@@ -5607,6 +5669,8 @@ function syncChatFab() {
   fab.classList.toggle("hidden", !show);
   fab.innerHTML = '<i class="fa-solid ' +
     (chatFloatState.floated ? "fa-xmark" : "fa-robot") + '"></i>';
+  if (show) { applyFabPos(); fabWake(); }
+  else { clearTimeout(fabIdleTimer); fab.classList.remove("idle"); }
 }
 function openChatFloat() {
   if (currentTab === "chat" || chatFloatState.floated) return;
@@ -5632,10 +5696,61 @@ function closeChatFloat() {
   if (currentTab !== "chat") cv.classList.add("hidden");
   syncChatFab();
 }
+let fabMoved = false;
 $("chatFab").addEventListener("click", () => {
+  if (fabMoved) { fabMoved = false; return; }
   if (chatFloatState.floated) closeChatFloat();
   else openChatFloat();
 });
+/* Seret tombol: pointer capture di tombol itu sendiri; gerak < 9px
+   dihitung ketukan (klik biasa yang bekerja), selebihnya seretan —
+   saat dilepas tombol menempel ke tepi terdekat dan posisi disimpan. */
+(function initFabMotion() {
+  const fab = $("chatFab");
+  if (!fab) return;
+  fab.addEventListener("pointerdown", e => {
+    fabDrag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, left: 0, top: 0 };
+    fabWake();
+    try { fab.setPointerCapture(e.pointerId); } catch (err) { /* abaikan */ }
+  });
+  fab.addEventListener("pointermove", e => {
+    if (!fabDrag || e.pointerId !== fabDrag.id) return;
+    const dx = e.clientX - fabDrag.sx, dy = e.clientY - fabDrag.sy;
+    if (!fabDrag.moved && Math.hypot(dx, dy) < 9) return;
+    if (!fabDrag.moved) {
+      fabDrag.moved = true;
+      fab.classList.add("drag");
+      fab.classList.remove("idle");
+    }
+    const vw = window.innerWidth;
+    const left = Math.max(4, Math.min(vw - FAB_SIZE - 4, e.clientX - FAB_SIZE / 2));
+    const top = fabClampTop(e.clientY - FAB_SIZE / 2);
+    fab.style.left = left + "px";
+    fab.style.top = top + "px";
+    fabDrag.left = left;
+    fabDrag.top = top;
+  });
+  const endFabDrag = e => {
+    if (!fabDrag || e.pointerId !== fabDrag.id) return;
+    const wasMoved = fabDrag.moved;
+    fab.classList.remove("drag");
+    if (wasMoved) {
+      fabMoved = true;
+      fabSide = (fabDrag.left + FAB_SIZE / 2) < window.innerWidth / 2 ? "left" : "right";
+      fabYFrac = fabDrag.top / window.innerHeight;
+      applyFabPos();
+      saveFabPos();
+      setTimeout(() => { fabMoved = false; }, 350);
+    }
+    fabDrag = null;
+    fabWake();
+  };
+  fab.addEventListener("pointerup", endFabDrag);
+  fab.addEventListener("pointercancel", endFabDrag);
+  window.addEventListener("resize", () => {
+    if (!fab.classList.contains("hidden")) applyFabPos();
+  });
+})();
 new MutationObserver(syncChatFab)
   .observe($("pickerView"), { attributes: true, attributeFilter: ["class"] });
 new MutationObserver(syncChatFab)
