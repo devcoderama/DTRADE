@@ -57,6 +57,14 @@ class MainActivity : Activity() {
     private lateinit var fabMenu: Button
     private lateinit var prefs: SharedPreferences
 
+    /** v1.31.11: id callback jembatan yang menunggu hasil pengenalan suara. */
+    private var voiceCallbackId: Int? = null
+
+    /** v1.31.11: mesin text-to-speech bawaan Android (dibuat saat pertama dipakai). */
+    private var tts: android.speech.tts.TextToSpeech? = null
+    private var ttsReady = false
+    private var pendingSpeak: String? = null
+
     /** true selama halaman mode mandiri yang sedang ditampilkan. */
     private var standaloneMode = false
 
@@ -691,7 +699,79 @@ class MainActivity : Activity() {
         fpCancel?.cancel()
         fpDialog?.dismiss()
         fpDialog = null
+        try { tts?.stop(); tts?.shutdown() } catch (e: Exception) { /* abaikan */ }
+        tts = null
         super.onDestroy()
+    }
+
+    // ------------------------------------------------------------------
+    // v1.31.11: masukan suara (RecognizerIntent) + text-to-speech.
+    // Keduanya memakai layanan bawaan Android — tanpa kunci API, tanpa
+    // izin mikrofon untuk aplikasi (aktivitas pengenal suara yang
+    // menangani mikrofon), dan tanpa scraping layanan web mana pun.
+    // ------------------------------------------------------------------
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_VOICE_INPUT) {
+            val cb = voiceCallbackId
+            voiceCallbackId = null
+            if (cb != null) {
+                var text = ""
+                if (resultCode == RESULT_OK && data != null) {
+                    val results = data.getStringArrayListExtra(
+                        android.speech.RecognizerIntent.EXTRA_RESULTS)
+                    if (!results.isNullOrEmpty()) text = results[0] ?: ""
+                }
+                resolveVoice(cb, text)
+            }
+        }
+    }
+
+    private fun resolveVoice(callbackId: Int, text: String) {
+        val payload = JSONObject()
+            .put("id", callbackId)
+            .put("body", text)
+            .put("error", JSONObject.NULL)
+        webView.post {
+            webView.evaluateJavascript("window.__apiResolve($payload)", null)
+        }
+    }
+
+    private fun speakNow(text: String) {
+        val clean = text.take(1500)
+        val engine = tts
+        if (engine == null) {
+            pendingSpeak = clean
+            tts = android.speech.tts.TextToSpeech(this) { status ->
+                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                    ttsReady = true
+                    val r = tts?.setLanguage(java.util.Locale("id", "ID"))
+                    if (r == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
+                        r == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                        try { tts?.setLanguage(java.util.Locale.getDefault()) }
+                        catch (e: Exception) { /* abaikan */ }
+                    }
+                    val p = pendingSpeak
+                    pendingSpeak = null
+                    if (p != null) {
+                        try {
+                            tts?.speak(p, android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                                null, "dtrade-tts")
+                        } catch (e: Exception) { /* abaikan */ }
+                    }
+                }
+            }
+            return
+        }
+        if (ttsReady) {
+            try {
+                engine.speak(clean, android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                    null, "dtrade-tts")
+            } catch (e: Exception) { /* abaikan */ }
+        } else {
+            pendingSpeak = clean
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1101,6 +1181,51 @@ class MainActivity : Activity() {
             }.start()
         }
 
+        /**
+         * Masukan suara (v1.31.11): membuka pengenal suara bawaan Android
+         * berbahasa Indonesia. Hasil teks diteruskan lewat __apiResolve
+         * yang sama; batal/gagal menghasilkan body kosong (JS diam saja),
+         * dan perangkat tanpa pengenal suara mendapat Toast penjelasan.
+         */
+        @JavascriptInterface
+        fun voiceInput(callbackId: Int) {
+            webView.post {
+                try {
+                    val intent = Intent(
+                        android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                    ).apply {
+                        putExtra(
+                            android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                            android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
+                        putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Silakan bicara…")
+                        putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    }
+                    voiceCallbackId = callbackId
+                    startActivityForResult(intent, REQ_VOICE_INPUT)
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Pengenalan suara tidak tersedia di perangkat ini",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    resolveVoice(callbackId, "")
+                }
+            }
+        }
+
+        /** Ucapkan teks jawaban AI (v1.31.11, TTS bawaan Android). */
+        @JavascriptInterface
+        fun speak(text: String) {
+            webView.post { speakNow(text) }
+        }
+
+        /** Hentikan ucapan yang sedang berjalan (v1.31.11). */
+        @JavascriptInterface
+        fun stopSpeak() {
+            webView.post { try { tts?.stop() } catch (e: Exception) { /* abaikan */ } }
+        }
+
         /** Salin teks ke clipboard (tombol Salin pada pesan chat AI). */
         @JavascriptInterface
         fun copyText(text: String) {
@@ -1165,6 +1290,9 @@ class MainActivity : Activity() {
 
         /** v1.29.0: perangkat ini pernah berhasil membuka Web UI server. */
         private const val KEY_SERVER_SESSION = "server_session_seen"
+
+        /** v1.31.11: kode permintaan aktivitas pengenalan suara. */
+        private const val REQ_VOICE_INPUT = 9401
 
         /**
          * SHA-256 sertifikat penanda tangan rilis resmi D TRADE —

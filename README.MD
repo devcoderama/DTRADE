@@ -368,7 +368,12 @@ fundamental dasar, peringatan saham gorengan), saham global, dan jebakan
 trading — disematkan apa adanya sebagai prompt sistem (`AI_SYSTEM`) di halaman
 mandiri aplikasi. Sunting file itu lalu sematkan ulang isinya untuk mengubah
 perilaku AI mandiri. Chat AI aplikasi juga mendukung banyak **sesi**
-percakapan: mulai sesi baru atau kembali ke sesi sebelumnya kapan saja.
+percakapan (sidebar geser: mulai sesi baru atau kembali ke sesi sebelumnya),
+**masukan suara** (tombol mikrofon — pengenalan suara bawaan Android
+berbahasa Indonesia, tanpa izin mikrofon untuk aplikasi), dan **suara
+jawaban** (text-to-speech bawaan Android; tombol pengeras suara di bar sesi
+untuk menghidupkan/mematikan bacaan otomatis, atau ikon pengeras suara di
+tiap jawaban untuk mendengarkan satu jawaban saja).
 
 ### Siaran sinyal ke Telegram (`broadcast`)
 

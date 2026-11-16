@@ -340,6 +340,9 @@
   .chatbar input:focus{border-color:rgba(240,185,11,.55)}
   .chatbar button{flex:none;width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
     background:var(--gold);color:#0b0e11;font-size:1rem}
+  /* Tombol mikrofon (v1.31.11): gaya hantu agar tombol kirim tetap menonjol */
+  .chatbar button#chatMic{background:var(--panel);border:1px solid var(--line);color:var(--gold)}
+  .chat-sess-bar button.off{color:var(--muted)}
   .chatbar button:disabled{opacity:.45;cursor:default}
   .aibtn{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:12px;border-radius:12px;
     background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.5);color:var(--gold);
@@ -530,6 +533,7 @@
 <div id="chatView" class="hidden">
   <div class="chat-sess-bar">
     <div class="chat-sess-title" id="chatSessTitle">Sesi baru</div>
+    <button id="chatTtsBtn" aria-label="Hidupkan/matikan suara jawaban AI"><i class="fa-solid fa-volume-xmark"></i></button>
     <button id="chatSessListBtn" aria-label="Daftar sesi chat"><i class="fa-solid fa-clock-rotate-left"></i></button>
     <button id="chatNewBtn" aria-label="Mulai sesi chat baru"><i class="fa-solid fa-plus"></i></button>
   </div>
@@ -554,6 +558,7 @@
   </div>
   <div class="chatbar">
     <input id="chatInput" type="text" placeholder="Tulis pesan untuk AI…" autocomplete="off">
+    <button id="chatMic" aria-label="Kirim pesan dengan suara"><i class="fa-solid fa-microphone"></i></button>
     <button id="chatSend" aria-label="Kirim pesan"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
 </div>
@@ -3851,7 +3856,8 @@ function renderChat() {
       acts.className = "cacts left";
       acts.dataset.idx = i;
       acts.innerHTML =
-        '<button data-act="copyai" aria-label="Salin jawaban AI"><i class="fa-solid fa-copy"></i></button>';
+        '<button data-act="copyai" aria-label="Salin jawaban AI"><i class="fa-solid fa-copy"></i></button>' +
+        '<button data-act="speak" aria-label="Dengarkan jawaban AI"><i class="fa-solid fa-volume-high"></i></button>';
       box.appendChild(acts);
     }
   });
@@ -3891,6 +3897,7 @@ async function sendChat(content, display) {
   content = (content || "").trim();
   if (chatBusy || !content) return;
   chatBusy = true;
+  stopSpeak();
   $("chatSend").disabled = true;
   chatMsgs.push({ role: "user", content: content, display: display || content });
   renderChat();
@@ -3920,6 +3927,7 @@ async function sendChat(content, display) {
       chatMsgs.slice(-16).map(m => ({ role: m.role, content: m.content })));
     const reply = (await aiAsk(convo)).trim();
     chatMsgs.push({ role: "assistant", content: reply || "(AI mengembalikan jawaban kosong)" });
+    if (ttsOn && reply) speakAi(chatMsgs[chatMsgs.length - 1]);
   } catch (e) {
     chatMsgs.push({ role: "assistant", content: "⚠️ " + cleanAiError(e.message) });
   }
@@ -3966,6 +3974,11 @@ function chatAct(act, idx) {
     const txt = tmp.innerText || mm.content;
     tmp.remove();
     copyChatText(txt);
+    return;
+  }
+  if (act === "speak") {
+    const mm = chatMsgs[idx];
+    if (mm && mm.role === "assistant") speakAi(mm);
     return;
   }
   if (chatBusy) return;
@@ -4016,6 +4029,68 @@ $("chatList").addEventListener("click", e => {
   const b = e.target.closest("button[data-act]");
   if (!b) return;
   chatAct(b.dataset.act, parseInt(b.parentElement.dataset.idx, 10));
+});
+/* ===== Suara: masukan suara (STT) + suara jawaban (TTS) — v1.31.11 =====
+   Keduanya memakai layanan bawaan Android lewat jembatan native
+   (RecognizerIntent + TextToSpeech): gratis, tanpa kunci API, dan tidak
+   perlu scraping layanan web (API suara web tidak berjalan di WebView). */
+let ttsOn = false;
+try { ttsOn = localStorage.getItem("dtrade-tts") === "1"; } catch (e) { /* abaikan */ }
+function renderTtsBtn() {
+  const b = $("chatTtsBtn");
+  if (!b) return;
+  b.innerHTML = '<i class="fa-solid fa-volume-' + (ttsOn ? "high" : "xmark") + '"></i>';
+  b.classList.toggle("off", !ttsOn);
+}
+function stopSpeak() {
+  if (window.AndroidBridge && window.AndroidBridge.stopSpeak) window.AndroidBridge.stopSpeak();
+}
+function speakTextFor(m) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = mdLite(m.content);
+  // Blok kode tidak diucapkan isinya — cukup penanda lisan.
+  tmp.querySelectorAll(".md-code").forEach(el =>
+    el.replaceWith(document.createTextNode(" (blok kode) ")));
+  tmp.style.cssText = "position:fixed;left:-9999px;top:0;width:320px";
+  document.body.appendChild(tmp);
+  const txt = (tmp.innerText || m.content).trim();
+  tmp.remove();
+  return txt;
+}
+function speakAi(m) {
+  if (window.AndroidBridge && window.AndroidBridge.speak) {
+    window.AndroidBridge.speak(speakTextFor(m));
+  }
+}
+function voiceAsk() {
+  return new Promise((resolve, reject) => {
+    if (!(window.AndroidBridge && window.AndroidBridge.voiceInput)) {
+      reject(new Error("no-bridge"));
+      return;
+    }
+    const id = ++cbSeq;
+    cbs[id] = { resolve, reject };
+    window.AndroidBridge.voiceInput(id);
+  });
+}
+$("chatTtsBtn").addEventListener("click", () => {
+  ttsOn = !ttsOn;
+  try { localStorage.setItem("dtrade-tts", ttsOn ? "1" : "0"); } catch (e) { /* abaikan */ }
+  if (!ttsOn) stopSpeak();
+  renderTtsBtn();
+});
+renderTtsBtn();
+$("chatMic").addEventListener("click", async () => {
+  if (chatBusy) return;
+  if (!(window.AndroidBridge && window.AndroidBridge.voiceInput)) {
+    $("chatInput").focus();
+    return;
+  }
+  stopSpeak();
+  try {
+    const text = (await voiceAsk() || "").trim();
+    if (text) sendChat(text);
+  } catch (e) { /* dibatalkan/gagal: diam saja */ }
 });
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
