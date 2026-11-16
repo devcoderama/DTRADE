@@ -314,7 +314,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.13.1</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.13.2</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1582,11 +1582,24 @@ function onWsKline(k) {
   if (k.x) renderAnalysis();   // candle ditutup → hitung ulang skor
 }
 
+const BULAN_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+function fmtWaktuCandle(ts, iv, spanMs) {
+  const d = new Date(ts);
+  const p2 = n => String(n).padStart(2, "0");
+  if (iv === "1mo" || iv === "1M") return BULAN_ID[d.getMonth()] + " " + String(d.getFullYear()).slice(2);
+  if (iv === "1d" || iv === "1wk" || iv === "1w") return d.getDate() + " " + BULAN_ID[d.getMonth()];
+  if (spanMs > 2 * 24 * 3600 * 1000) {
+    return p2(d.getDate()) + "/" + p2(d.getMonth() + 1) + " " + p2(d.getHours()) + ":" + p2(d.getMinutes());
+  }
+  return p2(d.getHours()) + ":" + p2(d.getMinutes());
+}
+
 function drawChart(kl) {
   const canvas = $("chart");
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.clientWidth, H = 340;
+  const W = canvas.clientWidth, H = 348;
   canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.height = H + "px";
   const ctx = canvas.getContext("2d");
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
@@ -1600,17 +1613,29 @@ function drawChart(kl) {
     hi = Math.max(hi, tradePlan.entry, tradePlan.tp, tradePlan.sl);
     lo = Math.min(lo, tradePlan.entry, tradePlan.tp, tradePlan.sl);
   }
-  const pad = (hi - lo) * 0.07 || 1; hi += pad; lo -= pad;
-  const priceH = H * 0.78, volTop = H * 0.84, volH = H * 0.14;
+  /* v1.13.2: bantalan vertikal diperbesar (7% → 10%) supaya candle dan
+     label ekstrem tidak lagi menempel/terpotong tepi kanvas. */
+  const pad = (hi - lo) * 0.10 || 1; hi += pad; lo -= pad;
+  /* Tata letak: area harga, area volume, lalu strip sumbu waktu 18px
+     di paling bawah (v1.13.2). */
+  const timeH = 18, plotH = H - timeH;
+  const priceH = plotH * 0.78, volTop = plotH * 0.845, volH = plotH * 0.125;
   const labelW = 56, cw = (W - labelW) / kl.length;
   const y = p => priceH - (p - lo) / (hi - lo) * priceH;
+  const clampY = yy => Math.max(10, Math.min(priceH - 2, yy));
   ctx.font = "10px sans-serif";
+  /* Posisi label level rencana dihitung lebih dulu agar label kisi
+     yang bertabrakan dengannya bisa dilewati (anti tumpang tindih). */
+  const planLabelYs = tradePlan ?
+    [tradePlan.tp, tradePlan.entry, tradePlan.sl].map(v => clampY(y(v))) : [];
   // Garis kisi + label harga
   ctx.strokeStyle = "#232a33"; ctx.fillStyle = "#9aa7b4"; ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const p = lo + (hi - lo) * i / 4, yy = y(p);
     ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - labelW, yy); ctx.stroke();
-    ctx.fillText(fmtPrice(p), W - labelW + 5, yy < 8 ? yy + 10 : yy + 3);
+    const ly = clampY(yy);
+    if (planLabelYs.some(py => Math.abs(py - ly) < 11)) continue;
+    ctx.fillText(fmtPrice(p), W - labelW + 5, ly + 3);
   }
   // Volume
   kl.forEach((k, i) => {
@@ -1643,30 +1668,44 @@ function drawChart(kl) {
   }
   line(e20, "#f0b90b");
   line(e50, "#4f8ff7");
-  // Harga terakhir
+  // Harga terakhir: garis putus-putus + label harga di sumbu kanan
   const last = closes[closes.length - 1];
   ctx.strokeStyle = "rgba(240,185,11,.55)";
   ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(0, y(last)); ctx.lineTo(W - labelW, y(last)); ctx.stroke();
   ctx.setLineDash([]);
-  // Level rencana trade: ENTRY / TP / SL
+  /* Label harga terakhir dilewati bila berhimpit dengan label ENTRY
+     (pada rencana indikatif ENTRY memang = harga terakhir). */
+  if (!tradePlan || Math.abs(y(last) - y(tradePlan.entry)) > 11) {
+    ctx.fillStyle = "#f0b90b";
+    ctx.fillText(fmtPrice(last), W - labelW + 5, clampY(y(last)) + 3);
+  }
+  // Level rencana trade: ENTRY / TP / SL (garis boleh di tepi plot,
+  // label selalu dijepit ke dalam area dan diberi jarak minimum).
   if (tradePlan) {
     const levels = [
-      ["TP", tradePlan.tp, "#2ebd85"],
       ["ENTRY", tradePlan.entry, "#e8ecf1"],
+      ["TP", tradePlan.tp, "#2ebd85"],
       ["SL", tradePlan.sl, "#f6465d"]
     ];
     ctx.font = "bold 10px sans-serif";
+    const usedYs = [];
     for (const [name, val, color] of levels) {
       const yy = y(val);
-      if (yy < 6 || yy > priceH - 2) continue;
+      if (yy < -4 || yy > priceH + 4) continue;
       ctx.strokeStyle = color;
       ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W - labelW, yy); ctx.stroke();
       ctx.setLineDash([]);
+      let ly = clampY(yy);
+      for (const uy of usedYs) {
+        if (Math.abs(ly - uy) < 11) ly = uy + (ly >= uy ? 11 : -11);
+      }
+      ly = clampY(ly);
+      usedYs.push(ly);
       ctx.fillStyle = color;
-      ctx.fillText(name, 6, yy - 4);
-      ctx.fillText(fmtPrice(val), W - labelW + 5, yy + 3);
+      ctx.fillText(name, yy < 22 ? 104 : 6, ly - 4);
+      ctx.fillText(fmtPrice(val), W - labelW + 5, ly + 3);
     }
     ctx.font = "10px sans-serif";
   }
@@ -1674,6 +1713,28 @@ function drawChart(kl) {
   ctx.fillText("EMA20", 6, 14);
   ctx.fillStyle = "#4f8ff7";
   ctx.fillText("EMA50", 48, 14);
+  /* Sumbu waktu (v1.13.2): ±5 label waktu candle di bawah grafik,
+     format mengikuti timeframe (intraday: jam; harian: tanggal;
+     bulanan: bulan/tahun) dalam zona waktu perangkat. */
+  const iv = detailMarket === "stock" ? stockInterval : currentInterval;
+  const spanMs = kl.length > 1 ? (kl[kl.length - 1][0] - kl[0][0]) : 0;
+  ctx.strokeStyle = "#232a33";
+  ctx.beginPath(); ctx.moveTo(0, plotH + 1); ctx.lineTo(W - labelW, plotH + 1); ctx.stroke();
+  ctx.fillStyle = "#7d8896";
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const prevAlign = ctx.textAlign;
+  for (const f of ticks) {
+    const idx = Math.min(kl.length - 1, Math.round(f * (kl.length - 1)));
+    const label = fmtWaktuCandle(kl[idx][0], iv, spanMs);
+    const cx = idx * cw + cw / 2;
+    const tw = ctx.measureText(label).width;
+    let tx = cx, align = "center";
+    if (cx - tw / 2 < 0) { tx = 0; align = "left"; }
+    if (cx + tw / 2 > W - labelW) { tx = W - labelW; align = "right"; }
+    ctx.textAlign = align;
+    ctx.fillText(label, tx, H - 5);
+  }
+  ctx.textAlign = prevAlign;
 }
 
 /* ================= Peristiwa ================= */
