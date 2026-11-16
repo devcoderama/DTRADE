@@ -109,6 +109,35 @@ class MainActivity : Activity() {
                 return target.host != allowedHost && target.host != STANDALONE_HOST
             }
 
+            // v1.8.0: halaman mode mandiri dimuat dengan base URL semu
+            // https://dtrade.local/ sehingga subresource relatif (CSS +
+            // font Font Awesome di assets/fa/) tidak bisa diambil dari
+            // jaringan — sajikan langsung dari aset aplikasi. Hanya jalur
+            // /fa/ di host semu yang dilayani, dengan penolakan "..".
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                val url = request?.url ?: return null
+                val path = url.path ?: return null
+                if (url.host != STANDALONE_HOST || !path.startsWith("/fa/") ||
+                    path.contains("..")
+                ) {
+                    return null
+                }
+                return try {
+                    val assetPath = path.removePrefix("/")
+                    val mime = when {
+                        assetPath.endsWith(".css") -> "text/css"
+                        assetPath.endsWith(".woff2") -> "font/woff2"
+                        else -> "application/octet-stream"
+                    }
+                    WebResourceResponse(mime, "UTF-8", assets.open(assetPath))
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
             override fun onReceivedError(
                 view: WebView?,
                 request: WebResourceRequest?,
@@ -344,7 +373,8 @@ class MainActivity : Activity() {
             "www.coindesk.com", "cointelegraph.com", "decrypt.co",
             "cryptopotato.com", "www.theblock.co", "u.today",
             "ambcrypto.com", "beincrypto.com", "bitcoinmagazine.com",
-            "cryptoslate.com", "www.newsbtc.com"
+            "cryptoslate.com", "www.newsbtc.com",
+            "nftplazas.com", "nftnow.com"
         )
 
         /** Endpoint terjemahan Google (EN→ID) untuk tab Berita (v1.7.0). */

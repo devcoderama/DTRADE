@@ -139,6 +139,7 @@
   .article h3{font-size:1.02rem;margin:18px 0 8px;color:var(--text)}
   .hidden{display:none !important}
 </style>
+<link rel="stylesheet" href="fa/css/all.min.css">
 </head>
 <body>
 
@@ -149,18 +150,8 @@
       <button id="btnMainnet" class="on">Mainnet</button>
       <button id="btnTestnet">Testnet</button>
     </div>
-    <button class="iconbtn" id="btnRefresh" aria-label="Muat ulang">⟳</button>
+    <button class="iconbtn" id="btnRefresh" aria-label="Muat ulang"><i class="fa-solid fa-rotate-right"></i></button>
   </div>
-</div>
-
-<div class="info">Mode mandiri: aplikasi tidak terhubung ke server binance-ai-future, jadi yang
-ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita crypto</b> dari
-API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
-
-<div class="serverbar" id="serverBar">
-  <div>Server: <b id="serverUrl">—</b></div>
-  <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
-  <button id="btnServer" style="margin-left:0">Hubungkan</button>
 </div>
 
 <div id="listView">
@@ -179,7 +170,7 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 
 <div class="detail" id="detailView">
   <div class="dhead">
-    <button class="iconbtn" id="btnBack" aria-label="Kembali">←</button>
+    <button class="iconbtn" id="btnBack" aria-label="Kembali"><i class="fa-solid fa-arrow-left"></i></button>
     <span id="dCoin"></span>
     <div>
       <div class="nm" id="dSymbol">—</div>
@@ -190,7 +181,7 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
       <div class="p" id="dPrice">—</div>
       <div class="chg" id="dChange">—</div>
     </div>
-    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol">⇄</button>
+    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
   </div>
   <div class="tabs" id="tabs">
     <button data-iv="1m">1m</button>
@@ -219,7 +210,7 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 
 <div id="pickerView" class="hidden" style="position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column">
   <div class="dhead" style="padding:12px 14px 2px">
-    <button class="iconbtn" id="btnPickBack" aria-label="Tutup pemilih simbol">←</button>
+    <button class="iconbtn" id="btnPickBack" aria-label="Tutup pemilih simbol"><i class="fa-solid fa-arrow-left"></i></button>
     <div>
       <div class="nm">Ganti Simbol</div>
       <div class="chg">Ketuk simbol untuk membuka grafiknya</div>
@@ -233,13 +224,13 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 
 <div id="readerView" class="hidden">
   <div class="dhead" style="padding:12px 14px 2px">
-    <button class="iconbtn" id="btnReaderBack" aria-label="Kembali ke daftar berita">←</button>
+    <button class="iconbtn" id="btnReaderBack" aria-label="Kembali ke daftar berita"><i class="fa-solid fa-arrow-left"></i></button>
     <div style="flex:1;min-width:0">
       <div class="nm" style="font-size:1rem">Baca Berita</div>
       <div class="chg" id="readerMeta">—</div>
     </div>
-    <button class="iconbtn" id="btnTranslate" aria-label="Alihkan terjemahan" title="Terjemahan Google EN→ID">ID</button>
-    <button class="iconbtn" id="btnReaderExt" aria-label="Buka di browser" title="Buka di browser">↗</button>
+    <button class="iconbtn" id="btnTranslate" aria-label="Alihkan terjemahan" title="Terjemahan Google EN→ID"><i class="fa-solid fa-language"></i></button>
+    <button class="iconbtn" id="btnReaderExt" aria-label="Buka di browser" title="Buka di browser"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
   </div>
   <div id="readerBody" style="padding:8px 16px 90px"></div>
 </div>
@@ -250,6 +241,9 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 </div>
 
 <div id="newsView" class="hidden">
+  <div class="controls" style="padding:12px 14px 0">
+    <input id="nq" type="search" placeholder="Cari berita… (cth: Bitcoin, NFT, ETF)" autocomplete="off">
+  </div>
   <div class="chips" id="srcChips"></div>
   <div class="status" id="newsStatus">Ketuk tab Berita untuk memuat kabar crypto terbaru.</div>
   <div id="newsList" style="padding-top:8px"></div>
@@ -257,24 +251,31 @@ API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
 
 <div id="moreView" class="hidden">
   <div style="height:12px"></div>
-  <button class="menuitem" id="mServer"><span class="ic">🖥️</span><span>Hubungkan ke Server<small>Kembali ke Web UI binance-ai-future</small></span></button>
-  <button class="menuitem" id="mEditServer"><span class="ic">✏️</span><span>Ubah Alamat Server<small>Alamat backend di komputer/VPS Anda</small></span></button>
-  <button class="menuitem" id="mReload"><span class="ic">⟳</span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
-  <div class="info" style="margin-top:4px">D TRADE <b>v1.7.0</b> — mode mandiri. Berita dikumpulkan
-  langsung dari RSS publik 11 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
-  U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, dan NewsBTC. Ketuk berita untuk
-  membacanya di browser ponsel.</div>
+  <div class="info" style="margin:0 14px 10px">Mode mandiri: aplikasi tidak terhubung ke server binance-ai-future, jadi yang
+  ditampilkan hanya <b>sinyal teknikal</b>, <b>grafik candlestick</b>, dan <b>berita crypto</b> dari
+  API publik Binance &amp; RSS — tanpa AI, tanpa eksekusi order.</div>
+  <div class="serverbar" id="serverBar" style="margin:0 14px 10px">
+    <div>Server: <b id="serverUrl">—</b></div>
+    <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
+    <button id="btnServer" style="margin-left:0">Hubungkan</button>
+  </div>
+  <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.8.0</b> — mode mandiri. Berita dikumpulkan
+  langsung dari RSS publik 13 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
+  U.Today, AMBCrypto, BeInCrypto, Bitcoin Magazine, CryptoSlate, NewsBTC, plus dua sumber khusus
+  NFT — NFT Plazas dan NFT Now. Ketuk berita untuk membacanya langsung di aplikasi, lengkap
+  dengan terjemahan Google ke Bahasa Indonesia.</div>
 </div>
 
 <div class="foot">Skor = gabungan EMA, RSI, MACD, dan Bollinger Bands dari candle terakhir.
 Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).</div>
 
 <nav class="bottomnav" id="bottomNav">
-  <button data-tab="pasar" class="on"><span class="ic">🏠</span>Pasar</button>
-  <button data-tab="analisis"><span class="ic">📈</span>Analisis</button>
-  <button data-tab="sinyal"><span class="ic">⚡</span>Sinyal</button>
-  <button data-tab="berita"><span class="ic">📰</span>Berita</button>
-  <button data-tab="lainnya"><span class="ic">☰</span>Lainnya</button>
+  <button data-tab="pasar" class="on"><i class="fa-solid fa-house ic"></i>Pasar</button>
+  <button data-tab="analisis"><i class="fa-solid fa-chart-line ic"></i>Analisis</button>
+  <button data-tab="sinyal"><i class="fa-solid fa-bolt ic"></i>Sinyal</button>
+  <button data-tab="berita"><i class="fa-solid fa-newspaper ic"></i>Berita</button>
+  <button data-tab="lainnya"><i class="fa-solid fa-bars ic"></i>Lainnya</button>
 </nav>
 
 <script>
@@ -1032,7 +1033,9 @@ const FEEDS = [
   { name: "BeInCrypto", url: "https://beincrypto.com/feed" },
   { name: "Bitcoin Magazine", url: "https://bitcoinmagazine.com/feed" },
   { name: "CryptoSlate", url: "https://cryptoslate.com/feed/" },
-  { name: "NewsBTC", url: "https://www.newsbtc.com/feed/" }
+  { name: "NewsBTC", url: "https://www.newsbtc.com/feed/" },
+  { name: "NFT Plazas", url: "https://nftplazas.com/feed/", nft: true },
+  { name: "NFT Now", url: "https://nftnow.com/feed/", nft: true }
 ];
 let newsItems = [], newsLoaded = false, newsLoading = false, newsFilter = "Semua";
 /* Status terjemahan Google EN→ID (v1.7.0): default aktif, disimpan di
@@ -1073,7 +1076,7 @@ function feedImage(item, descRaw) {
   if (u && u.indexOf("http://") === 0) u = "https://" + u.slice(7);
   return u || "";
 }
-function parseFeed(xmlText, source) {
+function parseFeed(xmlText, source, feedNft) {
   const doc = new DOMParser().parseFromString(xmlText, "text/xml");
   const out = [];
   doc.querySelectorAll("item, entry").forEach(it => {
@@ -1088,13 +1091,17 @@ function parseFeed(xmlText, source) {
     }
     const descRaw = tx("description") || tx("summary") || tx("content");
     const t = Date.parse(tx("pubDate") || tx("published") || tx("updated"));
+    const title = tx("title");
+    const desc = stripHtml(descRaw).slice(0, 180);
     out.push({
       source: source,
-      title: tx("title"),
+      title: title,
       link: link,
-      desc: stripHtml(descRaw).slice(0, 180),
+      desc: desc,
       img: feedImage(it, descRaw),
-      time: isNaN(t) ? 0 : t
+      time: isNaN(t) ? 0 : t,
+      /* Berita NFT: dari feed khusus NFT, atau kata kunci di judul/ringkasan. */
+      nft: !!feedNft || /\bnft\b|non[- ]fungible/i.test(title + " " + desc)
     });
   });
   return out.filter(n => n.title && n.link);
@@ -1113,16 +1120,26 @@ async function loadNews(force) {
   let ok = 0;
   const results = await Promise.all(FEEDS.map(async f => {
     try {
-      const items = parseFeed(await fetchText(f.url), f.name);
+      const items = parseFeed(await fetchText(f.url), f.name, f.nft);
       ok++;
       return items;
     } catch (e) { return []; }
   }));
   const seen = new Set();
-  newsItems = results.reduce((a, b) => a.concat(b), [])
+  const merged = results.reduce((a, b) => a.concat(b), [])
     .filter(n => !seen.has(n.link) && seen.add(n.link))
-    .sort((a, b) => b.time - a.time)
-    .slice(0, 90);
+    .sort((a, b) => b.time - a.time);
+  /* Jatah adil per sumber: tanpa ini, feed khusus yang terbitnya jarang
+     (NFT Plazas/NFT Now) tersingkir dari 90 besar oleh sumber besar. */
+  const bySrc = {};
+  merged.forEach(n => { (bySrc[n.source] = bySrc[n.source] || []).push(n); });
+  const guaranteed = [];
+  Object.values(bySrc).forEach(arr => { guaranteed.push.apply(guaranteed, arr.slice(0, 6)); });
+  const fill = merged
+    .filter(n => !guaranteed.includes(n))
+    .slice(0, Math.max(0, 90 - guaranteed.length));
+  newsItems = guaranteed.concat(fill)
+    .sort((a, b) => b.time - a.time);
   newsLoaded = true;
   newsLoading = false;
   $("newsStatus").textContent = newsItems.length + " berita · " + ok + "/" + FEEDS.length +
@@ -1135,7 +1152,7 @@ async function loadNews(force) {
 function renderChips() {
   const wrap = $("srcChips");
   wrap.innerHTML = "";
-  ["Semua"].concat(FEEDS.map(f => f.name)).forEach(nm => {
+  ["Semua", "NFT"].concat(FEEDS.map(f => f.name)).forEach(nm => {
     const b = document.createElement("button");
     b.textContent = nm;
     if (nm === newsFilter) b.className = "on";
@@ -1169,9 +1186,17 @@ function openNewsLink(url) {
 function renderNews() {
   const wrap = $("newsList");
   wrap.innerHTML = "";
-  const arr = newsItems.filter(n => newsFilter === "Semua" || n.source === newsFilter);
+  const q = ($("nq").value || "").trim().toLowerCase();
+  const arr = newsItems.filter(n => {
+    if (newsFilter === "NFT" ? !n.nft
+        : newsFilter !== "Semua" && n.source !== newsFilter) return false;
+    if (!q) return true;
+    const hay = (n.title + " " + (n.titleId || "") + " " + n.desc + " " + n.source).toLowerCase();
+    return q.split(/\s+/).every(w => hay.includes(w));
+  });
   if (!arr.length) {
-    wrap.innerHTML = '<div class="status">Tidak ada berita untuk filter ini.</div>';
+    wrap.innerHTML = '<div class="status">Tidak ada berita yang cocok' +
+      (q ? ' untuk pencarian "' + escHtml(q) + '"' : " untuk filter ini") + ".</div>";
     return;
   }
   arr.forEach(n => {
@@ -1184,12 +1209,12 @@ function renderNews() {
       relTime(n.time) + "</span></div></div>" +
       (n.img
         ? '<img class="nthumb" loading="lazy" alt="" src="' + escHtml(n.img) + '">'
-        : '<div class="nthumbf">📰</div>');
+        : '<div class="nthumbf"><i class="fa-solid fa-newspaper"></i></div>');
     const img = d.querySelector("img.nthumb");
     if (img) img.addEventListener("error", () => {
       const f = document.createElement("div");
       f.className = "nthumbf";
-      f.textContent = "📰";
+      f.innerHTML = '<i class="fa-solid fa-newspaper"></i>';
       img.replaceWith(f);
     });
     d.addEventListener("click", () => openReader(n));
@@ -1286,7 +1311,7 @@ function openReader(item) {
   $("detailView").classList.remove("open");
   $("readerView").classList.remove("hidden");
   $("readerMeta").textContent = item.source + " · " + relTime(item.time);
-  $("btnTranslate").textContent = translateOn ? "ID" : "EN";
+  $("btnTranslate").style.color = translateOn ? "var(--gold)" : "var(--muted)";
   $("readerBody").innerHTML = '<h2 class="rtitle">' + escHtml(item.title) + "</h2>" +
     '<div class="status" style="padding:0">Memuat artikel…</div>';
   window.scrollTo(0, 0);
@@ -1301,7 +1326,7 @@ $("btnReaderExt").addEventListener("click", () => { if (readerItem) openNewsLink
 $("btnTranslate").addEventListener("click", async () => {
   translateOn = !translateOn;
   try { localStorage.setItem("dtrade-tl", translateOn ? "on" : "off"); } catch (e) { /* abaikan */ }
-  $("btnTranslate").textContent = translateOn ? "ID" : "EN";
+  $("btnTranslate").style.color = translateOn ? "var(--gold)" : "var(--muted)";
   renderChips();
   if (!readerItem || !readerParas) return;
   if (!translateOn) {
@@ -1388,19 +1413,12 @@ async function translateReader(item, hero, my) {
   }
 }
 
-/* ================= Tab Lainnya ================= */
-if (window.AndroidBridge && window.AndroidBridge.openServer) {
-  $("mServer").addEventListener("click", () => window.AndroidBridge.openServer());
-  if (window.AndroidBridge.editServerUrl) {
-    $("mEditServer").addEventListener("click", () => window.AndroidBridge.editServerUrl());
-  } else {
-    $("mEditServer").classList.add("hidden");
-  }
-} else {
-  $("mServer").classList.add("hidden");
-  $("mEditServer").classList.add("hidden");
-}
+/* ================= Tab Lainnya =================
+   Sejak v1.8.0 banner info + bilah server HANYA tampil di tab ini
+   (dipindah dari atas semua halaman); tombol Hubungkan/Ubah di bilah
+   server diikat di blok peristiwa bilah server. */
 $("mReload").addEventListener("click", () => { showTab("pasar"); loadList(); });
+$("nq").addEventListener("input", renderNews);
 
 loadList();
 </script>
