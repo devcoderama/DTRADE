@@ -234,6 +234,7 @@
   .cbub{max-width:86%;padding:10px 13px;border-radius:14px;font-size:.9rem;line-height:1.55;
     white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
   .cbub.me{align-self:flex-end;background:var(--gold);color:#0b0e11;border-bottom-right-radius:4px;font-weight:600}
+  .cbub.me.long{font-weight:500;text-align:left}
   .cbub.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
     color:var(--text);border-bottom-left-radius:4px;white-space:normal}
   .cbub.typing{color:var(--muted);font-style:italic}
@@ -3507,6 +3508,9 @@ function renderChat() {
     d.className = "cbub " + (m.role === "user" ? "me" : "ai");
     if (m.role === "user") {
       d.textContent = m.display || m.content;
+      // Pesan panjang (teks analisis yang dibagikan) tampil dengan bobot
+      // huruf normal agar nyaman dibaca (v1.31.1).
+      if ((m.display || m.content).length > 200) d.classList.add("long");
     } else {
       // Balon AI dirender dari markdown ringan (v1.31.0) + label AI.
       d.innerHTML = '<div class="ai-tag"><i class="fa-solid fa-robot"></i> D TRADE AI</div>' +
@@ -3654,25 +3658,24 @@ $("btnAskAi").addEventListener("click", async () => {
   btn.disabled = false;
   btn.innerHTML = label0;
   if (!text) return;
-  const label = "📊 Minta pendapat AI — " + shareSymbolLabel();
   if (currentSymbol) teardownDetail();
   showTab("chat");
-  const prompt =
-    "Kamu menerima dua blok data tentang simbol yang sama dari aplikasi D TRADE. " +
-    "Blok A adalah HASIL ANALISIS APLIKASI pada saat analisis dibuat. Blok B adalah " +
-    "SITUASI PASAR REALTIME yang baru saja diambil ulang sekarang. Tugasmu menilai " +
-    "Blok A DENGAN MEMBANDINGKANNYA terhadap Blok B.\n\n" +
-    "=== A. HASIL ANALISIS APLIKASI ===\n" + text + "\n\n" +
-    "=== B. SITUASI PASAR REALTIME ===\n" +
-    (realtime || "(Data realtime gagal diambil — nilai hanya dari Blok A dan sebutkan keterbatasan ini.)") +
-    "\n\n=== TUGASMU ===\n" +
-    "1. Jelaskan arti analisis aplikasi (Blok A) dengan bahasa sederhana.\n" +
-    "2. BANDINGKAN dengan situasi realtime (Blok B): apakah harga dan skor sudah bergerak sejak analisis dibuat? " +
-    "Apakah kesimpulan analisis MASIH BERLAKU, MENGUAT, atau justru BATAL karena pergerakan terbaru? Sebutkan angka perbandingannya.\n" +
-    "3. Sebutkan faktor pendukung dan faktor risiko terpenting saat ini.\n" +
-    "4. Akhiri dengan kesimpulan singkat: masih layak diperhatikan, lebih baik menunggu, atau hindari dulu — " +
-    "tanpa rekomendasi beli/jual yang pasti.";
-  sendChat(prompt, label);
+  // Yang dikirim & ditampilkan PERSIS teks Bagikan analisis (permintaan
+  // Rams, v1.31.1) — bukan label pendek. Data realtime + perintah
+  // membandingkan menyusul di bawahnya dengan bahasa polos.
+  let prompt = text;
+  if (realtime) {
+    prompt += "\n\n— Data terbaru saat ini —\n" + realtime +
+      "\n\nBandingkan data terbaru di atas dengan analisisnya: apakah kesimpulan analisis " +
+      "masih berlaku, menguat, atau batal? Jelaskan dengan bahasa sederhana dan sebutkan " +
+      "angka perbandingannya, faktor pendukung dan risiko terpentingnya, lalu akhiri " +
+      "dengan kesimpulan singkat tanpa rekomendasi beli/jual yang pasti.";
+  } else {
+    prompt += "\n\nMenurutmu bagaimana analisis ini? Jelaskan dengan bahasa sederhana: " +
+      "faktor pendukungnya, risiko terpentingnya, dan kesimpulan singkat " +
+      "tanpa rekomendasi beli/jual yang pasti.";
+  }
+  sendChat(prompt, text);
 });
 
 /* ================= Berita crypto — agregator RSS 11 sumber =================
