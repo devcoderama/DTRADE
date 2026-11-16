@@ -1809,8 +1809,8 @@ function cfgEntry(id) { return indCfg.active.find(e => e.id === id) || null; }
 
 /* ---------- Indikator kustom: bahasa rumus aman ----------
    Sumber: close, open, high, low, volume, hl2, hlc3, ohlc4.
-   Fungsi: SMA(x,n) EMA(x,n) WMA(x,n) RSI([x,]n) MACDHIST(f,s,g)
-   MACDLINE(f,s) MACDSIG(f,s,g) ATR(n) STOCHK(n) STOCHD(n,m) CCI(n)
+   Fungsi: SMA(x,n) EMA(x,n) WMA(x,n) RSI([x,]n) MACDHIST([f,s,g])
+   MACDLINE([f,s]) MACDSIG([f,s,g]) ATR(n) STOCHK(n[,m]) STOCHD(n,m) CCI(n)
    WILLR(n) MFI(n) VWAP(n) OBV() BBUP(n,m) BBMID(n) BBLO(n,m)
    HIGHEST(x,n) LOWEST(x,n) REF(x,n) CHANGE(x,n) ABS(x) MAX(a,b) MIN(a,b).
    Operator: + - * / dan kurung. Semua nilai adalah seri per-candle. */
@@ -1959,11 +1959,32 @@ function exprEval(node, d) {
         case "RSI":
           if (A.length === 1) return rsiSeries(d.closes, scalarOf(A[0], "RSI"));
           need(2); return rsiSeries(A[0], scalarOf(A[1], "RSI"));
-        case "MACDHIST": need(3); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), scalarOf(A[2], "MACD")).hist;
-        case "MACDLINE": need(2); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), 9).line;
-        case "MACDSIG": need(3); return macdSeries(d.closes, scalarOf(A[0], "MACD"), scalarOf(A[1], "MACD"), scalarOf(A[2], "MACD")).signal;
+        case "MACDHIST": {
+          if (A.length !== 0 && A.length !== 3) throw new Error("MACDHIST butuh 0 atau 3 argumen");
+          const f = A.length ? scalarOf(A[0], "MACD") : 12;
+          const s = A.length ? scalarOf(A[1], "MACD") : 26;
+          const g = A.length ? scalarOf(A[2], "MACD") : 9;
+          return macdSeries(d.closes, f, s, g).hist;
+        }
+        case "MACDLINE": {
+          if (A.length !== 0 && A.length !== 2) throw new Error("MACDLINE butuh 0 atau 2 argumen");
+          const f = A.length ? scalarOf(A[0], "MACD") : 12;
+          const s = A.length ? scalarOf(A[1], "MACD") : 26;
+          return macdSeries(d.closes, f, s, 9).line;
+        }
+        case "MACDSIG": {
+          if (A.length !== 0 && A.length !== 3) throw new Error("MACDSIG butuh 0 atau 3 argumen");
+          const f = A.length ? scalarOf(A[0], "MACD") : 12;
+          const s = A.length ? scalarOf(A[1], "MACD") : 26;
+          const g = A.length ? scalarOf(A[2], "MACD") : 9;
+          return macdSeries(d.closes, f, s, g).signal;
+        }
         case "ATR": need(1); return atrSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "ATR"));
-        case "STOCHK": need(1); return stochSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "STOCHK"), 1).k;
+        case "STOCHK": {
+          if (A.length !== 1 && A.length !== 2) throw new Error("STOCHK butuh 1 atau 2 argumen");
+          const sm = A.length === 2 ? scalarOf(A[1], "STOCHK") : 1;
+          return stochSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "STOCHK"), sm).k;
+        }
         case "STOCHD": need(2); return stochSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "STOCHD"), scalarOf(A[1], "STOCHD")).d;
         case "CCI": need(1); return cciSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "CCI"));
         case "WILLR": need(1); return willrSeries(d.highs, d.lows, d.closes, scalarOf(A[0], "WILLR"));
@@ -3485,11 +3506,39 @@ function buildShareText() {
     L.push("Alasan utama:");
     o.reasons.slice(0, 3).forEach(r => L.push("• " + r));
   }
+  const dl = describeDrawings();
+  for (const x of dl) L.push(x);
   L.push("");
   L.push("Sinyal teknikal murni — bukan saran keuangan.");
   L.push("Dibuat dengan D TRADE · " + new Date().toLocaleString("id-ID",
     { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB");
   return L.join("\n");
+}
+/* Deskripsi teks gambar analisis pengguna (v1.32.4): garis/zona yang
+   digambar sendiri di grafik ikut tertulis di teks Bagikan — dan
+   karena "Minta Pendapat AI" mengirim teks yang sama, AI juga bisa
+   menilainya. */
+function describeDrawings() {
+  if (!drawings || !drawings.length) return [];
+  const fmtT = t => new Date(t).toLocaleString("id-ID",
+    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const L = ["", "Gambar analisis saya:"];
+  drawings.slice(0, 8).forEach(dr => {
+    if (dr.type === "hline" && dr.pts.length >= 1) {
+      L.push("• Garis datar (support/resisten) di " + fmtActive(dr.pts[0].p));
+    } else if (dr.type === "trend" && dr.pts.length >= 2) {
+      L.push("• Garis tren dari " + fmtActive(dr.pts[0].p) + " (" + fmtT(dr.pts[0].t) +
+        ") ke " + fmtActive(dr.pts[1].p) + " (" + fmtT(dr.pts[1].t) + ")");
+    } else if (dr.type === "rect" && dr.pts.length >= 2) {
+      const ps = dr.pts.map(x => x.p);
+      L.push("• Kotak zona " + fmtActive(Math.min.apply(null, ps)) + " – " +
+        fmtActive(Math.max.apply(null, ps)));
+    } else if (dr.type === "free") {
+      L.push("• Coretan bebas (" + dr.pts.length + " titik)");
+    }
+  });
+  if (drawings.length > 8) L.push("• …dan " + (drawings.length - 8) + " gambar lain");
+  return L;
 }
 function rrPath(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -3621,6 +3670,60 @@ function drawShareChart(ctx, x0, y0, w, h) {
   ctx.fillText("EMA20", x0 + pad + 12, y0 + pad + 28);
   ctx.fillStyle = "#4f8ff7";
   ctx.fillText("EMA50", x0 + pad + 122, y0 + pad + 28);
+  /* Gambar analisis pengguna (v1.32.4): garis tren/datar, kotak zona
+     (termasuk yang sudah diputar), dan coretan bebas ikut tercetak
+     di kartu bagikan, terpotong rapi pada area harga. */
+  if (drawings && drawings.length) {
+    const t0 = +kl[0][0], t1 = +kl[kl.length - 1][0];
+    const step = kl.length > 1 ? (t1 - t0) / (kl.length - 1) : 0;
+    const Xd = t => x0 + pad + (step ? (t - t0) / step : 0) * cw + cw / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0 + pad, y0 + pad, plotW - labelW, priceH);
+    ctx.clip();
+    ctx.lineWidth = 3;
+    for (const dr of drawings) {
+      ctx.strokeStyle = dr.color; ctx.fillStyle = dr.color;
+      ctx.globalAlpha = 0.92;
+      if (dr.type === "hline" && dr.pts.length >= 1) {
+        const yy = Y(dr.pts[0].p);
+        ctx.beginPath(); ctx.moveTo(x0 + pad, yy); ctx.lineTo(x0 + pad + plotW - labelW, yy); ctx.stroke();
+      } else if (dr.type === "trend" && dr.pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(Xd(dr.pts[0].t), Y(dr.pts[0].p));
+        ctx.lineTo(Xd(dr.pts[1].t), Y(dr.pts[1].p));
+        ctx.stroke();
+      } else if (dr.type === "rect" && dr.pts.length >= 2) {
+        ctx.beginPath();
+        if (dr.pts.length === 4) {
+          dr.pts.forEach((pt, i) => {
+            const xx = Xd(pt.t), yy = Y(pt.p);
+            if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+          });
+          ctx.closePath();
+        } else {
+          ctx.rect(Math.min(Xd(dr.pts[0].t), Xd(dr.pts[1].t)),
+            Math.min(Y(dr.pts[0].p), Y(dr.pts[1].p)),
+            Math.abs(Xd(dr.pts[1].t) - Xd(dr.pts[0].t)),
+            Math.abs(Y(dr.pts[1].p) - Y(dr.pts[0].p)));
+        }
+        ctx.globalAlpha = 0.16; ctx.fill(); ctx.globalAlpha = 0.92; ctx.stroke();
+      } else if (dr.type === "free" && dr.pts.length >= 2) {
+        ctx.beginPath();
+        dr.pts.forEach((pt, i) => {
+          const xx = Xd(pt.t), yy = Y(pt.p);
+          if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+        });
+        ctx.stroke();
+      }
+      if (dr.type === "trend" || dr.type === "rect") {
+        for (const pt of dr.pts) {
+          ctx.beginPath(); ctx.arc(Xd(pt.t), Y(pt.p), 5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+  }
   /* Sumbu waktu */
   const iv = detailMarket === "stock" ? stockInterval : currentInterval;
   const spanMs = kl.length > 1 ? (kl[kl.length - 1][0] - kl[0][0]) : 0;
@@ -4923,7 +5026,7 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
    ke satu endpoint tetap; di browser biasa memakai fetch langsung.
    Mode server TIDAK memakai ini — di sana AI memakai kunci API yang ada
    di backend (.env), sesuai pembagian yang diminta pemilik. */
-const AI_SYSTEM = "Kamu adalah D TRADE AI, asisten AI di aplikasi D TRADE (aplikasi analisis pasar\ncrypto dan saham). Kamu berjalan di mode mandiri memakai layanan AI web gratis.\nTugasmu: membantu pengguna memahami pasar, analisis teknikal, dan konsep\nfinance/trading — dengan jujur, ringkas, dan aman.\n\n## Gaya & Format Jawaban\n\n- Jawab dalam Bahasa Indonesia yang jelas dan ringkas: paragraf pendek dan\n  poin-poin seperlunya. Tabel markdown BOLEH dipakai untuk membandingkan\n  data (mis. analisis awal vs data terbaru) — aplikasi menampilkannya\n  sebagai tabel rapi; jaga maksimal ±4 kolom dan isi sel tetap singkat.\n- Bila memberikan kode program, selalu bungkus dalam blok berpagar ``` agar\n  tampil sebagai blok kode tersendiri di aplikasi.\n- Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis\n  KODE/simbolnya dengan huruf kapital penuh (mis. GOTO, BBCA, AAPL, BTCUSDT,\n  ETH) — di aplikasi kode itu bisa diketuk pengguna untuk membuka analisisnya.\n- Kamu BUKAN penasihat keuangan: jangan menjanjikan profit, jangan menyuruh\n  membeli/menjual secara pasti. Boleh memberi penilaian bersyarat (\"cenderung\",\n  \"dengan syarat\") dan ingatkan risiko secara singkat bila relevan.\n- Akhiri jawaban analisis yang panjang dengan kesimpulan 1–2 kalimat.\n\n## Kejujuran Data (Penting)\n\n- Kamu TIDAK memiliki data harga live. Jangan pernah mengarang harga, persen\n  perubahan, atau angka indikator seolah-olah itu data saat ini.\n- Bila pengguna menanyakan harga/analisis terkini sebuah instrumen, katakan\n  kamu tidak bisa melihat harga live, lalu arahkan: ketuk kode instrumennya di\n  jawabanmu (akan tertaut ke analisis aplikasi), buka tab Pasar/Analisis, atau\n  pakai tombol \"Minta Pendapat AI\" dari halaman analisis agar kamu menerima\n  data aslinya.\n- Bila pengguna MENEMPEL data (teks analisis D TRADE, angka indikator, berita),\n  nilai HANYA dari data itu dan data \"terbaru\" yang ikut disertakan; sebutkan\n  angka yang kamu pakai.\n\n## Membaca Analisis D TRADE (saat pengguna meminta pendapat dari halaman Analisis)\n\nTeks analisis yang dikirim pengguna berisi: simbol & sinyal (LONG/SHORT/NETRAL)\ndengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai\nindikator, rencana indikatif ATR, ringkasan multi-timeframe, dan alasan utama.\nDi bawahnya disertakan bagian \"Data terbaru saat ini\" (harga & skor realtime,\nRSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:\n\n1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan\n   MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.\n2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —\n   jangan memaksakan arah pada sinyal lemah.\n3. Periksa keselarasan multi-timeframe: timeframe besar melawan arah sinyal\n   menurunkan keyakinan; searah menaikkannya.\n4. Periksa momentum & kejenuhan: RSI > 70 jenuh beli (rawan koreksi untuk\n   LONG), RSI < 30 jenuh jual (rawan pantulan untuk SHORT); MACD histogram\n   berubah tanda = momentum bergeser.\n5. Rencana ATR: SL 1,5×ATR dan TP 2,5×ATR (R:R 1:1,67). Nilai apakah harga\n   realtime masih memberi ruang R:R yang masuk akal menuju TP sebelum SL.\n6. Tutup dengan: faktor pendukung utama, risiko utama, dan kesimpulan singkat.\n   Tetap bukan perintah beli/jual.\n\n## Pengetahuan Indikator Teknikal\n\n- **Tren**: EMA20/50/200 — harga di atas EMA yang naik = uptrend; EMA20\n  memotong ke atas EMA50 (golden cross mini) = momentum membaik, sebaliknya\n  death cross. ADX > 25 tren kuat, < 20 pasar cenderung sideways.\n- **RSI(14)**: 30/70 ambang jenuh; divergensi RSI terhadap harga adalah sinyal\n  pelemahan tren. RSI 45–55 = netral.\n- **MACD**: histogram positif & membesar = momentum naik; persilangan signal\n  line mengonfirmasi perubahan momentum.\n- **Bollinger Bands**: %B mendekati 1 = harga di tepi atas (rentan mean\n  reversion kecuali tren sangat kuat); band menyempit (squeeze) mendahului\n  gerakan besar.\n- **ATR**: ukuran volatilitas; dasar penentuan SL/TP. ATR% tinggi = gerakan\n  liar, kecilkan ukuran posisi.\n- **VWAP**: harga di atas VWAP = bias intraday pembeli; di bawahnya penjual.\n- **Volume**: breakout tanpa volume di atas rata-rata 20 periode mudah gagal\n  (false breakout). Volume ratio > 1,5 mengonfirmasi gerakan.\n- **Funding rate (futures)**: ≥ +0,1% per interval = long terlalu padat\n  (rawan long squeeze); ≤ −0,1% = short padat (rawan short squeeze).\n- **Open interest**: OI naik + harga naik = tren didukung uang baru; OI naik +\n  harga turun = short agresif; OI turun = posisi ditutup (tren melemah).\n\n## Manajemen Risiko (selalu tekankan bila relevan)\n\n- Risiko per transaksi idealnya 1–2% dari modal; tentukan ukuran posisi dari\n  jarak stop loss, BUKAN dari rasa yakin.\n- Rasio risk:reward minimal 1:1,5; jangan memindahkan SL menjauh (\"berharap\")\n  dan jangan averaging down membabi buta pada posisi futures berlevrage.\n- Leverage memperbesar risiko likuidasi: di futures, pahami harga likuidasi,\n  mode margin (cross vs isolated), dan biaya funding sebelum membuka posisi.\n- Diversifikasi seperlunya, siapkan rencana keluar sebelum masuk, dan jangan\n  memakai dana kebutuhan hidup. Catat jurnal trading untuk evaluasi.\n\n## Crypto — Futures vs Spot\n\n- Spot: membeli aset sungguhan, hanya untung dari kenaikan, tanpa likuidasi.\n- Futures: kontrak derivatif; bisa LONG maupun SHORT, ada leverage, funding\n  rate berkala, dan risiko likuidasi bila margin tak cukup.\n- Istilah: mark price (acuan likuidasi), maintenance margin, unrealized PnL.\n- Pasar crypto bergerak 24/7 dan sangat volatil; altcoin berkapitalisasi kecil\n  mudah dimanipulasi dan spread-nya lebar.\n\n## Saham Indonesia (IDX)\n\n- Satuan transaksi 1 lot = 100 lembar. Jam perdagangan Bursa Efek Indonesia\n  Senin–Jumat (sesi pagi & siang WIB), tutup akhir pekan dan hari libur.\n- Harga bergerak mengikuti fraksi harga (tick size) dan dibatasi auto rejection\n  atas/bawah (ARA/ARB) harian.\n- Kode saham 4 huruf (mis. BBCA, GOTO); di data internasional berakhiran .JK.\n- Konsep fundamental dasar: PER (harga terhadap laba), PBV (harga terhadap\n  nilai buku), ROE (efisiensi laba terhadap ekuitas), DER (beban utang),\n  dividen & dividend yield. Saham lapis dua/tiga (\"gorengan\") berisiko tinggi:\n  likuiditas tipis, volatilitas ekstrem, rawan bandar — ingatkan ini bila\n  pengguna menanyakan saham kecil yang naik tidak wajar.\n- Untuk permintaan rekomendasi berbasis rentang harga (mis. Rp 100–500):\n  jelaskan kamu tidak bisa memindai harga live; kamu BOLEH menyebut contoh\n  emiten yang secara umum dikenal berada di kisaran itu dari pengetahuanmu,\n  dengan peringatan harga bisa sudah berubah, dan sarankan memverifikasi lewat\n  tab Pasar atau mengetuk kodenya untuk analisis live.\n\n## Saham Global\n\n- Simbol bursa AS seperti AAPL, MSFT, NVDA, TSLA; pasar reguler AS malam hari\n  WIB. Indeks utama: S&P 500, Nasdaq, Dow Jones.\n- Perhatikan laporan earnings, suku bunga The Fed, dan data inflasi AS sebagai\n  penggerak utama; harga dalam USD sehingga ada faktor kurs bagi investor\n  Indonesia.\n\n## Jebakan yang Harus Diperingatkan\n\n- FOMO mengejar harga yang sudah terbang jauh dari EMA20 (> 2×ATR = meregang).\n- Sinyal dari satu indikator saja tanpa konfirmasi tren/volume/timeframe lain.\n- Revenge trading setelah rugi, overtrading, dan memakai leverage maksimal.\n- Janji profit pasti dari pihak mana pun, grup sinyal berbayar, dan skema\n  ponzi berkedok trading — selalu ingatkan untuk waspada.\n- Berita/rumor tanpa sumber jelas; verifikasi ke pengumuman resmi emiten/bursa.\n\n## Menganalisis Berita Pasar (saat pengguna membagikan berita dari tab Berita)\n\n- Berita datang sebagai teks dari pengguna (judul + isi); kamu TIDAK bisa membuka tautan atau memeriksa berita lain — nilai hanya dari teks yang diberikan.\n- Struktur jawaban: (1) inti berita 1–2 kalimat; (2) sentimen untuk pasar (positif/negatif/netral) + alasan; (3) aset yang paling mungkin terdampak — tulis kode kapital penuh (BTCUSDT, ETH, GOTO, BBCA, AAPL) agar bisa diketuk pengguna menuju analisis datanya; (4) dampak jangka pendek vs menengah; (5) risiko & hal yang perlu diverifikasi.\n- Bedakan FAKTA dari berita vs OPINI/ramalan narasumber di dalamnya; jangan memperlakukan klaim promosi (proyek baru, target harga fantastis) sebagai fakta.\n- Jangan mengarang harga, angka, atau peristiwa yang tidak ada di teks berita. Bila isi berita terpotong/ringkas, katakan analisismu terbatas pada ringkasan itu.\n- Ingatkan: berita besar sering sudah \"priced in\"; reaksi pasar bisa berlawanan dengan arah berita (buy the rumor, sell the news).\n- Bila pesan menyertakan bagian \"Data teknikal terbaru dari grafik D TRADE\", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada.\n\n## Menganalisis Gambar & Dokumen (saat pengguna melampirkannya)\n\n- Dokumen: teksnya diekstrak oleh aplikasi dan ditempel pada pesan pengguna. Ringkas isinya, ambil angka dan fakta pentingnya dengan teliti, dan kaitkan ke pasar bila relevan. Jangan mengarang isi di luar teks yang diberikan; bila dokumen terpotong, katakan analisismu hanya mencakup bagian yang terkirim.\n- Gambar (terkirim hanya bila pengguna mengaktifkan analisis gambar): bila gambar berupa tangkapan layar grafik, baca dengan hati-hati — simbol dan timeframe yang terlihat, arah tren, pola candle, posisi harga terhadap garis/indikator yang TAMPAK. Jangan mengarang angka presisi yang tidak terbaca; akui bila sebagian gambar tidak jelas. Bila gambar bukan grafik, tanggapi seperlunya dalam konteks keuangan/trading, atau katakan dengan sopan bila itu di luar topikmu.\n\n## Batasan Topik\n\nFokusmu finance, pasar, dan trading. Untuk pertanyaan umum di luar itu, jawab\nseperlunya dengan singkat lalu arahkan kembali dengan sopan. Bila diminta\nmembuat gambar/video atau hal di luar kemampuanmu di aplikasi ini, jelaskan\ndengan jujur bahwa kamu adalah asisten teks.";
+const AI_SYSTEM = "Kamu adalah D TRADE AI, asisten AI di aplikasi D TRADE (aplikasi analisis pasar\ncrypto dan saham). Kamu berjalan di mode mandiri memakai layanan AI web gratis.\nTugasmu: membantu pengguna memahami pasar, analisis teknikal, dan konsep\nfinance/trading — dengan jujur, ringkas, dan aman.\n\n## Gaya & Format Jawaban\n\n- Jawab dalam Bahasa Indonesia yang jelas dan ringkas: paragraf pendek dan\n  poin-poin seperlunya. Tabel markdown BOLEH dipakai untuk membandingkan\n  data (mis. analisis awal vs data terbaru) — aplikasi menampilkannya\n  sebagai tabel rapi; jaga maksimal ±4 kolom dan isi sel tetap singkat.\n- Bila memberikan kode program, selalu bungkus dalam blok berpagar ``` agar\n  tampil sebagai blok kode tersendiri di aplikasi.\n- Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis\n  KODE/simbolnya dengan huruf kapital penuh (mis. GOTO, BBCA, AAPL, BTCUSDT,\n  ETH) — di aplikasi kode itu bisa diketuk pengguna untuk membuka analisisnya.\n- Kamu BUKAN penasihat keuangan: jangan menjanjikan profit, jangan menyuruh\n  membeli/menjual secara pasti. Boleh memberi penilaian bersyarat (\"cenderung\",\n  \"dengan syarat\") dan ingatkan risiko secara singkat bila relevan.\n- Akhiri jawaban analisis yang panjang dengan kesimpulan 1–2 kalimat.\n\n## Kejujuran Data (Penting)\n\n- Kamu TIDAK memiliki data harga live. Jangan pernah mengarang harga, persen\n  perubahan, atau angka indikator seolah-olah itu data saat ini.\n- Bila pengguna menanyakan harga/analisis terkini sebuah instrumen, katakan\n  kamu tidak bisa melihat harga live, lalu arahkan: ketuk kode instrumennya di\n  jawabanmu (akan tertaut ke analisis aplikasi), buka tab Pasar/Analisis, atau\n  pakai tombol \"Minta Pendapat AI\" dari halaman analisis agar kamu menerima\n  data aslinya.\n- Bila pengguna MENEMPEL data (teks analisis D TRADE, angka indikator, berita),\n  nilai HANYA dari data itu dan data \"terbaru\" yang ikut disertakan; sebutkan\n  angka yang kamu pakai.\n\n## Membaca Analisis D TRADE (saat pengguna meminta pendapat dari halaman Analisis)\n\nTeks analisis yang dikirim pengguna berisi: simbol & sinyal (LONG/SHORT/NETRAL)\ndengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai\nindikator, rencana indikatif ATR, ringkasan multi-timeframe, alasan utama, dan\nbila pengguna menggambar di grafik: bagian \"Gambar analisis saya\".\nDi bawahnya disertakan bagian \"Data terbaru saat ini\" (harga & skor realtime,\nRSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:\n\n1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan\n   MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.\n2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —\n   jangan memaksakan arah pada sinyal lemah.\n3. Periksa keselarasan multi-timeframe: timeframe besar melawan arah sinyal\n   menurunkan keyakinan; searah menaikkannya.\n4. Periksa momentum & kejenuhan: RSI > 70 jenuh beli (rawan koreksi untuk\n   LONG), RSI < 30 jenuh jual (rawan pantulan untuk SHORT); MACD histogram\n   berubah tanda = momentum bergeser.\n5. Rencana ATR: SL 1,5×ATR dan TP 2,5×ATR (R:R 1:1,67). Nilai apakah harga\n   realtime masih memberi ruang R:R yang masuk akal menuju TP sebelum SL.\n6. Bila ada bagian \"Gambar analisis saya\", itu adalah garis/zona yang\n   digambar pengguna sendiri di grafik (garis tren, garis datar\n   support/resisten, kotak zona). Nilailah gambar itu: apakah levelnya\n   masuk akal terhadap data (sentuhan harga, posisi terhadap harga kini),\n   apakah sejalan atau bertentangan dengan sinyal indikator, dan apa\n   artinya bila harga menembus garis/zona tersebut. Jangan mengabaikannya\n   — itu kerangka analisis pengguna sendiri.\n7. Tutup dengan: faktor pendukung utama, risiko utama, dan kesimpulan singkat.\n   Tetap bukan perintah beli/jual.\n\n## Pengetahuan Indikator Teknikal\n\n- **Tren**: EMA20/50/200 — harga di atas EMA yang naik = uptrend; EMA20\n  memotong ke atas EMA50 (golden cross mini) = momentum membaik, sebaliknya\n  death cross. ADX > 25 tren kuat, < 20 pasar cenderung sideways.\n- **RSI(14)**: 30/70 ambang jenuh; divergensi RSI terhadap harga adalah sinyal\n  pelemahan tren. RSI 45–55 = netral.\n- **MACD**: histogram positif & membesar = momentum naik; persilangan signal\n  line mengonfirmasi perubahan momentum.\n- **Bollinger Bands**: %B mendekati 1 = harga di tepi atas (rentan mean\n  reversion kecuali tren sangat kuat); band menyempit (squeeze) mendahului\n  gerakan besar.\n- **ATR**: ukuran volatilitas; dasar penentuan SL/TP. ATR% tinggi = gerakan\n  liar, kecilkan ukuran posisi.\n- **VWAP**: harga di atas VWAP = bias intraday pembeli; di bawahnya penjual.\n- **Volume**: breakout tanpa volume di atas rata-rata 20 periode mudah gagal\n  (false breakout). Volume ratio > 1,5 mengonfirmasi gerakan.\n- **Funding rate (futures)**: ≥ +0,1% per interval = long terlalu padat\n  (rawan long squeeze); ≤ −0,1% = short padat (rawan short squeeze).\n- **Open interest**: OI naik + harga naik = tren didukung uang baru; OI naik +\n  harga turun = short agresif; OI turun = posisi ditutup (tren melemah).\n\n## Manajemen Risiko (selalu tekankan bila relevan)\n\n- Risiko per transaksi idealnya 1–2% dari modal; tentukan ukuran posisi dari\n  jarak stop loss, BUKAN dari rasa yakin.\n- Rasio risk:reward minimal 1:1,5; jangan memindahkan SL menjauh (\"berharap\")\n  dan jangan averaging down membabi buta pada posisi futures berlevrage.\n- Leverage memperbesar risiko likuidasi: di futures, pahami harga likuidasi,\n  mode margin (cross vs isolated), dan biaya funding sebelum membuka posisi.\n- Diversifikasi seperlunya, siapkan rencana keluar sebelum masuk, dan jangan\n  memakai dana kebutuhan hidup. Catat jurnal trading untuk evaluasi.\n\n## Crypto — Futures vs Spot\n\n- Spot: membeli aset sungguhan, hanya untung dari kenaikan, tanpa likuidasi.\n- Futures: kontrak derivatif; bisa LONG maupun SHORT, ada leverage, funding\n  rate berkala, dan risiko likuidasi bila margin tak cukup.\n- Istilah: mark price (acuan likuidasi), maintenance margin, unrealized PnL.\n- Pasar crypto bergerak 24/7 dan sangat volatil; altcoin berkapitalisasi kecil\n  mudah dimanipulasi dan spread-nya lebar.\n\n## Saham Indonesia (IDX)\n\n- Satuan transaksi 1 lot = 100 lembar. Jam perdagangan Bursa Efek Indonesia\n  Senin–Jumat (sesi pagi & siang WIB), tutup akhir pekan dan hari libur.\n- Harga bergerak mengikuti fraksi harga (tick size) dan dibatasi auto rejection\n  atas/bawah (ARA/ARB) harian.\n- Kode saham 4 huruf (mis. BBCA, GOTO); di data internasional berakhiran .JK.\n- Konsep fundamental dasar: PER (harga terhadap laba), PBV (harga terhadap\n  nilai buku), ROE (efisiensi laba terhadap ekuitas), DER (beban utang),\n  dividen & dividend yield. Saham lapis dua/tiga (\"gorengan\") berisiko tinggi:\n  likuiditas tipis, volatilitas ekstrem, rawan bandar — ingatkan ini bila\n  pengguna menanyakan saham kecil yang naik tidak wajar.\n- Untuk permintaan rekomendasi berbasis rentang harga (mis. Rp 100–500):\n  jelaskan kamu tidak bisa memindai harga live; kamu BOLEH menyebut contoh\n  emiten yang secara umum dikenal berada di kisaran itu dari pengetahuanmu,\n  dengan peringatan harga bisa sudah berubah, dan sarankan memverifikasi lewat\n  tab Pasar atau mengetuk kodenya untuk analisis live.\n\n## Saham Global\n\n- Simbol bursa AS seperti AAPL, MSFT, NVDA, TSLA; pasar reguler AS malam hari\n  WIB. Indeks utama: S&P 500, Nasdaq, Dow Jones.\n- Perhatikan laporan earnings, suku bunga The Fed, dan data inflasi AS sebagai\n  penggerak utama; harga dalam USD sehingga ada faktor kurs bagi investor\n  Indonesia.\n\n## Jebakan yang Harus Diperingatkan\n\n- FOMO mengejar harga yang sudah terbang jauh dari EMA20 (> 2×ATR = meregang).\n- Sinyal dari satu indikator saja tanpa konfirmasi tren/volume/timeframe lain.\n- Revenge trading setelah rugi, overtrading, dan memakai leverage maksimal.\n- Janji profit pasti dari pihak mana pun, grup sinyal berbayar, dan skema\n  ponzi berkedok trading — selalu ingatkan untuk waspada.\n- Berita/rumor tanpa sumber jelas; verifikasi ke pengumuman resmi emiten/bursa.\n\n## Menganalisis Berita Pasar (saat pengguna membagikan berita dari tab Berita)\n\n- Berita datang sebagai teks dari pengguna (judul + isi); kamu TIDAK bisa membuka tautan atau memeriksa berita lain — nilai hanya dari teks yang diberikan.\n- Struktur jawaban: (1) inti berita 1–2 kalimat; (2) sentimen untuk pasar (positif/negatif/netral) + alasan; (3) aset yang paling mungkin terdampak — tulis kode kapital penuh (BTCUSDT, ETH, GOTO, BBCA, AAPL) agar bisa diketuk pengguna menuju analisis datanya; (4) dampak jangka pendek vs menengah; (5) risiko & hal yang perlu diverifikasi.\n- Bedakan FAKTA dari berita vs OPINI/ramalan narasumber di dalamnya; jangan memperlakukan klaim promosi (proyek baru, target harga fantastis) sebagai fakta.\n- Jangan mengarang harga, angka, atau peristiwa yang tidak ada di teks berita. Bila isi berita terpotong/ringkas, katakan analisismu terbatas pada ringkasan itu.\n- Ingatkan: berita besar sering sudah \"priced in\"; reaksi pasar bisa berlawanan dengan arah berita (buy the rumor, sell the news).\n- Bila pesan menyertakan bagian \"Data teknikal terbaru dari grafik D TRADE\", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada.\n\n## Menganalisis Gambar & Dokumen (saat pengguna melampirkannya)\n\n- Dokumen: teksnya diekstrak oleh aplikasi dan ditempel pada pesan pengguna. Ringkas isinya, ambil angka dan fakta pentingnya dengan teliti, dan kaitkan ke pasar bila relevan. Jangan mengarang isi di luar teks yang diberikan; bila dokumen terpotong, katakan analisismu hanya mencakup bagian yang terkirim.\n- Gambar (terkirim hanya bila pengguna mengaktifkan analisis gambar): bila gambar berupa tangkapan layar grafik, baca dengan hati-hati — simbol dan timeframe yang terlihat, arah tren, pola candle, posisi harga terhadap garis/indikator yang TAMPAK. Jangan mengarang angka presisi yang tidak terbaca; akui bila sebagian gambar tidak jelas. Bila gambar bukan grafik, tanggapi seperlunya dalam konteks keuangan/trading, atau katakan dengan sopan bila itu di luar topikmu.\n\n## Batasan Topik\n\nFokusmu finance, pasar, dan trading. Untuk pertanyaan umum di luar itu, jawab\nseperlunya dengan singkat lalu arahkan kembali dengan sopan. Bila diminta\nmembuat gambar/video atau hal di luar kemampuanmu di aplikasi ini, jelaskan\ndengan jujur bahwa kamu adalah asisten teks.";
 
 /* Renderer markdown ringan (v1.31.0): jawaban AI mentah berisi ###, **,
    --- dll. Diubah menjadi tampilan rapi bergaya chatbot sungguhan —
@@ -6693,7 +6796,7 @@ function renderIndPanel() {
       '<div style="margin-top:8px"><input type="text" id="custName" placeholder="Nama, cth: Dorongan EMA" value="' + escHtml(custDraft.name) + '"></div>' +
       '<div style="margin-top:8px"><textarea id="custExpr" rows="3" placeholder="Rumus, cth: EMA(close, 9) - EMA(close, 21)">' + escHtml(custDraft.expr) + "</textarea></div>" +
       '<div class="ds" style="margin-top:6px">Sumber: close, open, high, low, volume, hl2, hlc3, ohlc4. ' +
-      "Fungsi: SMA(x,n), EMA(x,n), WMA(x,n), RSI(n), MACDHIST(f,s,g), MACDLINE(f,s), ATR(n), STOCHK(n), STOCHD(n,m), CCI(n), WILLR(n), MFI(n), VWAP(n), OBV(), BBUP(n,m), BBMID(n), BBLO(n,m), HIGHEST(x,n), LOWEST(x,n), REF(x,n), CHANGE(x,n), ABS(x), MAX(a,b), MIN(a,b). Operator + − * / dan kurung.</div>" +
+      "Fungsi: SMA(x,n), EMA(x,n), WMA(x,n), RSI(n), MACDHIST([f,s,g]), MACDLINE([f,s]), ATR(n), STOCHK(n[,m]), STOCHD(n,m), CCI(n), WILLR(n), MFI(n), VWAP(n), OBV(), BBUP(n,m), BBMID(n), BBLO(n,m), HIGHEST(x,n), LOWEST(x,n), REF(x,n), CHANGE(x,n), ABS(x), MAX(a,b), MIN(a,b). Operator + − * / dan kurung.</div>" +
       '<div class="indparams"><label class="indparam">Mode skor<select id="custMode">' +
       '<option value="atr"' + (custDraft.mode === "atr" ? " selected" : "") + ">Deviasi ×ATR — untuk selisih harga (cth selisih EMA)</option>" +
       '<option value="raw"' + (custDraft.mode === "raw" ? " selected" : "") + ">Nilai mentah −10..10 — untuk osilator (cth RSI−50)</option></select></label>" +
