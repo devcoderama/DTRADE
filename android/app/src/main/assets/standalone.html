@@ -175,6 +175,8 @@
   /* Mode lanskap: overlay diputar 90° (kotak ditukar lebar/tingginya) */
   #chartFs.land{inset:auto;left:50%;top:50%;width:100vh;width:100dvh;height:100vw;height:100dvw;
     transform:translate(-50%,-50%) rotate(90deg)}
+  .zoomlbl{font-size:.68rem;font-weight:700;color:var(--gold);background:rgba(21,26,33,.88);
+    border:1px solid var(--line);border-radius:8px;padding:5px 6px;min-width:38px;text-align:center}
   .latestbtn{position:absolute;left:10px;bottom:10px;z-index:6;background:var(--gold);color:#0b0e11;
     border:none;border-radius:9px;padding:7px 12px;font-weight:800;font-size:.78rem;cursor:pointer;
     box-shadow:0 4px 14px rgba(0,0,0,.45)}
@@ -468,6 +470,9 @@
     <div class="chartbtns">
       <button class="cbtn" id="btnDraw" aria-label="Alat gambar" title="Gambar di grafik (seperti TradingView)"><i class="fa-solid fa-pen-ruler"></i></button>
       <button class="cbtn" id="btnFs" aria-label="Layar penuh" title="Perbesar grafik"><i class="fa-solid fa-expand"></i></button>
+      <button class="cbtn" id="btnZoomOut" aria-label="Zoom out grafik" title="Zoom out (candle lebih banyak)"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+      <span class="zoomlbl" id="zoomLbl">100%</span>
+      <button class="cbtn" id="btnZoomIn" aria-label="Zoom in grafik" title="Zoom in (candle lebih sedikit, lebih besar)"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
     </div>
     <button class="latestbtn hidden" id="btnLatest"><i class="fa-solid fa-angles-right"></i> Terbaru</button>
   </div>
@@ -513,7 +518,10 @@
       <div class="nm" id="fsSymbol">—</div>
       <div class="chg" id="fsSub">—</div>
     </div>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="iconbtn" id="btnZoomOutFs" aria-label="Zoom out grafik" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+      <span class="zoomlbl" id="zoomLblFs">100%</span>
+      <button class="iconbtn" id="btnZoomInFs" aria-label="Zoom in grafik" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
       <button class="iconbtn" id="btnFsRot" aria-label="Putar orientasi" title="Ganti potret / lanskap"><i class="fa-solid fa-rotate-right"></i></button>
       <button class="iconbtn" id="btnFsClose" aria-label="Tutup layar penuh"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -2315,7 +2323,7 @@ async function loadDetail(keepScroll, restartWs) {
      dua muatan berjalan bersamaan — hasil yang datang belakangan dari
      muatan lama tidak boleh menimpa tampilan muatan terbaru. */
   const mySeq = ++detailLoadSeq;
-  if (!keepScroll) chartOffset = 0;
+  if (!keepScroll) { chartOffset = 0; viewN = VIEW_N; }
   if (detailMarket === "stock") {
     const e = detailEntry;
     const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
@@ -2987,22 +2995,39 @@ function fmtWaktuCandle(ts, iv, spanMs) {
 }
 
 function paintChart(canvas, kl, H, emaSeg) {
-  const dpr = window.devicePixelRatio || 1;
+  /* Optimasi lukis (v1.31.18): DPR dibatasi 2 (GPU HP tidak terbebani
+     piksel tak terlihat), ukuran kanvas hanya diubah bila benar-benar
+     berubah (mengubah ukuran = realokasi + hapus total yang mahal),
+     transform dipasang absolut via setTransform (tidak menumpuk), dan
+     OHLCV di-parse SEKALI ke larik angka — sebelumnya parseFloat yang
+     sama diulang di banyak putaran pada setiap lukisan. */
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = canvas.clientWidth;
-  canvas.width = W * dpr; canvas.height = H * dpr;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  if (canvas.width !== pw || canvas.height !== ph) {
+    canvas.width = pw; canvas.height = ph;
+  }
   canvas.style.height = H + "px";
   const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  const closes = kl.map(k => parseFloat(k[4]));
+  const n = kl.length;
+  const os = new Array(n), hs = new Array(n), ls = new Array(n),
+        cs = new Array(n), vs = new Array(n);
+  let hi = -Infinity, lo = Infinity, maxV = 1;
+  for (let i = 0; i < n; i++) {
+    const k = kl[i];
+    os[i] = parseFloat(k[1]); hs[i] = parseFloat(k[2]);
+    ls[i] = parseFloat(k[3]); cs[i] = parseFloat(k[4]);
+    vs[i] = parseFloat(k[5]);
+    if (hs[i] > hi) hi = hs[i];
+    if (ls[i] < lo) lo = ls[i];
+    if (vs[i] > maxV) maxV = vs[i];
+  }
   /* EMA dari segmen riwayat penuh bila disediakan (v1.27.0) — garis
      tidak lagi mulai/terpotong di tengah jendela tampilan. */
-  const e20 = emaSeg ? emaSeg.e20 : emaSeries(closes, 20);
-  const e50 = emaSeg ? emaSeg.e50 : emaSeries(closes, 50);
-  const vols = kl.map(k => parseFloat(k[5]));
-  const maxV = Math.max.apply(null, vols) || 1;
-  let hi = -Infinity, lo = Infinity;
-  kl.forEach(k => { hi = Math.max(hi, parseFloat(k[2])); lo = Math.min(lo, parseFloat(k[3])); });
+  const e20 = emaSeg ? emaSeg.e20 : emaSeries(cs, 20);
+  const e50 = emaSeg ? emaSeg.e50 : emaSeries(cs, 50);
   if (tradePlan) {
     hi = Math.max(hi, tradePlan.entry, tradePlan.tp, tradePlan.sl);
     lo = Math.min(lo, tradePlan.entry, tradePlan.tp, tradePlan.sl);
@@ -3032,15 +3057,15 @@ function paintChart(canvas, kl, H, emaSeg) {
     ctx.fillText(fmtPrice(p), W - labelW + 5, ly + 3);
   }
   // Volume
-  kl.forEach((k, i) => {
-    const up = parseFloat(k[4]) >= parseFloat(k[1]);
+  for (let i = 0; i < n; i++) {
+    const up = cs[i] >= os[i];
     ctx.fillStyle = up ? "rgba(14,203,129,.45)" : "rgba(246,70,93,.45)";
-    const h = vols[i] / maxV * volH;
+    const h = vs[i] / maxV * volH;
     ctx.fillRect(i * cw + 0.5, volTop + volH - h, Math.max(cw - 1, 0.6), h);
-  });
+  }
   // Candle
-  kl.forEach((k, i) => {
-    const o = parseFloat(k[1]), h = parseFloat(k[2]), l = parseFloat(k[3]), c = parseFloat(k[4]);
+  for (let i = 0; i < n; i++) {
+    const o = os[i], h = hs[i], l = ls[i], c = cs[i];
     const up = c >= o, col = up ? "#0ecb81" : "#f6465d";
     const x = i * cw + cw / 2;
     ctx.strokeStyle = col; ctx.fillStyle = col;
@@ -3048,7 +3073,7 @@ function paintChart(canvas, kl, H, emaSeg) {
     const bw = Math.max(cw * 0.62, 0.8);
     const t = y(Math.max(o, c)), b = y(Math.min(o, c));
     ctx.fillRect(x - bw / 2, t, bw, Math.max(b - t, 1));
-  });
+  }
   // EMA
   function line(series, color) {
     ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.beginPath();
@@ -3063,7 +3088,7 @@ function paintChart(canvas, kl, H, emaSeg) {
   line(e20, "#f0b90b");
   line(e50, "#4f8ff7");
   // Harga terakhir: garis putus-putus + label harga di sumbu kanan
-  const last = closes[closes.length - 1];
+  const last = cs[n - 1];
   ctx.strokeStyle = "rgba(240,185,11,.55)";
   ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.moveTo(0, y(last)); ctx.lineTo(W - labelW, y(last)); ctx.stroke();
@@ -3153,25 +3178,45 @@ const DRAW_HINTS = {
 };
 
 let chartOffset = 0;   // berapa candle jendela digeser ke belakang
+let viewN = VIEW_N;    // jumlah candle tampil saat ini (zoom, v1.31.18)
 let viewKlines = [];   // irisan candle yang sedang tampil (geometri)
 let viewEmaSeg = null; // segmen EMA riwayat penuh untuk jendela ini
+/* Cache seri EMA riwayat penuh (v1.31.18): sebelumnya EMA20/50 dihitung
+   ulang dari 300 candle pada SETIAP lukisan — termasuk setiap frame
+   geser/zoom — padahal datanya tidak berubah selama interaksi itu.
+   Kini dihitung hanya bila tanda tangan data berubah (panjang + waktu
+   candle pertama/terakhir + harga tutup terakhir). */
+let emaCacheSig = "";
+let emaCacheFull = null;
+function emaFullFor(kl) {
+  const sig = kl.length + ":" +
+    (kl.length ? kl[0][0] + ":" + kl[kl.length - 1][0] + ":" + kl[kl.length - 1][4] : "");
+  if (emaCacheFull && sig === emaCacheSig) return emaCacheFull;
+  const closesAll = kl.map(k => parseFloat(k[4]));
+  emaCacheFull = { e20: emaSeries(closesAll, 20), e50: emaSeries(closesAll, 50) };
+  emaCacheSig = sig;
+  return emaCacheFull;
+}
 function drawChart(kl) {
-  const maxOff = Math.max(0, kl.length - VIEW_N);
+  const maxOff = Math.max(0, kl.length - viewN);
   if (chartOffset > maxOff) chartOffset = maxOff;
   if (chartOffset < 0) chartOffset = 0;
   const end = kl.length - chartOffset;
-  const start = Math.max(0, end - VIEW_N);
+  const start = Math.max(0, end - viewN);
   viewKlines = kl.slice(start, end);
   /* EMA dihitung dari SELURUH riwayat (300 candle) lalu dipotong
      mengikuti jendela — garis EMA20/50 utuh dari tepi ke tepi di
      posisi geser mana pun (v1.27.0). Hanya kanvas yang terlihat
      yang dilukis (hemat CPU saat layar penuh terbuka). */
-  const closesAll = kl.map(k => parseFloat(k[4]));
+  const full = emaFullFor(kl);
   const emaSeg = {
-    e20: emaSeries(closesAll, 20).slice(start, end),
-    e50: emaSeries(closesAll, 50).slice(start, end)
+    e20: full.e20.slice(start, end),
+    e50: full.e50.slice(start, end)
   };
   viewEmaSeg = emaSeg;
+  const zpct = Math.round(VIEW_N / viewN * 100) + "%";
+  if ($("zoomLbl")) $("zoomLbl").textContent = zpct;
+  if ($("zoomLblFs")) $("zoomLblFs").textContent = zpct;
   if (fsOpen) {
     const wrap = $("fsWrap");
     chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18), emaSeg);
@@ -3221,16 +3266,23 @@ function renderDrawings() {
 }
 function paintDrawLayer(ov, base, g) {
   if (!ov || !base || !g) return;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const W = base.clientWidth, H = base.clientHeight;
+  const pw = Math.round(W * dpr), ph = Math.round(H * dpr);
+  const hasContent = drawings.length > 0 || drawPending || drawPreview;
+  /* Lewati lukis ulang bila lapisan sudah kosong dan ukurannya sama —
+     menghemat realokasi kanvas pada setiap frame geser/zoom padahal
+     tidak ada coretan sama sekali (v1.31.18). */
+  if (!hasContent && ov.dataset.blank === "1" && ov.width === pw && ov.height === ph) return;
   ov.style.left = base.offsetLeft + "px";
   ov.style.top = base.offsetTop + "px";
   ov.style.width = W + "px";
   ov.style.height = H + "px";
-  ov.width = W * dpr; ov.height = H * dpr;
+  if (ov.width !== pw || ov.height !== ph) { ov.width = pw; ov.height = ph; }
   const ctx = ov.getContext("2d");
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  ov.dataset.blank = hasContent ? "" : "1";
   const all = drawings.slice();
   if (drawPending) {
     const p = Object.assign({}, drawPending);
@@ -3426,6 +3478,25 @@ function queuePanDraw() {
     if (detailKlines.length) drawChart(detailKlines);
   });
 }
+/* Zoom grafik (v1.31.18): viewN = jumlah candle tampil (10..300).
+   anchorFrac = posisi jangkar 0..1 di jendela (1 = tepi kanan/candle
+   terbaru, dipakai tombol & roda mouse; tengah cubitan untuk pinch). */
+const VIEW_MIN = 10, VIEW_MAX = 300;
+function setZoom(newN, anchorFrac) {
+  if (!detailKlines.length) return;
+  const kl = detailKlines;
+  const frac = anchorFrac == null ? 1 : anchorFrac;
+  newN = Math.max(VIEW_MIN, Math.min(Math.min(VIEW_MAX, kl.length), Math.round(newN)));
+  if (newN === viewN) return;
+  const end = kl.length - chartOffset;
+  const start = Math.max(0, end - viewN);
+  const anchorIdx = start + (viewN - 1) * frac;
+  viewN = newN;
+  let nStart = Math.round(anchorIdx - (viewN - 1) * frac);
+  nStart = Math.max(0, Math.min(Math.max(0, kl.length - viewN), nStart));
+  chartOffset = Math.max(0, kl.length - (nStart + viewN));
+  queuePanDraw();
+}
 function attachPanHandlers(cv, which) {
   let pan = null;
   const px = e => typeof e.offsetX === "number" ? e.offsetX
@@ -3443,7 +3514,7 @@ function attachPanHandlers(cv, which) {
        seret ke kanan untuk melihat candle-candle lama, seret ke
        kiri untuk kembali ke yang terbaru. */
     const d = Math.round((px(e) - pan.x) / g.cw);
-    const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), pan.off + d));
+    const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - viewN), pan.off + d));
     if (no !== chartOffset) { chartOffset = no; queuePanDraw(); }
   });
   const endPan = () => {
@@ -3452,13 +3523,48 @@ function attachPanHandlers(cv, which) {
   };
   cv.addEventListener("pointerup", endPan);
   cv.addEventListener("pointercancel", endPan);
+  /* Roda mouse kini zoom (perilaku standar aplikasi grafik);
+     geser tetap lewat seret. */
   cv.addEventListener("wheel", e => {
     if (drawMode || !detailKlines.length) return;
     e.preventDefault();
-    const step = e.deltaY > 0 ? 6 : -6;
-    const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), chartOffset + step));
-    if (no !== chartOffset) { chartOffset = no; queuePanDraw(); }
+    setZoom(viewN * (e.deltaY > 0 ? 1.2 : 1 / 1.2), 1);
   }, { passive: false });
+  /* Cubitan dua jari (pinch) untuk zoom — lewat kejadian sentuh
+     dengan preventDefault agar browser tidak mengambil alih gestur;
+     satu jari tetap ditangani pointer (geser/scroll utuh). */
+  let pinch = null;
+  cv.addEventListener("touchstart", e => {
+    if (drawMode || !detailKlines.length || e.touches.length !== 2) return;
+    const a = e.touches[0], b = e.touches[1];
+    const r = cv.getBoundingClientRect();
+    const g = which === "fs" ? chartGeom.fs : chartGeom.main;
+    const plotW = g ? (g.W - g.labelW) : r.width;
+    pinch = {
+      dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+      viewN: viewN,
+      frac: Math.max(0, Math.min(1,
+        ((a.clientX + b.clientX) / 2 - r.left) / Math.max(1, plotW)))
+    };
+    e.preventDefault();
+  }, { passive: false });
+  cv.addEventListener("touchmove", e => {
+    if (!pinch || e.touches.length !== 2) return;
+    const a = e.touches[0], b = e.touches[1];
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    if (pinch.dist > 0) setZoom(pinch.viewN * pinch.dist / dist, pinch.frac);
+    e.preventDefault();
+  }, { passive: false });
+  const endPinch = () => { pinch = null; };
+  cv.addEventListener("touchend", endPinch);
+  cv.addEventListener("touchcancel", endPinch);
+  /* Ketuk dua kali: kembalikan zoom & posisi ke bawaan. */
+  cv.addEventListener("dblclick", () => {
+    if (drawMode) return;
+    viewN = VIEW_N;
+    chartOffset = 0;
+    queuePanDraw();
+  });
 }
 attachPanHandlers($("chart"), "main");
 attachPanHandlers($("chartFsCv"), "fs");
@@ -3468,6 +3574,10 @@ function backToLatest() {
 }
 $("btnLatest").addEventListener("click", backToLatest);
 $("btnLatestFs").addEventListener("click", backToLatest);
+$("btnZoomIn").addEventListener("click", () => setZoom(viewN / 1.4, 1));
+$("btnZoomOut").addEventListener("click", () => setZoom(viewN * 1.4, 1));
+$("btnZoomInFs").addEventListener("click", () => setZoom(viewN / 1.4, 1));
+$("btnZoomOutFs").addEventListener("click", () => setZoom(viewN * 1.4, 1));
 
 function setDrawMode(on) {
   drawMode = on;
