@@ -910,7 +910,10 @@ class MainActivity : Activity() {
         private const val STANDALONE_HOST = "dtrade.local"
 
         /** Host API publik Binance yang boleh dihubungi jembatan mode mandiri. */
-        private val BINANCE_HOSTS = setOf("fapi.binance.com", "testnet.binancefuture.com")
+        private val BINANCE_HOSTS = setOf(
+            "fapi.binance.com", "testnet.binancefuture.com",
+            "api.binance.com", "testnet.binance.vision"
+        )
 
         /**
          * Host RSS berita crypto untuk tab Berita mode mandiri (v1.6.0) —

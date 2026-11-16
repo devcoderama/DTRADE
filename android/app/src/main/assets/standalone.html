@@ -144,6 +144,7 @@
   canvas{width:100%;display:block}
   /* Lapisan gambar di atas grafik (v1.25.0) — posisi diselaraskan JS */
   #drawCv, #drawFsCv{position:absolute;pointer-events:none;width:auto}
+  #chart, #chartFsCv{touch-action:pan-y}
   .chartbox.drawing #drawCv, #chartFs.drawing #drawFsCv{pointer-events:auto;touch-action:none;cursor:crosshair}
   .chartbtns{position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:5}
   .cbtn{background:rgba(21,26,33,.88);border:1px solid var(--line);color:var(--muted);
@@ -161,6 +162,12 @@
   .fshead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 0 8px}
   .fsChartWrap{position:relative;flex:1;min-height:0;background:var(--panel);
     border:1px solid var(--line);border-radius:12px;padding:10px 6px 6px}
+  /* Mode lanskap: overlay diputar 90° (kotak ditukar lebar/tingginya) */
+  #chartFs.land{inset:auto;left:50%;top:50%;width:100vh;width:100dvh;height:100vw;height:100dvw;
+    transform:translate(-50%,-50%) rotate(90deg)}
+  .latestbtn{position:absolute;left:10px;bottom:10px;z-index:6;background:var(--gold);color:#0b0e11;
+    border:none;border-radius:9px;padding:7px 12px;font-weight:800;font-size:.78rem;cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.45)}
   .verdict{margin:12px;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:13px 15px;display:flex;align-items:center;gap:14px}
   .verdict .big{font-size:1.5rem;font-weight:800}
@@ -244,6 +251,10 @@
     <button data-mkt="idx">Saham IDX</button>
     <button data-mkt="global">Saham Global</button>
   </div>
+  <div class="mktseg hidden" id="kindSeg" style="margin-top:8px">
+    <button data-kind="futures" class="on">Futures</button>
+    <button data-kind="spot">Spot</button>
+  </div>
   <div class="controls">
     <input id="q" type="search" placeholder="Cari… (cth: BTC, BBCA, AAPL)" autocomplete="off">
     <select id="sort">
@@ -295,12 +306,15 @@
       <button class="cbtn" id="btnDraw" aria-label="Alat gambar" title="Gambar di grafik (seperti TradingView)"><i class="fa-solid fa-pen-ruler"></i></button>
       <button class="cbtn" id="btnFs" aria-label="Layar penuh" title="Perbesar grafik"><i class="fa-solid fa-expand"></i></button>
     </div>
+    <button class="latestbtn hidden" id="btnLatest"><i class="fa-solid fa-angles-right"></i> Terbaru</button>
   </div>
   <div id="drawToolsHome"><div id="drawTools" class="hidden">
     <button data-tool="trend" class="dtool on"><i class="fa-solid fa-slash"></i> Tren</button>
     <button data-tool="hline" class="dtool"><i class="fa-solid fa-minus"></i> Datar</button>
     <button data-tool="rect" class="dtool"><i class="fa-regular fa-square"></i> Kotak</button>
     <button data-tool="free" class="dtool"><i class="fa-solid fa-pen"></i> Bebas</button>
+    <button data-tool="move" class="dtool"><i class="fa-solid fa-arrows-up-down-left-right"></i> Geser</button>
+    <button data-tool="erase" class="dtool"><i class="fa-solid fa-eraser"></i> Hapus</button>
     <button id="drawColorBtn" class="dtool"><span id="drawColorDot"></span> Warna</button>
     <button id="drawUndo" class="dtool" title="Urungkan gambar terakhir"><i class="fa-solid fa-rotate-left"></i></button>
     <button id="drawClear" class="dtool" title="Hapus semua gambar di simbol ini"><i class="fa-solid fa-trash"></i></button>
@@ -335,9 +349,14 @@
       <div class="nm" id="fsSymbol">—</div>
       <div class="chg" id="fsSub">—</div>
     </div>
-    <button class="iconbtn" id="btnFsClose" aria-label="Tutup layar penuh"><i class="fa-solid fa-xmark"></i></button>
+    <div style="display:flex;gap:6px">
+      <button class="iconbtn" id="btnFsRot" aria-label="Putar orientasi" title="Ganti potret / lanskap"><i class="fa-solid fa-rotate-right"></i></button>
+      <button class="iconbtn" id="btnFsClose" aria-label="Tutup layar penuh"><i class="fa-solid fa-xmark"></i></button>
+    </div>
   </div>
-  <div class="fsChartWrap" id="fsWrap"><canvas id="chartFsCv"></canvas><canvas id="drawFsCv"></canvas></div>
+  <div class="fsChartWrap" id="fsWrap"><canvas id="chartFsCv"></canvas><canvas id="drawFsCv"></canvas>
+    <button class="latestbtn hidden" id="btnLatestFs"><i class="fa-solid fa-angles-right"></i> Terbaru</button>
+  </div>
   <div id="drawToolsHomeFs"></div>
 </div>
 
@@ -430,7 +449,7 @@
   <div class="info" style="margin:0 14px 10px;text-align:center">Warung kang dyana · NMID ID1023268427326<br>
   <span style="color:var(--muted)">Ketuk gambar untuk memperbesar. Membayar dari HP yang sama?
   Screenshot gambar ini, lalu unggah lewat fitur scan di aplikasi bank/e-wallet kamu.</span></div>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.25.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.26.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -490,6 +509,46 @@ async function api(path) {
     text = await r.text();
   }
   return JSON.parse(text);
+}
+
+/* Binance Spot (v1.26.0): basis terpisah dari Futures — mainnet
+   api.binance.com, testnet testnet.binance.vision (keduanya masuk
+   daftar izin jembatan native). Bentuk data klines/ticker sama. */
+const SPOT_BASES = {
+  mainnet: "https://api.binance.com",
+  testnet: "https://testnet.binance.vision"
+};
+/* Pengait pengujian: ?apiSpot=http://host:port mengganti basis Spot. */
+if (params.get("apiSpot")) {
+  SPOT_BASES.mainnet = params.get("apiSpot");
+  SPOT_BASES.testnet = params.get("apiSpot");
+}
+async function apiSpot(path) {
+  const url = SPOT_BASES[network] + path;
+  let text;
+  if (window.AndroidBridge && window.AndroidBridge.fetch) {
+    text = await bridgeFetch(url);
+  } else {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    text = await r.text();
+  }
+  return JSON.parse(text);
+}
+/* Jenis pasar crypto aktif: "futures" | "spot" (pilihan tersimpan). */
+let cryptoKind = "futures";
+try { cryptoKind = localStorage.getItem("dtrade-crypto-kind") === "spot" ? "spot" : "futures"; }
+catch (e) { /* abaikan */ }
+let detailKind = "futures";
+function favMktCrypto() { return cryptoKind === "spot" ? "spot" : "crypto"; }
+function cryptoCacheKey() { return cryptoKind === "spot" ? "dtrade-cache-spot" : "dtrade-cache-crypto"; }
+function klinePath(kind, symbol, interval, limit) {
+  return (kind === "spot" ? "/api/v3/klines" : "/fapi/v1/klines") +
+    "?symbol=" + symbol + "&interval=" + interval + "&limit=" + limit;
+}
+function klineFetch(kind, symbol, interval, limit) {
+  const p = klinePath(kind, symbol, interval, limit);
+  return kind === "spot" ? apiSpot(p) : api(p);
 }
 
 /* ================= Indikator ================= */
@@ -850,6 +909,10 @@ const stockCacheTs = { idx: 0, global: 0 };
 /* ================= Daftar simbol ================= */
 const SIGNAL_LIMIT = 80;      // sinyal dihitung untuk 80 simbol tervolume dulu
 const KLINE_LIMIT = 100;
+/* Riwayat detail lebih dalam (300) agar grafik bisa digeser ke
+   candle-candle sebelumnya (v1.26.0); jendela tampil tetap 100. */
+const DETAIL_LIMIT = 300;
+const VIEW_N = 100;
 let symbols = [];             // {symbol, price, change, volume, scoreObj|null, loading}
 let tickerTimer = null, signalAbort = 0;
 
@@ -1074,7 +1137,7 @@ const STOCK_TFS = [
   { id: "30m", iv: "30m", range: "1mo", poll: 20000 },
   { id: "1h", iv: "60m", range: "3mo", poll: 30000 },
   { id: "4h", iv: "60m", range: "3mo", poll: 30000, agg: 4 },
-  { id: "1d", iv: "1d", range: "6mo", poll: 60000 },
+  { id: "1d", iv: "1d", range: "2y", poll: 60000 },
   { id: "1wk", iv: "1wk", range: "2y", poll: 300000 },
   { id: "1mo", iv: "1mo", range: "5y", poll: 300000 }
 ];
@@ -1407,6 +1470,7 @@ function renderActiveList() {
 $("mktSeg").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
     market = b.dataset.mkt;
+    $("kindSeg").classList.toggle("hidden", market !== "crypto");
     $("btnAddSym").classList.toggle("hidden", market === "crypto");
     $("mktSeg").querySelectorAll("button").forEach(x =>
       x.classList.toggle("on", x === b));
@@ -1421,6 +1485,27 @@ $("mktSeg").querySelectorAll("button").forEach(b =>
         " instrumen · sinyal 1d · data Yahoo Finance";
     }
   }));
+
+/* Pilihan Futures / Spot untuk pasar crypto (v1.26.0). Beralih jenis
+   mengganti seluruh semesta simbol (daftar, cache, dan skor memakai
+   sumber Binance yang sesuai); pilihan tersimpan antar-sesi. */
+function paintKindSeg() {
+  $("kindSeg").querySelectorAll("button").forEach(x =>
+    x.classList.toggle("on", x.dataset.kind === cryptoKind));
+  $("kindSeg").classList.toggle("hidden", market !== "crypto");
+}
+$("kindSeg").querySelectorAll("button").forEach(b =>
+  b.addEventListener("click", () => {
+    if (b.dataset.kind === cryptoKind) return;
+    cryptoKind = b.dataset.kind;
+    try { localStorage.setItem("dtrade-crypto-kind", cryptoKind); } catch (e) {}
+    signalAbort++;
+    symbols = [];
+    paintKindSeg();
+    renderList();
+    loadList();
+  }));
+paintKindSeg();
 
 /* ============ Modal tambah simbol kustom (v1.12.0) ============ */
 $("btnAddSym").addEventListener("click", () => {
@@ -1469,7 +1554,7 @@ async function loadList() {
   $("listErr").classList.add("hidden");
   if (!symbols.length) {
     /* Cache-first: tampilkan simpanan terakhir seketika (v1.16.0). */
-    const c = cacheLoad("dtrade-cache-crypto");
+    const c = cacheLoad(cryptoCacheKey());
     if (c) {
       cryptoCacheTs = c.ts;
       symbols = c.rows;
@@ -1483,13 +1568,16 @@ async function loadList() {
     $("status").textContent = "Memuat daftar simbol…";
   }
   try {
-    const [info, tickers] = await Promise.all([
-      api("/fapi/v1/exchangeInfo"),
-      api("/fapi/v1/ticker/24hr")
-    ]);
+    const spot = cryptoKind === "spot";
+    const [info, tickers] = await Promise.all(spot
+      ? [apiSpot("/api/v3/exchangeInfo"), apiSpot("/api/v3/ticker/24hr")]
+      : [api("/fapi/v1/exchangeInfo"), api("/fapi/v1/ticker/24hr")]);
     const tradable = new Set(
       info.symbols
-        .filter(s => s.contractType === "PERPETUAL" && s.quoteAsset === "USDT" && s.status === "TRADING")
+        .filter(s => spot
+          ? (s.quoteAsset === "USDT" && s.status === "TRADING" &&
+             (s.isSpotTradingAllowed || (s.permissions || []).includes("SPOT")))
+          : (s.contractType === "PERPETUAL" && s.quoteAsset === "USDT" && s.status === "TRADING"))
         .map(s => s.symbol)
     );
     const baseOf = {};
@@ -1498,6 +1586,7 @@ async function loadList() {
       .filter(t => tradable.has(t.symbol))
       .map(t => ({
         symbol: t.symbol,
+        kind: cryptoKind,
         base: baseOf[t.symbol] || t.symbol.replace(/USDT$/, ""),
         price: parseFloat(t.lastPrice),
         change: parseFloat(t.priceChangePercent),
@@ -1507,11 +1596,12 @@ async function loadList() {
       .sort((a, b) => b.volume - a.volume);
     renderList();
     cryptoCacheTs = Date.now();
-    cacheSave("dtrade-cache-crypto", symbols.map(s => ({
-      symbol: s.symbol, base: s.base, price: s.price, change: s.change,
+    cacheSave(cryptoCacheKey(), symbols.map(s => ({
+      symbol: s.symbol, kind: s.kind, base: s.base, price: s.price, change: s.change,
       volume: s.volume, scoreObj: s.scoreObj })));
     if (market === "crypto") {
-      $("status").textContent = symbols.length + " simbol USDT perpetual · data per " +
+      $("status").textContent = symbols.length + " simbol USDT " +
+        (cryptoKind === "spot" ? "spot" : "perpetual") + " · data per " +
         jamLabel(cryptoCacheTs) + " · menghitung sinyal " +
         Math.min(SIGNAL_LIMIT, symbols.length) + " teratas…";
     }
@@ -1549,7 +1639,7 @@ async function computeSignals(run) {
       const s = queue.shift();
       s.loading = true; paintRow(s);
       try {
-        const kl = await api("/fapi/v1/klines?symbol=" + s.symbol + "&interval=1h&limit=" + KLINE_LIMIT);
+        const kl = await klineFetch(cryptoKind, s.symbol, "1h", KLINE_LIMIT);
         s.scoreObj = scoreSymbol(
           kl.map(k => parseFloat(k[4])),
           kl.map(k => parseFloat(k[2])),
@@ -1567,15 +1657,15 @@ async function computeSignals(run) {
         }
         /* Simpan ulang cache kini dengan skor yang sudah terhitung. */
         cryptoCacheTs = Date.now();
-        cacheSave("dtrade-cache-crypto", symbols.map(s => ({
-          symbol: s.symbol, base: s.base, price: s.price, change: s.change,
+        cacheSave(cryptoCacheKey(), symbols.map(s => ({
+          symbol: s.symbol, kind: s.kind, base: s.base, price: s.price, change: s.change,
           volume: s.volume, scoreObj: s.scoreObj })));
         /* Digest perubahan favorit + snapshot sesi ini (v1.18.0). */
-        noteChanges("crypto", symbols.map(s => ({
+        noteChanges(favMktCrypto(), symbols.map(s => ({
           symbol: s.symbol, label: s.symbol.replace("USDT", ""), scoreObj: s.scoreObj })));
         const freshC = {};
         symbols.forEach(s => {
-          if (s.scoreObj) freshC["crypto:" + s.symbol] = { s: s.scoreObj.side, v: s.scoreObj.score };
+          if (s.scoreObj) freshC[favMktCrypto() + ":" + s.symbol] = { s: s.scoreObj.side, v: s.scoreObj.score };
         });
         snapshotSave(freshC);
         if ($("sort").value === "signal") renderList();
@@ -1628,16 +1718,19 @@ function chipHtml(s) {
 }
 function rowHtml(s) {
   return coinHtml(s, 34) +
-    '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small></div>' +
+    '<div class="nm">' + s.symbol.replace("USDT", "") + '<small>/USDT</small>' +
+    (s.kind === "spot"
+      ? ' <span style="color:var(--gold);font-size:.6rem;border:1px solid var(--line);border-radius:5px;padding:0 4px;vertical-align:2px">SPOT</span>'
+      : "") + '</div>' +
     '<div class="pr"><div class="p">' + fmtPrice(s.price) + '</div>' +
     '<div class="chg ' + (s.change >= 0 ? "up" : "dn") + '">' +
     (s.change >= 0 ? "+" : "") + s.change.toFixed(2) + '%</div></div>' + chipHtml(s) +
-    favStarHtml("crypto", s.symbol);
+    favStarHtml(favMktCrypto(), s.symbol);
 }
 function visibleSymbols() {
   const q = $("q").value.trim().toUpperCase();
   let arr = symbols.filter(s => !q || s.symbol.includes(q));
-  if (favOnly) arr = arr.filter(s => isFav("crypto", s.symbol));
+  if (favOnly) arr = arr.filter(s => isFav(favMktCrypto(), s.symbol));
   const mode = $("sort").value;
   if (mode === "signal") {
     arr = arr.slice().sort((a, b) =>
@@ -1655,7 +1748,7 @@ function renderList() {
     const d = document.createElement("div");
     d.className = "sym"; d.dataset.symbol = s.symbol;
     d.innerHTML = rowHtml(s);
-    d.addEventListener("click", () => openDetail(s.symbol, "crypto"));
+    d.addEventListener("click", () => openDetail(s.symbol, "crypto", s.kind));
     list.appendChild(d);
   });
   if (favOnly && vis.length === 0) list.innerHTML = FAV_EMPTY_HTML;
@@ -1669,7 +1762,9 @@ function scheduleTickerRefresh() {
   tickerTimer = setInterval(async () => {
     if (document.hidden || currentSymbol) return;
     try {
-      const tickers = await api("/fapi/v1/ticker/24hr");
+      const tickers = cryptoKind === "spot"
+        ? await apiSpot("/api/v3/ticker/24hr")
+        : await api("/fapi/v1/ticker/24hr");
       const by = {};
       tickers.forEach(t => { by[t.symbol] = t; });
       symbols.forEach(s => {
@@ -1707,10 +1802,14 @@ function paintFavStates() {
   });
   paintDetailFav();
 }
+function favMktDetail() {
+  return detailMarket === "stock" ? lastMarket :
+    (detailKind === "spot" ? "spot" : "crypto");
+}
 function paintDetailFav() {
   const b = $("btnFav");
   if (!b || !currentSymbol) return;
-  const on = isFav(lastMarket, currentSymbol);
+  const on = isFav(favMktDetail(), currentSymbol);
   b.innerHTML = '<i class="fa-' + (on ? "solid" : "regular") + ' fa-star"></i>';
   b.classList.toggle("on", on);
 }
@@ -1738,7 +1837,7 @@ $("list").addEventListener("click", ev2 => {
   toggleFav(st.dataset.fav.slice(0, i), st.dataset.fav.slice(i + 1));
 }, true);
 $("btnFav").addEventListener("click", () => {
-  if (currentSymbol) toggleFav(lastMarket, currentSymbol);
+  if (currentSymbol) toggleFav(favMktDetail(), currentSymbol);
 });
 const FAV_EMPTY_HTML = '<div class="favempty">Belum ada favorit di pasar ini.<br>' +
   "Ketuk ☆ pada baris daftar atau di halaman Analisis untuk menambahkan.</div>";
@@ -1829,7 +1928,15 @@ const WS_BASES = {
   mainnet: "wss://fstream.binance.com",
   testnet: "wss://stream.binancefuture.com"
 };
-function wsBase() { return params.get("ws") || WS_BASES[network]; }
+const WS_SPOT_BASES = {
+  mainnet: "wss://stream.binance.com:9443",
+  testnet: "wss://stream.testnet.binance.vision"
+};
+function wsBase() {
+  if (params.get("ws")) return params.get("ws");
+  return (detailMarket === "crypto" && detailKind === "spot")
+    ? WS_SPOT_BASES[network] : WS_BASES[network];
+}
 
 function setLive(on, label) {
   $("liveDot").classList.toggle("on", on);
@@ -1850,7 +1957,10 @@ function inMarket(mkt, symbol) {
   if (mkt === "crypto") return symbols.some(s => s.symbol === symbol);
   return (stockLists[mkt] || []).some(e => e.symbol === symbol);
 }
-async function openDetail(symbol, mkt) {
+async function openDetail(symbol, mkt, kind) {
+  if (mkt === "spot") { kind = "spot"; mkt = "crypto"; }
+  detailKind = kind ||
+    ((symbols.find(x => x.symbol === symbol) || {}).kind) || "futures";
   currentSymbol = symbol;
   lastSymbol = symbol;
   /* v1.20.0: pasar ditentukan dari SIMBOL-nya, bukan dari pasar
@@ -1980,6 +2090,7 @@ async function loadDetail(keepScroll, restartWs) {
      dua muatan berjalan bersamaan — hasil yang datang belakangan dari
      muatan lama tidak boleh menimpa tampilan muatan terbaru. */
   const mySeq = ++detailLoadSeq;
+  if (!keepScroll) chartOffset = 0;
   if (detailMarket === "stock") {
     const e = detailEntry;
     const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
@@ -2007,7 +2118,7 @@ async function loadDetail(keepScroll, restartWs) {
       if (stockInterval === "1d") e.candles = candles;
       if (meta && meta.regularMarketPrice != null) e.price = meta.regularMarketPrice;
       if (meta && meta.regularMarketChangePercent != null) e.change = meta.regularMarketChangePercent;
-      detailKlines = candles.slice(-KLINE_LIMIT);
+      detailKlines = candles.slice(-DETAIL_LIMIT);
       drawChart(detailKlines);
       renderAnalysis();
       renderRelatedNews();
@@ -2023,12 +2134,13 @@ async function loadDetail(keepScroll, restartWs) {
   $("dSymbol").textContent = currentSymbol;
   $("dCoin").innerHTML = coinHtml(
     symbols.find(x => x.symbol === currentSymbol) || { symbol: currentSymbol }, 38);
-  $("dSub").textContent = "Binance Futures · " + currentInterval + " · " + network;
+  $("dSub").textContent = "Binance " + (detailKind === "spot" ? "Spot" : "Futures") +
+    " · " + currentInterval + " · " + network;
   $("dFoot").textContent = "Skor = gabungan 12 komponen teknikal (EMA, MACD, ADX, Supertrend, RSI, Stochastic, Bollinger, momentum, VWAP, volume, pola candle, S/R). " +
-    "Sinyal teknikal murni — bukan saran keuangan. Data: Binance Futures (publik).";
+    "Sinyal teknikal murni — bukan saran keuangan. Data: Binance " +
+    (detailKind === "spot" ? "Spot" : "Futures") + " (publik).";
   try {
-    detailKlines = await api("/fapi/v1/klines?symbol=" + currentSymbol +
-      "&interval=" + currentInterval + "&limit=" + KLINE_LIMIT);
+    detailKlines = await klineFetch(detailKind, currentSymbol, currentInterval, DETAIL_LIMIT);
     if (mySeq !== detailLoadSeq) return;
     drawChart(detailKlines);
     renderAnalysis();
@@ -2107,8 +2219,7 @@ async function loadMtf() {
         if (tf === currentInterval && detailKlines.length >= 55) {
           data[tf] = scoreOf(detailKlines);
         } else {
-          const kl = await api("/fapi/v1/klines?symbol=" + sym +
-            "&interval=" + tf + "&limit=" + KLINE_LIMIT);
+          const kl = await klineFetch(detailKind, sym, tf, KLINE_LIMIT);
           data[tf] = scoreOf(kl);
         }
       }
@@ -2203,7 +2314,7 @@ function rrPath(ctx, x, y, w, h, r) {
    halaman Analisis (drawChart) pada ukuran besar — candle, EMA20/50,
    garis ENTRY/TP/SL, volume, label harga kanan, dan sumbu waktu. */
 function drawShareChart(ctx, x0, y0, w, h) {
-  const kl = detailKlines;
+  const kl = detailKlines.slice(-100);
   rrPath(ctx, x0, y0, w, h, 16);
   ctx.fillStyle = "#10141a"; ctx.fill();
   ctx.strokeStyle = "#2a3038"; ctx.stroke();
@@ -2613,7 +2724,13 @@ function onWsKline(k) {
     detailKlines[detailKlines.length - 1] = candle;
   } else if (k.t > (lastK ? lastK[0] : 0)) {
     detailKlines.push(candle);
-    if (detailKlines.length > KLINE_LIMIT) detailKlines.shift();
+    /* Jendela geser tetap menunjuk candle yang sama saat candle
+       baru tiba (v1.26.0). */
+    if (chartOffset > 0) chartOffset++;
+    while (detailKlines.length > DETAIL_LIMIT) {
+      detailKlines.shift();
+      if (chartOffset > 0) chartOffset--;
+    }
   } else {
     return;
   }
@@ -2798,15 +2915,26 @@ const DRAW_HINTS = {
   trend: "Garis tren: ketuk titik awal, lalu ketuk titik akhir pada grafik.",
   hline: "Garis datar: ketuk sekali pada level harga yang diinginkan.",
   rect: "Kotak zona: ketuk sudut pertama, lalu ketuk sudut berlawanan.",
-  free: "Gambar bebas: sentuh dan geser jari di atas grafik."
+  free: "Gambar bebas: sentuh dan geser jari di atas grafik.",
+  move: "Geser: sentuh gambar lalu seret untuk memindahkannya; seret titik ujung garis/kotak untuk mengubah bentuknya.",
+  erase: "Hapus: ketuk gambar yang ingin dihapus (satu saja)."
 };
 
+let chartOffset = 0;   // berapa candle jendela digeser ke belakang
+let viewKlines = [];   // irisan candle yang sedang tampil (geometri)
 function drawChart(kl) {
-  chartGeom.main = paintChart($("chart"), kl, 348);
+  const maxOff = Math.max(0, kl.length - VIEW_N);
+  if (chartOffset > maxOff) chartOffset = maxOff;
+  if (chartOffset < 0) chartOffset = 0;
+  const end = kl.length - chartOffset;
+  viewKlines = kl.slice(Math.max(0, end - VIEW_N), end);
+  chartGeom.main = paintChart($("chart"), viewKlines, 348);
   if (fsOpen) {
     const wrap = $("fsWrap");
-    chartGeom.fs = paintChart($("chartFsCv"), kl, Math.max(240, wrap.clientHeight - 18));
+    chartGeom.fs = paintChart($("chartFsCv"), viewKlines, Math.max(240, wrap.clientHeight - 18));
   }
+  $("btnLatest").classList.toggle("hidden", chartOffset === 0);
+  $("btnLatestFs").classList.toggle("hidden", chartOffset === 0);
   const k = currentSymbol ? drawKey() : "";
   if (k !== drawKeyCur) { drawKeyCur = k; loadDrawings(); }
   renderDrawings();
@@ -2826,14 +2954,14 @@ function saveDrawings() {
   try { localStorage.setItem(drawKeyCur, JSON.stringify(drawings)); } catch (e) {}
 }
 function xForT(g, t) {
-  const kl = detailKlines;
+  const kl = viewKlines.length ? viewKlines : detailKlines;
   if (!kl.length) return 0;
   const t0 = +kl[0][0], t1 = +kl[kl.length - 1][0];
   const fi = kl.length === 1 || t1 === t0 ? 0 : (t - t0) / ((t1 - t0) / (kl.length - 1));
   return fi * g.cw + g.cw / 2;
 }
 function tForX(g, x) {
-  const kl = detailKlines;
+  const kl = viewKlines.length ? viewKlines : detailKlines;
   if (!kl.length) return 0;
   const t0 = +kl[0][0], t1 = +kl[kl.length - 1][0];
   const step = kl.length > 1 ? (t1 - t0) / (kl.length - 1) : 0;
@@ -2904,8 +3032,52 @@ function paintDrawLayer(ov, base, g) {
     }
   }
 }
+/* Uji ketuk untuk alat Geser/Hapus (v1.26.0): jarak piksel dari
+   titik ketuk ke gambar terdekat; titik ujung garis/kotak bisa
+   diseret sendiri untuk mengubah bentuk. */
+function segDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - x1) * dx + (py - y1) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+function hitDrawing(g, x, y) {
+  let best = null;
+  drawings.forEach((d, idx) => {
+    const ps = d.pts.map(pt => ({ x: xForT(g, pt.t), y: g.y(pt.p) }));
+    let cand = null;
+    if (d.type === "hline") {
+      cand = { idx, ptIdx: 0, dist: Math.abs(y - ps[0].y) };
+    } else if (d.type === "trend" || d.type === "rect") {
+      let ep = null, epd = Infinity;
+      ps.forEach((p, i) => {
+        const dd = Math.hypot(x - p.x, y - p.y);
+        if (dd < epd) { epd = dd; ep = i; }
+      });
+      if (epd <= 13) cand = { idx, ptIdx: ep, dist: epd };
+      else if (d.type === "trend") {
+        cand = { idx, ptIdx: null, dist: segDist(x, y, ps[0].x, ps[0].y, ps[1].x, ps[1].y) };
+      } else {
+        const inX = x >= Math.min(ps[0].x, ps[1].x) - 4 && x <= Math.max(ps[0].x, ps[1].x) + 4;
+        const inY = y >= Math.min(ps[0].y, ps[1].y) - 4 && y <= Math.max(ps[0].y, ps[1].y) + 4;
+        cand = { idx, ptIdx: null, dist: inX && inY ? 8 : Infinity };
+      }
+    } else if (d.type === "free") {
+      let md = Infinity;
+      for (let i = 1; i < ps.length; i++) {
+        md = Math.min(md, segDist(x, y, ps[i - 1].x, ps[i - 1].y, ps[i].x, ps[i].y));
+      }
+      cand = { idx, ptIdx: null, dist: md };
+    }
+    if (cand && cand.dist <= 14 && (!best || cand.dist < best.dist)) best = cand;
+  });
+  return best;
+}
+let drawDrag = null;
 function attachDrawHandlers(ov, which) {
   const pos = e => {
+    if (typeof e.offsetX === "number") return { x: e.offsetX, y: e.offsetY };
     const r = ov.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
@@ -2917,6 +3089,16 @@ function attachDrawHandlers(ov, which) {
     try { ov.setPointerCapture(e.pointerId); } catch (err) {}
     const p0 = pos(e);
     const tp = { t: tForX(g, p0.x), p: priceForY(g, p0.y) };
+    if (drawTool === "erase") {
+      const hit = hitDrawing(g, p0.x, p0.y);
+      if (hit) { drawings.splice(hit.idx, 1); saveDrawings(); renderDrawings(); }
+      return;
+    }
+    if (drawTool === "move") {
+      const hit = hitDrawing(g, p0.x, p0.y);
+      if (hit) drawDrag = { idx: hit.idx, ptIdx: hit.ptIdx, last: tp };
+      return;
+    }
     if (drawTool === "hline") {
       drawings.push({ type: "hline", pts: [tp], color: drawColor });
       saveDrawings();
@@ -2934,11 +3116,26 @@ function attachDrawHandlers(ov, which) {
     renderDrawings();
   });
   ov.addEventListener("pointermove", e => {
-    if (!drawMode || !drawPending) return;
+    if (!drawMode) return;
     const g = which === "fs" ? chartGeom.fs : chartGeom.main;
     if (!g) return;
     const p0 = pos(e);
     const tp = { t: tForX(g, p0.x), p: priceForY(g, p0.y) };
+    if (drawDrag) {
+      const d = drawings[drawDrag.idx];
+      if (d) {
+        if (drawDrag.ptIdx !== null && drawDrag.ptIdx !== undefined) {
+          d.pts[drawDrag.ptIdx] = tp;
+        } else {
+          const dt = tp.t - drawDrag.last.t, dp = tp.p - drawDrag.last.p;
+          d.pts = d.pts.map(pt => ({ t: pt.t + dt, p: pt.p + dp }));
+        }
+        drawDrag.last = tp;
+      }
+      renderDrawings();
+      return;
+    }
+    if (!drawPending) return;
     if (drawPending.type === "free") {
       const lastPt = drawPending.pts[drawPending.pts.length - 1];
       if (Math.abs(xForT(g, tp.t) - xForT(g, lastPt.t)) + Math.abs(g.y(tp.p) - g.y(lastPt.p)) > 4) {
@@ -2950,6 +3147,11 @@ function attachDrawHandlers(ov, which) {
     renderDrawings();
   });
   const finish = () => {
+    if (drawDrag) {
+      drawDrag = null;
+      saveDrawings();
+      renderDrawings();
+    }
     if (drawPending && drawPending.type === "free") {
       if (drawPending.pts.length >= 2) drawings.push(drawPending);
       drawPending = null;
@@ -2962,6 +3164,47 @@ function attachDrawHandlers(ov, which) {
 }
 attachDrawHandlers($("drawCv"), "main");
 attachDrawHandlers($("drawFsCv"), "fs");
+
+/* Geser grafik kiri/kanan (v1.26.0): seret horizontal pada grafik
+   menggeser jendela 100 candle ke riwayat sebelumnya (detail memuat
+   300 candle). Mode gambar menonaktifkannya. Tombol "Terbaru"
+   muncul selama jendela tergeser. */
+function attachPanHandlers(cv, which) {
+  let pan = null;
+  const px = e => typeof e.offsetX === "number" ? e.offsetX
+    : e.clientX - cv.getBoundingClientRect().left;
+  cv.addEventListener("pointerdown", e => {
+    if (drawMode || !detailKlines.length) return;
+    pan = { x: px(e), off: chartOffset };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!pan) return;
+    const g = which === "fs" ? chartGeom.fs : chartGeom.main;
+    if (!g || !g.cw) return;
+    const d = Math.round((pan.x - px(e)) / g.cw);
+    const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), pan.off + d));
+    if (no !== chartOffset) { chartOffset = no; drawChart(detailKlines); }
+  });
+  const endPan = () => { pan = null; };
+  cv.addEventListener("pointerup", endPan);
+  cv.addEventListener("pointercancel", endPan);
+  cv.addEventListener("wheel", e => {
+    if (drawMode || !detailKlines.length) return;
+    e.preventDefault();
+    const step = e.deltaY > 0 ? 6 : -6;
+    const no = Math.max(0, Math.min(Math.max(0, detailKlines.length - VIEW_N), chartOffset + step));
+    if (no !== chartOffset) { chartOffset = no; drawChart(detailKlines); }
+  }, { passive: false });
+}
+attachPanHandlers($("chart"), "main");
+attachPanHandlers($("chartFsCv"), "fs");
+function backToLatest() {
+  chartOffset = 0;
+  if (detailKlines.length) drawChart(detailKlines);
+}
+$("btnLatest").addEventListener("click", backToLatest);
+$("btnLatestFs").addEventListener("click", backToLatest);
 
 function setDrawMode(on) {
   drawMode = on;
@@ -2997,10 +3240,20 @@ $("drawClear").addEventListener("click", () => {
   drawings = []; drawPending = null; drawPreview = null;
   saveDrawings(); renderDrawings();
 });
+/* Orientasi layar penuh (v1.26.0): potret atau lanskap (dirotasi
+   CSS), pilihan tersimpan dan bisa diganti kapan pun dari kepala
+   layar penuh. */
+let fsOrient = "portrait";
+try { fsOrient = localStorage.getItem("dtrade-fs-orient") === "landscape" ? "landscape" : "portrait"; }
+catch (e) { /* abaikan */ }
+function applyFsOrient() {
+  $("chartFs").classList.toggle("land", fsOrient === "landscape");
+}
 function setFs(open) {
   fsOpen = open;
   $("chartFs").classList.toggle("hidden", !open);
   if (open) {
+    applyFsOrient();
     $("fsSymbol").textContent = $("dSymbol").textContent;
     $("fsSub").textContent = $("dSub").textContent + " · " +
       (detailMarket === "stock" ? stockInterval : currentInterval);
@@ -3012,6 +3265,12 @@ function setFs(open) {
 }
 $("btnFs").addEventListener("click", () => setFs(true));
 $("btnFsClose").addEventListener("click", () => setFs(false));
+$("btnFsRot").addEventListener("click", () => {
+  fsOrient = fsOrient === "landscape" ? "portrait" : "landscape";
+  try { localStorage.setItem("dtrade-fs-orient", fsOrient); } catch (e) {}
+  applyFsOrient();
+  requestAnimationFrame(() => { if (detailKlines.length) drawChart(detailKlines); });
+});
 
 /* ================= Peristiwa ================= */
 $("btnRefresh").addEventListener("click", () => {
@@ -3400,6 +3659,7 @@ function renderPicker() {
     return;
   }
   symbols
+    .filter(s => (s.kind || "futures") === detailKind)
     .filter(s => !q || s.symbol.includes(q))
     .slice(0, 200)
     .forEach(s => {
@@ -3409,7 +3669,7 @@ function renderPicker() {
       d.innerHTML = rowHtml(s);
       d.addEventListener("click", () => {
         closePicker();
-        if (s.symbol !== currentSymbol) openDetail(s.symbol, "crypto");
+        if (s.symbol !== currentSymbol) openDetail(s.symbol, "crypto", s.kind);
       });
       wrap.appendChild(d);
     });
