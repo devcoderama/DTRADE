@@ -60,6 +60,9 @@ class MainActivity : Activity() {
     /** v1.31.11: id callback jembatan yang menunggu hasil pengenalan suara. */
     private var voiceCallbackId: Int? = null
 
+    /** v1.31.15: id callback jembatan yang menunggu hasil pemilih berkas. */
+    private var pickCallbackId: Int? = null
+
     /** v1.31.11: mesin text-to-speech bawaan Android (dibuat saat pertama dipakai). */
     private var tts: android.speech.tts.TextToSpeech? = null
     private var ttsReady = false
@@ -230,7 +233,8 @@ class MainActivity : Activity() {
                 val url = request?.url ?: return null
                 val path = url.path ?: return null
                 if (url.host != STANDALONE_HOST ||
-                    !(path.startsWith("/fa/") || path.startsWith("/img/")) ||
+                    !(path.startsWith("/fa/") || path.startsWith("/img/") ||
+                        path.startsWith("/pdfjs/")) ||
                     path.contains("..")
                 ) {
                     return null
@@ -238,6 +242,7 @@ class MainActivity : Activity() {
                 return try {
                     val assetPath = path.removePrefix("/")
                     val mime = when {
+                        assetPath.endsWith(".js") -> "text/javascript"
                         assetPath.endsWith(".css") -> "text/css"
                         assetPath.endsWith(".woff2") -> "font/woff2"
                         assetPath.endsWith(".jpg") || assetPath.endsWith(".jpeg") -> "image/jpeg"
@@ -726,6 +731,107 @@ class MainActivity : Activity() {
                 resolveVoice(cb, text)
             }
         }
+        if (requestCode == REQ_PICK_FILE) {
+            val cb = pickCallbackId
+            pickCallbackId = null
+            if (cb != null) {
+                val uri = if (resultCode == RESULT_OK) data?.data else null
+                if (uri == null) {
+                    resolveBridgeText(cb, "")
+                } else {
+                    Thread { processPickedFile(cb, uri) }.start()
+                }
+            }
+        }
+    }
+
+    private fun resolveBridgeText(callbackId: Int, bodyText: String) {
+        val payload = JSONObject()
+            .put("id", callbackId)
+            .put("body", bodyText)
+            .put("error", JSONObject.NULL)
+        webView.post {
+            webView.evaluateJavascript("window.__apiResolve($payload)", null)
+        }
+    }
+
+    /**
+     * v1.31.15: olah berkas pilihan pengguna menjadi JSON lampiran —
+     * gambar dikompresi JPEG (maks 1280px, dekode dua tahap agar hemat
+     * memori), PDF diteruskan base64 (teksnya diekstrak pdf.js di
+     * halaman), dokumen lain dibaca sebagai teks UTF-8.
+     */
+    private fun processPickedFile(callbackId: Int, uri: android.net.Uri) {
+        var json = ""
+        try {
+            val cr = contentResolver
+            val mime = cr.getType(uri) ?: ""
+            var name = "berkas"
+            cr.query(uri, null, null, null, null)?.use { cur ->
+                val ni = cur.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (ni >= 0 && cur.moveToFirst()) name = cur.getString(ni) ?: name
+            }
+            val lower = name.lowercase()
+            when {
+                mime.startsWith("image/") -> {
+                    val bounds = android.graphics.BitmapFactory.Options()
+                    bounds.inJustDecodeBounds = true
+                    cr.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, bounds)
+                    }
+                    var sample = 1
+                    val big = Math.max(bounds.outWidth, bounds.outHeight)
+                    while (big / sample > 2560) sample *= 2
+                    val opts = android.graphics.BitmapFactory.Options()
+                    opts.inSampleSize = sample
+                    val bmp = cr.openInputStream(uri)?.use {
+                        android.graphics.BitmapFactory.decodeStream(it, null, opts)
+                    }
+                    if (bmp != null) {
+                        val scale = Math.min(1.0, 1280.0 / Math.max(bmp.width, bmp.height))
+                        val w = Math.max(1, (bmp.width * scale).toInt())
+                        val h = Math.max(1, (bmp.height * scale).toInt())
+                        val scaled = if (scale < 1.0) {
+                            android.graphics.Bitmap.createScaledBitmap(bmp, w, h, true)
+                        } else bmp
+                        val baos = java.io.ByteArrayOutputStream()
+                        scaled.compress(
+                            android.graphics.Bitmap.CompressFormat.JPEG, 82, baos)
+                        val b64 = android.util.Base64.encodeToString(
+                            baos.toByteArray(), android.util.Base64.NO_WRAP)
+                        json = JSONObject().put("kind", "image").put("name", name)
+                            .put("dataUrl", "data:image/jpeg;base64,$b64").toString()
+                    }
+                }
+                mime == "application/pdf" || lower.endsWith(".pdf") -> {
+                    val bytes = cr.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes != null && bytes.size <= 4_500_000) {
+                        val b64 = android.util.Base64.encodeToString(
+                            bytes, android.util.Base64.NO_WRAP)
+                        json = JSONObject().put("kind", "pdf").put("name", name)
+                            .put("dataUrl", "data:application/pdf;base64,$b64").toString()
+                    } else if (bytes != null) {
+                        webView.post {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "PDF terlalu besar (maks ±4,5 MB).",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+                else -> {
+                    val text = cr.openInputStream(uri)?.use {
+                        it.bufferedReader(Charsets.UTF_8).readText()
+                    }
+                    if (text != null) {
+                        json = JSONObject().put("kind", "text").put("name", name)
+                            .put("text", text.take(200_000)).toString()
+                    }
+                }
+            }
+        } catch (e: Exception) { /* json kosong = gagal/batal */ }
+        resolveBridgeText(callbackId, json)
     }
 
     private fun resolveVoice(callbackId: Int, text: String) {
@@ -1226,6 +1332,120 @@ class MainActivity : Activity() {
             webView.post { try { tts?.stop() } catch (e: Exception) { /* abaikan */ } }
         }
 
+        /**
+         * Pemilih berkas lampiran Chat AI (v1.31.15): gambar, PDF, atau
+         * dokumen teks. Hasil olahan processPickedFile diteruskan lewat
+         * __apiResolve sebagai JSON; batal/gagal → body kosong.
+         */
+        @JavascriptInterface
+        fun pickFile(callbackId: Int) {
+            webView.post {
+                try {
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                            "image/*", "application/pdf", "text/*",
+                            "application/json", "text/csv"))
+                    }
+                    pickCallbackId = callbackId
+                    startActivityForResult(intent, REQ_PICK_FILE)
+                } catch (e: Exception) {
+                    resolveBridgeText(callbackId, "")
+                }
+            }
+        }
+
+        /**
+         * Chat AI dengan GAMBAR (v1.31.15): POST ke API Pollinations
+         * generasi baru (gen.pollinations.ai) yang menyediakan model
+         * vision. Berbeda dari aiChat klasik (tanpa kunci), endpoint ini
+         * mewajibkan kunci API milik pengguna sendiri — model gratis
+         * tanpa kunci kini hanya teks (terverifikasi dari daftar model
+         * resmi mereka). Kunci hanya dipakai sebagai header Authorization
+         * untuk permintaan ini; tidak disimpan di sisi native.
+         */
+        @JavascriptInterface
+        fun aiChatVision(callbackId: Int, apiKey: String, payloadJson: String) {
+            Thread {
+                var body = ""
+                var error: String? = null
+                var attempt = 0
+                while (true) {
+                    try {
+                        if (apiKey.isBlank()) {
+                            error = "Analisis gambar butuh kunci API Pollinations — " +
+                                "isi dulu di tab Lainnya (gratis dari enter.pollinations.ai)."
+                            break
+                        }
+                        if (payloadJson.length > 3_500_000) {
+                            error = "Gambar terlalu besar."
+                            break
+                        }
+                        val conn = URL("https://gen.pollinations.ai/v1/chat/completions")
+                            .openConnection() as HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.connectTimeout = 15000
+                        conn.readTimeout = 120000
+                        conn.doOutput = true
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.setRequestProperty("Authorization", "Bearer $apiKey")
+                        conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
+                        conn.outputStream.use {
+                            it.write(payloadJson.toByteArray(Charsets.UTF_8))
+                        }
+                        val code = conn.responseCode
+                        val stream =
+                            if (code in 200..299) conn.inputStream else conn.errorStream
+                        val raw = stream?.bufferedReader()?.readText() ?: ""
+                        if (code in 200..299) {
+                            body = try {
+                                JSONObject(raw).getJSONArray("choices").getJSONObject(0)
+                                    .getJSONObject("message").getString("content")
+                            } catch (e: Exception) { "" }
+                            if (body.isBlank()) {
+                                error = "AI tidak mengembalikan jawaban."
+                            }
+                        } else {
+                            error = when (code) {
+                                401, 403 ->
+                                    "Kunci API Pollinations ditolak — periksa lagi kuncimu di tab Lainnya."
+                                402 ->
+                                    "Kuota/kredit Pollinations untuk kunci ini habis."
+                                429 ->
+                                    "Layanan vision sedang ramai — tunggu sebentar, lalu coba lagi."
+                                in 500..599 ->
+                                    "Server AI vision sedang bermasalah — coba lagi sebentar lagi."
+                                else -> "AI vision menolak permintaan (HTTP $code)."
+                            }
+                        }
+                        break
+                    } catch (e: java.net.SocketTimeoutException) {
+                        if (attempt++ == 0) {
+                            Thread.sleep(2500)
+                            continue
+                        }
+                        error = "Koneksi ke AI vision timeout — jaringan lambat, coba lagi."
+                        break
+                    } catch (e: Exception) {
+                        if (attempt++ == 0) {
+                            Thread.sleep(2500)
+                            continue
+                        }
+                        error = "Koneksi ke AI vision terputus — periksa internet, lalu coba lagi."
+                        break
+                    }
+                }
+                val payload = JSONObject()
+                    .put("id", callbackId)
+                    .put("body", body)
+                    .put("error", error ?: JSONObject.NULL)
+                webView.post {
+                    webView.evaluateJavascript("window.__apiResolve($payload)", null)
+                }
+            }.start()
+        }
+
         /** Salin teks ke clipboard (tombol Salin pada pesan chat AI). */
         @JavascriptInterface
         fun copyText(text: String) {
@@ -1293,6 +1513,9 @@ class MainActivity : Activity() {
 
         /** v1.31.11: kode permintaan aktivitas pengenalan suara. */
         private const val REQ_VOICE_INPUT = 9401
+
+        /** v1.31.15: kode permintaan aktivitas pemilih berkas lampiran. */
+        private const val REQ_PICK_FILE = 9402
 
         /**
          * SHA-256 sertifikat penanda tangan rilis resmi D TRADE —

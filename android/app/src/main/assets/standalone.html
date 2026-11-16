@@ -353,6 +353,20 @@
     background:var(--gold);color:#0b0e11;font-size:1rem}
   /* Tombol mikrofon (v1.31.11): gaya hantu agar tombol kirim tetap menonjol */
   .chatbar button#chatMic{background:var(--panel);border:1px solid var(--line);color:var(--gold)}
+  .chatbar button#chatAttach{background:var(--panel);border:1px solid var(--line);color:var(--gold)}
+  /* Bilah lampiran Chat AI (v1.31.15) */
+  .attbar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel)}
+  .att-thumb{width:38px;height:38px;object-fit:cover;border-radius:8px;flex:none}
+  .att-ic{flex:none;width:38px;height:38px;border-radius:8px;background:rgba(240,185,11,.12);
+    color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:1rem}
+  .att-main{flex:1;min-width:0}
+  .att-name{font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att-meta{font-size:.7rem;color:var(--muted);margin-top:1px}
+  .attbar button{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);cursor:pointer}
+  .cbub-att{margin-bottom:6px;font-size:.8rem;font-weight:600}
+  .cbub-att i{margin-right:5px}
+  .cbub-img{display:block;max-width:100%;border-radius:8px}
   .chat-sess-bar button.off{color:var(--muted)}
   .chatbar button:disabled{opacity:.45;cursor:default}
   .aibtn{display:block;width:calc(100% - 28px);margin:10px 14px 0;padding:12px;border-radius:12px;
@@ -568,8 +582,18 @@
     <span><i class="fa-solid fa-pen"></i> Mengedit pesan…</span>
     <button id="editCancel">✕ Batal</button>
   </div>
+  <div id="attBar" class="attbar hidden">
+    <img id="attThumb" class="att-thumb hidden" alt="Pratinjau lampiran">
+    <span id="attIcon" class="att-ic"><i class="fa-solid fa-file-lines"></i></span>
+    <div class="att-main">
+      <div id="attName" class="att-name">—</div>
+      <div id="attMeta" class="att-meta">—</div>
+    </div>
+    <button id="attRemove" aria-label="Hapus lampiran"><i class="fa-solid fa-xmark"></i></button>
+  </div>
   <div class="chatbar">
     <input id="chatInput" type="text" placeholder="Tulis pesan untuk AI…" autocomplete="off">
+    <button id="chatAttach" aria-label="Lampirkan gambar atau dokumen"><i class="fa-solid fa-paperclip"></i></button>
     <button id="chatMic" aria-label="Kirim pesan dengan suara"><i class="fa-solid fa-microphone"></i></button>
     <button id="chatSend" aria-label="Kirim pesan"><i class="fa-solid fa-paper-plane"></i></button>
   </div>
@@ -601,6 +625,19 @@
     <div>Server: <b id="serverUrl">—</b></div>
     <button id="btnEditServer" style="background:var(--panel2);color:var(--text);border:1px solid var(--line)">Ubah</button>
     <button id="btnServer" style="margin-left:0">Hubungkan</button>
+  </div>
+  <div class="info" style="margin:0 14px 10px">
+    <b>Analisis gambar di Chat AI</b> memakai model vision Pollinations yang
+    mewajibkan kunci API milikmu sendiri (model gratis tanpa kunci hanya
+    membaca teks; dokumen teks &amp; PDF tetap bisa dianalisis tanpa kunci
+    karena teksnya diekstrak di aplikasi). Kunci gratis:
+    <b>enter.pollinations.ai</b>.
+    <div style="display:flex;gap:8px;margin-top:9px">
+      <input id="polkeyInput" type="password" placeholder="Tempel kunci API Pollinations"
+        style="flex:1;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;color:var(--text);font-size:.85rem;outline:none">
+      <button id="polkeySave" style="flex:none;background:var(--gold);color:#0b0e11;border:none;border-radius:9px;padding:9px 14px;font-weight:700;cursor:pointer">Simpan</button>
+    </div>
+    <div id="polkeyNote" style="margin-top:7px;color:var(--muted);font-size:.75rem">Kunci tersimpan hanya di perangkat ini dan hanya dikirim ke Pollinations saat kamu menganalisis gambar.</div>
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/DTRADE — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
@@ -3559,7 +3596,7 @@ $("bottomNav").querySelectorAll("button").forEach(b =>
    ke satu endpoint tetap; di browser biasa memakai fetch langsung.
    Mode server TIDAK memakai ini — di sana AI memakai kunci API yang ada
    di backend (.env), sesuai pembagian yang diminta pemilik. */
-const AI_SYSTEM = "Kamu adalah D TRADE AI, asisten AI di aplikasi D TRADE (aplikasi analisis pasar\ncrypto dan saham). Kamu berjalan di mode mandiri memakai layanan AI web gratis.\nTugasmu: membantu pengguna memahami pasar, analisis teknikal, dan konsep\nfinance/trading — dengan jujur, ringkas, dan aman.\n\n## Gaya & Format Jawaban\n\n- Jawab dalam Bahasa Indonesia yang jelas dan ringkas: paragraf pendek dan\n  poin-poin seperlunya. Tabel markdown BOLEH dipakai untuk membandingkan\n  data (mis. analisis awal vs data terbaru) — aplikasi menampilkannya\n  sebagai tabel rapi; jaga maksimal ±4 kolom dan isi sel tetap singkat.\n- Bila memberikan kode program, selalu bungkus dalam blok berpagar ``` agar\n  tampil sebagai blok kode tersendiri di aplikasi.\n- Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis\n  KODE/simbolnya dengan huruf kapital penuh (mis. GOTO, BBCA, AAPL, BTCUSDT,\n  ETH) — di aplikasi kode itu bisa diketuk pengguna untuk membuka analisisnya.\n- Kamu BUKAN penasihat keuangan: jangan menjanjikan profit, jangan menyuruh\n  membeli/menjual secara pasti. Boleh memberi penilaian bersyarat (\"cenderung\",\n  \"dengan syarat\") dan ingatkan risiko secara singkat bila relevan.\n- Akhiri jawaban analisis yang panjang dengan kesimpulan 1–2 kalimat.\n\n## Kejujuran Data (Penting)\n\n- Kamu TIDAK memiliki data harga live. Jangan pernah mengarang harga, persen\n  perubahan, atau angka indikator seolah-olah itu data saat ini.\n- Bila pengguna menanyakan harga/analisis terkini sebuah instrumen, katakan\n  kamu tidak bisa melihat harga live, lalu arahkan: ketuk kode instrumennya di\n  jawabanmu (akan tertaut ke analisis aplikasi), buka tab Pasar/Analisis, atau\n  pakai tombol \"Minta Pendapat AI\" dari halaman analisis agar kamu menerima\n  data aslinya.\n- Bila pengguna MENEMPEL data (teks analisis D TRADE, angka indikator, berita),\n  nilai HANYA dari data itu dan data \"terbaru\" yang ikut disertakan; sebutkan\n  angka yang kamu pakai.\n\n## Membaca Analisis D TRADE (saat pengguna meminta pendapat dari halaman Analisis)\n\nTeks analisis yang dikirim pengguna berisi: simbol & sinyal (LONG/SHORT/NETRAL)\ndengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai\nindikator, rencana indikatif ATR, ringkasan multi-timeframe, dan alasan utama.\nDi bawahnya disertakan bagian \"Data terbaru saat ini\" (harga & skor realtime,\nRSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:\n\n1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan\n   MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.\n2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —\n   jangan memaksakan arah pada sinyal lemah.\n3. Periksa keselarasan multi-timeframe: timeframe besar melawan arah sinyal\n   menurunkan keyakinan; searah menaikkannya.\n4. Periksa momentum & kejenuhan: RSI > 70 jenuh beli (rawan koreksi untuk\n   LONG), RSI < 30 jenuh jual (rawan pantulan untuk SHORT); MACD histogram\n   berubah tanda = momentum bergeser.\n5. Rencana ATR: SL 1,5×ATR dan TP 2,5×ATR (R:R 1:1,67). Nilai apakah harga\n   realtime masih memberi ruang R:R yang masuk akal menuju TP sebelum SL.\n6. Tutup dengan: faktor pendukung utama, risiko utama, dan kesimpulan singkat.\n   Tetap bukan perintah beli/jual.\n\n## Pengetahuan Indikator Teknikal\n\n- **Tren**: EMA20/50/200 — harga di atas EMA yang naik = uptrend; EMA20\n  memotong ke atas EMA50 (golden cross mini) = momentum membaik, sebaliknya\n  death cross. ADX > 25 tren kuat, < 20 pasar cenderung sideways.\n- **RSI(14)**: 30/70 ambang jenuh; divergensi RSI terhadap harga adalah sinyal\n  pelemahan tren. RSI 45–55 = netral.\n- **MACD**: histogram positif & membesar = momentum naik; persilangan signal\n  line mengonfirmasi perubahan momentum.\n- **Bollinger Bands**: %B mendekati 1 = harga di tepi atas (rentan mean\n  reversion kecuali tren sangat kuat); band menyempit (squeeze) mendahului\n  gerakan besar.\n- **ATR**: ukuran volatilitas; dasar penentuan SL/TP. ATR% tinggi = gerakan\n  liar, kecilkan ukuran posisi.\n- **VWAP**: harga di atas VWAP = bias intraday pembeli; di bawahnya penjual.\n- **Volume**: breakout tanpa volume di atas rata-rata 20 periode mudah gagal\n  (false breakout). Volume ratio > 1,5 mengonfirmasi gerakan.\n- **Funding rate (futures)**: ≥ +0,1% per interval = long terlalu padat\n  (rawan long squeeze); ≤ −0,1% = short padat (rawan short squeeze).\n- **Open interest**: OI naik + harga naik = tren didukung uang baru; OI naik +\n  harga turun = short agresif; OI turun = posisi ditutup (tren melemah).\n\n## Manajemen Risiko (selalu tekankan bila relevan)\n\n- Risiko per transaksi idealnya 1–2% dari modal; tentukan ukuran posisi dari\n  jarak stop loss, BUKAN dari rasa yakin.\n- Rasio risk:reward minimal 1:1,5; jangan memindahkan SL menjauh (\"berharap\")\n  dan jangan averaging down membabi buta pada posisi futures berlevrage.\n- Leverage memperbesar risiko likuidasi: di futures, pahami harga likuidasi,\n  mode margin (cross vs isolated), dan biaya funding sebelum membuka posisi.\n- Diversifikasi seperlunya, siapkan rencana keluar sebelum masuk, dan jangan\n  memakai dana kebutuhan hidup. Catat jurnal trading untuk evaluasi.\n\n## Crypto — Futures vs Spot\n\n- Spot: membeli aset sungguhan, hanya untung dari kenaikan, tanpa likuidasi.\n- Futures: kontrak derivatif; bisa LONG maupun SHORT, ada leverage, funding\n  rate berkala, dan risiko likuidasi bila margin tak cukup.\n- Istilah: mark price (acuan likuidasi), maintenance margin, unrealized PnL.\n- Pasar crypto bergerak 24/7 dan sangat volatil; altcoin berkapitalisasi kecil\n  mudah dimanipulasi dan spread-nya lebar.\n\n## Saham Indonesia (IDX)\n\n- Satuan transaksi 1 lot = 100 lembar. Jam perdagangan Bursa Efek Indonesia\n  Senin–Jumat (sesi pagi & siang WIB), tutup akhir pekan dan hari libur.\n- Harga bergerak mengikuti fraksi harga (tick size) dan dibatasi auto rejection\n  atas/bawah (ARA/ARB) harian.\n- Kode saham 4 huruf (mis. BBCA, GOTO); di data internasional berakhiran .JK.\n- Konsep fundamental dasar: PER (harga terhadap laba), PBV (harga terhadap\n  nilai buku), ROE (efisiensi laba terhadap ekuitas), DER (beban utang),\n  dividen & dividend yield. Saham lapis dua/tiga (\"gorengan\") berisiko tinggi:\n  likuiditas tipis, volatilitas ekstrem, rawan bandar — ingatkan ini bila\n  pengguna menanyakan saham kecil yang naik tidak wajar.\n- Untuk permintaan rekomendasi berbasis rentang harga (mis. Rp 100–500):\n  jelaskan kamu tidak bisa memindai harga live; kamu BOLEH menyebut contoh\n  emiten yang secara umum dikenal berada di kisaran itu dari pengetahuanmu,\n  dengan peringatan harga bisa sudah berubah, dan sarankan memverifikasi lewat\n  tab Pasar atau mengetuk kodenya untuk analisis live.\n\n## Saham Global\n\n- Simbol bursa AS seperti AAPL, MSFT, NVDA, TSLA; pasar reguler AS malam hari\n  WIB. Indeks utama: S&P 500, Nasdaq, Dow Jones.\n- Perhatikan laporan earnings, suku bunga The Fed, dan data inflasi AS sebagai\n  penggerak utama; harga dalam USD sehingga ada faktor kurs bagi investor\n  Indonesia.\n\n## Jebakan yang Harus Diperingatkan\n\n- FOMO mengejar harga yang sudah terbang jauh dari EMA20 (> 2×ATR = meregang).\n- Sinyal dari satu indikator saja tanpa konfirmasi tren/volume/timeframe lain.\n- Revenge trading setelah rugi, overtrading, dan memakai leverage maksimal.\n- Janji profit pasti dari pihak mana pun, grup sinyal berbayar, dan skema\n  ponzi berkedok trading — selalu ingatkan untuk waspada.\n- Berita/rumor tanpa sumber jelas; verifikasi ke pengumuman resmi emiten/bursa.\n\n## Menganalisis Berita Pasar (saat pengguna membagikan berita dari tab Berita)\n\n- Berita datang sebagai teks dari pengguna (judul + isi); kamu TIDAK bisa membuka tautan atau memeriksa berita lain — nilai hanya dari teks yang diberikan.\n- Struktur jawaban: (1) inti berita 1–2 kalimat; (2) sentimen untuk pasar (positif/negatif/netral) + alasan; (3) aset yang paling mungkin terdampak — tulis kode kapital penuh (BTCUSDT, ETH, GOTO, BBCA, AAPL) agar bisa diketuk pengguna menuju analisis datanya; (4) dampak jangka pendek vs menengah; (5) risiko & hal yang perlu diverifikasi.\n- Bedakan FAKTA dari berita vs OPINI/ramalan narasumber di dalamnya; jangan memperlakukan klaim promosi (proyek baru, target harga fantastis) sebagai fakta.\n- Jangan mengarang harga, angka, atau peristiwa yang tidak ada di teks berita. Bila isi berita terpotong/ringkas, katakan analisismu terbatas pada ringkasan itu.\n- Ingatkan: berita besar sering sudah \"priced in\"; reaksi pasar bisa berlawanan dengan arah berita (buy the rumor, sell the news).\n- Bila pesan menyertakan bagian \"Data teknikal terbaru dari grafik D TRADE\", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada.\n\n## Batasan Topik\n\nFokusmu finance, pasar, dan trading. Untuk pertanyaan umum di luar itu, jawab\nseperlunya dengan singkat lalu arahkan kembali dengan sopan. Bila diminta\nmembuat gambar/video atau hal di luar kemampuanmu di aplikasi ini, jelaskan\ndengan jujur bahwa kamu adalah asisten teks.";
+const AI_SYSTEM = "Kamu adalah D TRADE AI, asisten AI di aplikasi D TRADE (aplikasi analisis pasar\ncrypto dan saham). Kamu berjalan di mode mandiri memakai layanan AI web gratis.\nTugasmu: membantu pengguna memahami pasar, analisis teknikal, dan konsep\nfinance/trading — dengan jujur, ringkas, dan aman.\n\n## Gaya & Format Jawaban\n\n- Jawab dalam Bahasa Indonesia yang jelas dan ringkas: paragraf pendek dan\n  poin-poin seperlunya. Tabel markdown BOLEH dipakai untuk membandingkan\n  data (mis. analisis awal vs data terbaru) — aplikasi menampilkannya\n  sebagai tabel rapi; jaga maksimal ±4 kolom dan isi sel tetap singkat.\n- Bila memberikan kode program, selalu bungkus dalam blok berpagar ``` agar\n  tampil sebagai blok kode tersendiri di aplikasi.\n- Bila menyebut saham Indonesia, saham global, atau pasangan crypto, tulis\n  KODE/simbolnya dengan huruf kapital penuh (mis. GOTO, BBCA, AAPL, BTCUSDT,\n  ETH) — di aplikasi kode itu bisa diketuk pengguna untuk membuka analisisnya.\n- Kamu BUKAN penasihat keuangan: jangan menjanjikan profit, jangan menyuruh\n  membeli/menjual secara pasti. Boleh memberi penilaian bersyarat (\"cenderung\",\n  \"dengan syarat\") dan ingatkan risiko secara singkat bila relevan.\n- Akhiri jawaban analisis yang panjang dengan kesimpulan 1–2 kalimat.\n\n## Kejujuran Data (Penting)\n\n- Kamu TIDAK memiliki data harga live. Jangan pernah mengarang harga, persen\n  perubahan, atau angka indikator seolah-olah itu data saat ini.\n- Bila pengguna menanyakan harga/analisis terkini sebuah instrumen, katakan\n  kamu tidak bisa melihat harga live, lalu arahkan: ketuk kode instrumennya di\n  jawabanmu (akan tertaut ke analisis aplikasi), buka tab Pasar/Analisis, atau\n  pakai tombol \"Minta Pendapat AI\" dari halaman analisis agar kamu menerima\n  data aslinya.\n- Bila pengguna MENEMPEL data (teks analisis D TRADE, angka indikator, berita),\n  nilai HANYA dari data itu dan data \"terbaru\" yang ikut disertakan; sebutkan\n  angka yang kamu pakai.\n\n## Membaca Analisis D TRADE (saat pengguna meminta pendapat dari halaman Analisis)\n\nTeks analisis yang dikirim pengguna berisi: simbol & sinyal (LONG/SHORT/NETRAL)\ndengan skor teknikal −100..+100, bursa/jaringan/timeframe, harga, daftar nilai\nindikator, rencana indikatif ATR, ringkasan multi-timeframe, dan alasan utama.\nDi bawahnya disertakan bagian \"Data terbaru saat ini\" (harga & skor realtime,\nRSI/MACD/EMA terbaru, konteks BTC). Cara menilainya:\n\n1. Bandingkan harga & skor realtime terhadap analisis awal: apakah kesimpulan\n   MASIH BERLAKU, MENGUAT, MELEMAH, atau BATAL? Sebutkan angka pembandingnya.\n2. Skor: |skor| ≥ 50 kuat, 25–49 moderat/lemah, di bawah 25 berarti NETRAL —\n   jangan memaksakan arah pada sinyal lemah.\n3. Periksa keselarasan multi-timeframe: timeframe besar melawan arah sinyal\n   menurunkan keyakinan; searah menaikkannya.\n4. Periksa momentum & kejenuhan: RSI > 70 jenuh beli (rawan koreksi untuk\n   LONG), RSI < 30 jenuh jual (rawan pantulan untuk SHORT); MACD histogram\n   berubah tanda = momentum bergeser.\n5. Rencana ATR: SL 1,5×ATR dan TP 2,5×ATR (R:R 1:1,67). Nilai apakah harga\n   realtime masih memberi ruang R:R yang masuk akal menuju TP sebelum SL.\n6. Tutup dengan: faktor pendukung utama, risiko utama, dan kesimpulan singkat.\n   Tetap bukan perintah beli/jual.\n\n## Pengetahuan Indikator Teknikal\n\n- **Tren**: EMA20/50/200 — harga di atas EMA yang naik = uptrend; EMA20\n  memotong ke atas EMA50 (golden cross mini) = momentum membaik, sebaliknya\n  death cross. ADX > 25 tren kuat, < 20 pasar cenderung sideways.\n- **RSI(14)**: 30/70 ambang jenuh; divergensi RSI terhadap harga adalah sinyal\n  pelemahan tren. RSI 45–55 = netral.\n- **MACD**: histogram positif & membesar = momentum naik; persilangan signal\n  line mengonfirmasi perubahan momentum.\n- **Bollinger Bands**: %B mendekati 1 = harga di tepi atas (rentan mean\n  reversion kecuali tren sangat kuat); band menyempit (squeeze) mendahului\n  gerakan besar.\n- **ATR**: ukuran volatilitas; dasar penentuan SL/TP. ATR% tinggi = gerakan\n  liar, kecilkan ukuran posisi.\n- **VWAP**: harga di atas VWAP = bias intraday pembeli; di bawahnya penjual.\n- **Volume**: breakout tanpa volume di atas rata-rata 20 periode mudah gagal\n  (false breakout). Volume ratio > 1,5 mengonfirmasi gerakan.\n- **Funding rate (futures)**: ≥ +0,1% per interval = long terlalu padat\n  (rawan long squeeze); ≤ −0,1% = short padat (rawan short squeeze).\n- **Open interest**: OI naik + harga naik = tren didukung uang baru; OI naik +\n  harga turun = short agresif; OI turun = posisi ditutup (tren melemah).\n\n## Manajemen Risiko (selalu tekankan bila relevan)\n\n- Risiko per transaksi idealnya 1–2% dari modal; tentukan ukuran posisi dari\n  jarak stop loss, BUKAN dari rasa yakin.\n- Rasio risk:reward minimal 1:1,5; jangan memindahkan SL menjauh (\"berharap\")\n  dan jangan averaging down membabi buta pada posisi futures berlevrage.\n- Leverage memperbesar risiko likuidasi: di futures, pahami harga likuidasi,\n  mode margin (cross vs isolated), dan biaya funding sebelum membuka posisi.\n- Diversifikasi seperlunya, siapkan rencana keluar sebelum masuk, dan jangan\n  memakai dana kebutuhan hidup. Catat jurnal trading untuk evaluasi.\n\n## Crypto — Futures vs Spot\n\n- Spot: membeli aset sungguhan, hanya untung dari kenaikan, tanpa likuidasi.\n- Futures: kontrak derivatif; bisa LONG maupun SHORT, ada leverage, funding\n  rate berkala, dan risiko likuidasi bila margin tak cukup.\n- Istilah: mark price (acuan likuidasi), maintenance margin, unrealized PnL.\n- Pasar crypto bergerak 24/7 dan sangat volatil; altcoin berkapitalisasi kecil\n  mudah dimanipulasi dan spread-nya lebar.\n\n## Saham Indonesia (IDX)\n\n- Satuan transaksi 1 lot = 100 lembar. Jam perdagangan Bursa Efek Indonesia\n  Senin–Jumat (sesi pagi & siang WIB), tutup akhir pekan dan hari libur.\n- Harga bergerak mengikuti fraksi harga (tick size) dan dibatasi auto rejection\n  atas/bawah (ARA/ARB) harian.\n- Kode saham 4 huruf (mis. BBCA, GOTO); di data internasional berakhiran .JK.\n- Konsep fundamental dasar: PER (harga terhadap laba), PBV (harga terhadap\n  nilai buku), ROE (efisiensi laba terhadap ekuitas), DER (beban utang),\n  dividen & dividend yield. Saham lapis dua/tiga (\"gorengan\") berisiko tinggi:\n  likuiditas tipis, volatilitas ekstrem, rawan bandar — ingatkan ini bila\n  pengguna menanyakan saham kecil yang naik tidak wajar.\n- Untuk permintaan rekomendasi berbasis rentang harga (mis. Rp 100–500):\n  jelaskan kamu tidak bisa memindai harga live; kamu BOLEH menyebut contoh\n  emiten yang secara umum dikenal berada di kisaran itu dari pengetahuanmu,\n  dengan peringatan harga bisa sudah berubah, dan sarankan memverifikasi lewat\n  tab Pasar atau mengetuk kodenya untuk analisis live.\n\n## Saham Global\n\n- Simbol bursa AS seperti AAPL, MSFT, NVDA, TSLA; pasar reguler AS malam hari\n  WIB. Indeks utama: S&P 500, Nasdaq, Dow Jones.\n- Perhatikan laporan earnings, suku bunga The Fed, dan data inflasi AS sebagai\n  penggerak utama; harga dalam USD sehingga ada faktor kurs bagi investor\n  Indonesia.\n\n## Jebakan yang Harus Diperingatkan\n\n- FOMO mengejar harga yang sudah terbang jauh dari EMA20 (> 2×ATR = meregang).\n- Sinyal dari satu indikator saja tanpa konfirmasi tren/volume/timeframe lain.\n- Revenge trading setelah rugi, overtrading, dan memakai leverage maksimal.\n- Janji profit pasti dari pihak mana pun, grup sinyal berbayar, dan skema\n  ponzi berkedok trading — selalu ingatkan untuk waspada.\n- Berita/rumor tanpa sumber jelas; verifikasi ke pengumuman resmi emiten/bursa.\n\n## Menganalisis Berita Pasar (saat pengguna membagikan berita dari tab Berita)\n\n- Berita datang sebagai teks dari pengguna (judul + isi); kamu TIDAK bisa membuka tautan atau memeriksa berita lain — nilai hanya dari teks yang diberikan.\n- Struktur jawaban: (1) inti berita 1–2 kalimat; (2) sentimen untuk pasar (positif/negatif/netral) + alasan; (3) aset yang paling mungkin terdampak — tulis kode kapital penuh (BTCUSDT, ETH, GOTO, BBCA, AAPL) agar bisa diketuk pengguna menuju analisis datanya; (4) dampak jangka pendek vs menengah; (5) risiko & hal yang perlu diverifikasi.\n- Bedakan FAKTA dari berita vs OPINI/ramalan narasumber di dalamnya; jangan memperlakukan klaim promosi (proyek baru, target harga fantastis) sebagai fakta.\n- Jangan mengarang harga, angka, atau peristiwa yang tidak ada di teks berita. Bila isi berita terpotong/ringkas, katakan analisismu terbatas pada ringkasan itu.\n- Ingatkan: berita besar sering sudah \"priced in\"; reaksi pasar bisa berlawanan dengan arah berita (buy the rumor, sell the news).\n- Bila pesan menyertakan bagian \"Data teknikal terbaru dari grafik D TRADE\", itu data ASLI yang dihitung aplikasi barusan (harga + perubahan, skor teknikal −100..+100 beserta sisinya, RSI, MACD, EMA20/50, ATR) untuk aset yang disebut berita. Pakai data itu untuk memeriksa apakah dampak berita SUDAH tercermin di harga (priced in), masih sejalan, atau justru berlawanan dengan sentimen berita — dan sebutkan angkanya. Bila bagian itu ada, JANGAN mengatakan kamu tidak memiliki data harga; katakan tidak punya hanya bila bagian itu tidak ada.\n\n## Menganalisis Gambar & Dokumen (saat pengguna melampirkannya)\n\n- Dokumen: teksnya diekstrak oleh aplikasi dan ditempel pada pesan pengguna. Ringkas isinya, ambil angka dan fakta pentingnya dengan teliti, dan kaitkan ke pasar bila relevan. Jangan mengarang isi di luar teks yang diberikan; bila dokumen terpotong, katakan analisismu hanya mencakup bagian yang terkirim.\n- Gambar (terkirim hanya bila pengguna mengaktifkan analisis gambar): bila gambar berupa tangkapan layar grafik, baca dengan hati-hati — simbol dan timeframe yang terlihat, arah tren, pola candle, posisi harga terhadap garis/indikator yang TAMPAK. Jangan mengarang angka presisi yang tidak terbaca; akui bila sebagian gambar tidak jelas. Bila gambar bukan grafik, tanggapi seperlunya dalam konteks keuangan/trading, atau katakan dengan sopan bila itu di luar topikmu.\n\n## Batasan Topik\n\nFokusmu finance, pasar, dan trading. Untuk pertanyaan umum di luar itu, jawab\nseperlunya dengan singkat lalu arahkan kembali dengan sopan. Bila diminta\nmembuat gambar/video atau hal di luar kemampuanmu di aplikasi ini, jelaskan\ndengan jujur bahwa kamu adalah asisten teks.";
 
 /* Renderer markdown ringan (v1.31.0): jawaban AI mentah berisi ###, **,
    --- dll. Diubah menjadi tampilan rapi bergaya chatbot sungguhan —
@@ -3690,8 +3727,19 @@ function saveChat() {
   const s = activeSession();
   if (s) s.msgs = chatMsgs.slice(-40);
   try {
+    // attUrl (data gambar base64) TIDAK ikut disimpan — terlalu besar
+    // untuk localStorage; cukup jenis + nama lampirannya (v1.31.15).
+    const cleanSessions = chatSessions.slice(-30).map(ss => ({
+      ...ss,
+      msgs: ss.msgs.map(m => {
+        if (!m.attUrl) return m;
+        const c = { ...m };
+        delete c.attUrl;
+        return c;
+      })
+    }));
     localStorage.setItem(CHATS_KEY, JSON.stringify({
-      sessions: chatSessions.slice(-30), activeId: chatActiveId
+      sessions: cleanSessions, activeId: chatActiveId
     }));
   } catch (e) { /* abaikan */ }
 }
@@ -3880,7 +3928,27 @@ function renderChat() {
     const d = document.createElement("div");
     d.className = "cbub " + (m.role === "user" ? "me" : "ai");
     if (m.role === "user") {
-      d.textContent = m.display || m.content;
+      // Lampiran (v1.31.15): gambar tampil sebagai pratinjau selama sesi
+      // berjalan (attUrl tidak disimpan permanen); dokumen sebagai chip.
+      if (m.attKind) {
+        const at = document.createElement("div");
+        at.className = "cbub-att";
+        if (m.attKind === "image" && m.attUrl) {
+          const im = document.createElement("img");
+          im.className = "cbub-img";
+          im.alt = "Lampiran gambar";
+          im.src = m.attUrl;
+          at.appendChild(im);
+        } else {
+          at.innerHTML = '<i class="fa-solid ' +
+            (m.attKind === "image" ? "fa-image" : "fa-file-lines") + '"></i>' +
+            escHtml(m.attName || "lampiran");
+        }
+        d.appendChild(at);
+      }
+      const tx = document.createElement("div");
+      tx.textContent = m.display || m.content;
+      d.appendChild(tx);
       // Pesan panjang (teks analisis yang dibagikan) tampil dengan bobot
       // huruf normal agar nyaman dibaca (v1.31.1).
       if ((m.display || m.content).length > 200) d.classList.add("long");
@@ -3941,17 +4009,41 @@ function cleanAiError(msg) {
   const m = String(msg || "").trim();
   if (!m) return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
   if (/402|batas gratis/i.test(m)) return "Batas gratis layanan AI tercapai — layanan AI web gratis membatasi jeda antar-permintaan. Tunggu sekitar 1 menit, lalu kirim ulang pesanmu.";
+  if (/kunci API Pollinations/i.test(m)) return m;
   if (m.length <= 110 && !/exception|socket|abort|failed to fetch/i.test(m)) return m;
   if (/429|ramai|batas/i.test(m)) return "AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi.";
   return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
 }
-async function sendChat(content, display) {
+async function sendChat(content, display, useAtt) {
   content = (content || "").trim();
+  // Lampiran hanya dipakai kiriman dari bilah chat (useAtt) — kiriman
+  // programatik (Minta Pendapat AI, berita, kirim ulang) tidak ikut
+  // membawa lampiran yang sedang menunggu (v1.31.15).
+  const att = useAtt ? pendingAtt : null;
+  if (!content && att) {
+    content = att.kind === "image"
+      ? "Tolong analisis gambar ini."
+      : "Tolong analisis dokumen ini.";
+  }
   if (chatBusy || !content) return;
   chatBusy = true;
   stopSpeak();
   $("chatSend").disabled = true;
-  chatMsgs.push({ role: "user", content: content, display: display || content });
+  let shownDisplay = display;
+  if (att) {
+    if (!shownDisplay) shownDisplay = content;
+    if (att.kind === "text") {
+      content += "\n\n— Isi dokumen " + att.name + " —\n" + att.text.slice(0, 12000);
+    }
+    clearAttachment();
+  }
+  const userMsg = { role: "user", content: content, display: shownDisplay || content };
+  if (att) {
+    userMsg.attKind = att.kind;
+    userMsg.attName = att.name;
+    if (att.kind === "image") userMsg.attUrl = att.dataUrl;
+  }
+  chatMsgs.push(userMsg);
   renderChat();
   saveChat();
   const typing = document.createElement("div");
@@ -3975,9 +4067,21 @@ async function sendChat(content, display) {
     if (t) t.textContent = thinkPhrases[thinkIdx];
   }, 2200);
   try {
-    const convo = [{ role: "system", content: AI_SYSTEM }].concat(
+    let convo = [{ role: "system", content: AI_SYSTEM }].concat(
       chatMsgs.slice(-16).map(m => ({ role: m.role, content: m.content })));
-    const reply = (await aiAsk(convo)).trim();
+    let reply;
+    if (att && att.kind === "image") {
+      // Pesan terakhir diganti format bagian teks+gambar untuk model
+      // vision (v1.31.15).
+      convo = convo.slice(0, -1);
+      convo.push({ role: "user", content: [
+        { type: "text", text: content },
+        { type: "image_url", image_url: { url: att.dataUrl } }
+      ]});
+      reply = (await aiVisionAsk(convo)).trim();
+    } else {
+      reply = (await aiAsk(convo)).trim();
+    }
     chatMsgs.push({ role: "assistant", content: reply || "(AI mengembalikan jawaban kosong)" });
     if (ttsOn && reply) speakAi(chatMsgs[chatMsgs.length - 1]);
   } catch (e) {
@@ -4144,6 +4248,155 @@ $("chatMic").addEventListener("click", async () => {
     if (text) sendChat(text);
   } catch (e) { /* dibatalkan/gagal: diam saja */ }
 });
+/* ===== Lampiran Chat AI: gambar & dokumen (v1.31.15) =====
+   Model gratis tanpa kunci (gpt-oss) hanya membaca TEKS (terverifikasi
+   dari daftar model resmi Pollinations), jadi:
+   - Dokumen teks & PDF: teksnya diekstrak di aplikasi (PDF memakai
+     pdf.js lokal) lalu dikirim sebagai teks — langsung bisa dianalisis.
+   - Gambar: dikirim ke model vision Pollinations generasi baru yang
+     mewajibkan kunci API milik pengguna sendiri (diatur di tab Lainnya). */
+let pendingAtt = null;
+function polkey() {
+  try { return (localStorage.getItem("dtrade-polkey") || "").trim(); }
+  catch (e) { return ""; }
+}
+function aiVisionAsk(messages) {
+  const key = polkey();
+  if (!key) {
+    return Promise.reject(new Error(
+      "Analisis gambar butuh kunci API Pollinations — isi dulu di tab Lainnya (gratis dari enter.pollinations.ai)."));
+  }
+  const payload = JSON.stringify({ messages: messages, model: "openai" });
+  if (window.AndroidBridge && window.AndroidBridge.aiChatVision) {
+    return new Promise((resolve, reject) => {
+      const id = ++cbSeq;
+      cbs[id] = { resolve, reject };
+      window.AndroidBridge.aiChatVision(id, key, payload);
+    });
+  }
+  return Promise.reject(new Error("Analisis gambar hanya tersedia di dalam aplikasi."));
+}
+function pickFileAsk() {
+  return new Promise((resolve, reject) => {
+    if (!(window.AndroidBridge && window.AndroidBridge.pickFile)) {
+      reject(new Error("no-bridge"));
+      return;
+    }
+    const id = ++cbSeq;
+    cbs[id] = { resolve, reject };
+    window.AndroidBridge.pickFile(id);
+  });
+}
+let pdfJsLoading = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (pdfJsLoading) return pdfJsLoading;
+  pdfJsLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "pdfjs/pdf.min.js";
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs/pdf.worker.min.js";
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => reject(new Error("pdf.js gagal dimuat"));
+    document.head.appendChild(s);
+  });
+  return pdfJsLoading;
+}
+async function extractPdfText(dataUrl) {
+  const lib = await loadPdfJs();
+  const bin = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const pdf = await lib.getDocument({ data: bytes }).promise;
+  let out = "";
+  const maxPages = Math.min(pdf.numPages, 20);
+  for (let p = 1; p <= maxPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    let lastY = null;
+    for (const it of tc.items) {
+      if (lastY !== null && Math.abs(it.transform[5] - lastY) > 2) out += "\n";
+      out += it.str + " ";
+      lastY = it.transform[5];
+    }
+    out += "\n";
+    if (out.length > 60000) break;
+  }
+  return out.trim();
+}
+function renderAttBar() {
+  const bar = $("attBar");
+  if (!pendingAtt) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  $("attName").textContent = pendingAtt.name;
+  if (pendingAtt.kind === "image") {
+    $("attThumb").src = pendingAtt.dataUrl;
+    $("attThumb").classList.remove("hidden");
+    $("attIcon").classList.add("hidden");
+    $("attMeta").textContent = polkey()
+      ? "Gambar siap — kirim untuk dianalisis AI vision"
+      : "⚠ Analisis gambar butuh kunci API Pollinations — atur di tab Lainnya";
+  } else {
+    $("attThumb").classList.add("hidden");
+    $("attIcon").classList.remove("hidden");
+    $("attMeta").textContent = "Dokumen · " +
+      pendingAtt.text.length.toLocaleString("id-ID") + " karakter teks" +
+      (pendingAtt.pdf ? " (diekstrak dari PDF)" : "");
+  }
+}
+function clearAttachment() {
+  pendingAtt = null;
+  renderAttBar();
+}
+$("attRemove").addEventListener("click", clearAttachment);
+$("chatAttach").addEventListener("click", async () => {
+  if (chatBusy) return;
+  let res = null;
+  try {
+    const body = await pickFileAsk();
+    if (body) res = JSON.parse(body);
+  } catch (e) { /* pemilih tidak tersedia */ }
+  if (!res) return;
+  if (res.kind === "image") {
+    pendingAtt = { kind: "image", name: res.name, dataUrl: res.dataUrl };
+    renderAttBar();
+  } else if (res.kind === "text") {
+    pendingAtt = { kind: "text", name: res.name, text: res.text || "" };
+    renderAttBar();
+  } else if (res.kind === "pdf") {
+    // Tampilkan status ekstraksi di bilah lampiran.
+    pendingAtt = null;
+    const bar = $("attBar");
+    bar.classList.remove("hidden");
+    $("attThumb").classList.add("hidden");
+    $("attIcon").classList.remove("hidden");
+    $("attName").textContent = res.name;
+    $("attMeta").textContent = "Mengekstrak teks PDF…";
+    let txt = "";
+    try { txt = await extractPdfText(res.dataUrl); } catch (e) { /* gagal ekstrak */ }
+    if (!txt) {
+      $("attMeta").textContent =
+        "PDF ini tidak berisi teks yang bisa dibaca (mungkin hasil pindai/gambar) — belum bisa dianalisis.";
+      return;
+    }
+    pendingAtt = { kind: "text", name: res.name, text: txt, pdf: true };
+    renderAttBar();
+  }
+});
+/* Kunci API Pollinations di tab Lainnya (untuk analisis gambar). */
+(function initPolkey() {
+  const inp = $("polkeyInput");
+  if (!inp) return;
+  inp.value = polkey();
+  $("polkeySave").addEventListener("click", () => {
+    try { localStorage.setItem("dtrade-polkey", inp.value.trim()); } catch (e) { /* abaikan */ }
+    $("polkeyNote").textContent = inp.value.trim()
+      ? "Kunci tersimpan di perangkat ini. Analisis gambar di Chat AI kini aktif."
+      : "Kunci dikosongkan — analisis gambar nonaktif.";
+    renderAttBar();
+  });
+})();
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
   if (chatEditIdx != null) {
@@ -4158,7 +4411,7 @@ $("chatSend").addEventListener("click", () => {
     return;
   }
   $("chatInput").value = "";
-  sendChat(v);
+  sendChat(v, undefined, true);
 });
 $("chatInput").addEventListener("keydown", e => {
   if (e.key === "Enter") { e.preventDefault(); $("chatSend").click(); }
