@@ -290,21 +290,12 @@
     color:var(--muted);font-size:.82rem;display:grid;gap:8px}
   .disclaimer .copy{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
 
-  /* Bottom Navigation Bar (mobile) */
-  .bottomnav{display:none}
+  /* Navigasi mobile: hamburger rata kanan (bottom bar dihapus per permintaan) */
   @media(max-width:900px){
     nav.mainnav,.top-actions .btn.ghost{display:none}
+    .top-actions{margin-left:auto}
     .burger{display:grid;place-items:center}
     .mmenu{display:block}
-    .bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:100;
-      background:rgba(8,11,18,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-      border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
-    .bottomnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
-      color:var(--muted);font-size:.64rem;font-weight:500;padding:5px 0 3px;border-radius:10px}
-    .bottomnav a i{font-size:1.1rem}
-    .bottomnav a:hover{text-decoration:none}
-    .bottomnav a.act{color:var(--gold)}
-    body{padding-bottom:70px}
     section{scroll-margin-top:14px}
   }
 
@@ -808,15 +799,6 @@
     </div>
   </div>
 </footer>
-
-<nav class="bottomnav" aria-label="Navigasi bawah">
-  <a href="#top" data-sec="top"><i class="fa-solid fa-house"></i>Beranda</a>
-  <a href="#fitur" data-sec="fitur"><i class="fa-solid fa-wand-magic-sparkles"></i>Fitur</a>
-  <a href="#cli" data-sec="cli"><i class="fa-solid fa-terminal"></i>CLI</a>
-  <a href="#web" data-sec="web"><i class="fa-solid fa-display"></i>Web UI</a>
-  <a href="#android" data-sec="android"><i class="fa-brands fa-android"></i>Android</a>
-  <a href="#cara-kerja" data-sec="cara-kerja"><i class="fa-solid fa-book-open"></i>Panduan</a>
-</nav>
 
 <script>
 (function () {
