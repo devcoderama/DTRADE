@@ -53,6 +53,8 @@
   .coinf{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     font-weight:800;color:#fff}
   .coini{position:absolute;inset:0;width:100%;height:100%;border-radius:50%}
+  .slogo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+    padding:16%;box-sizing:border-box;background:#fff;border-radius:50%}
   .chg{font-size:.82rem;font-variant-numeric:tabular-nums}
   .up{color:var(--green)} .dn{color:var(--red)}
   .chip{flex:none;min-width:86px;text-align:center;border-radius:9px;padding:6px 7px;
@@ -275,7 +277,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.10.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.11.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -647,10 +649,27 @@ async function loadStocks(mkt, force) {
       ok + " · " + new Date().toLocaleTimeString("id-ID") + " · data Yahoo Finance";
   }
 }
+/* Logo emiten (v1.11.0), pola yang sama seperti logo koin crypto:
+   gambar menutupi avatar huruf; gagal → sumber cadangan; gagal lagi →
+   gambar disembunyikan dan avatar huruf yang tampil. Indeks (^JKSE,
+   ^IXIC, ^DJI) tidak punya logo di kedua sumber → avatar huruf. */
+const STOCK_LOGO1 = "https://financialmodelingprep.com/image-stock/";
+const STOCK_LOGO2 = "https://assets.parqet.com/logos/symbol/";
+function stockIconErr(img) {
+  if (!img.dataset.r1) {
+    img.dataset.r1 = "1";
+    img.src = STOCK_LOGO2 + encodeURIComponent(img.dataset.sym) + "?format=png";
+  } else {
+    img.style.display = "none";
+  }
+}
 function stockIconHtml(e, size) {
   return '<div class="coin" style="width:' + size + "px;height:" + size + 'px">' +
     '<div class="coinf" style="background:hsl(' + coinHue(e.ticker) + ',45%,30%);font-size:' +
-    Math.round(size * 0.44) + 'px">' + e.ticker.charAt(0) + "</div></div>";
+    Math.round(size * 0.44) + 'px">' + e.ticker.charAt(0) + "</div>" +
+    '<img class="slogo" loading="lazy" alt="" data-sym="' + escHtml(e.symbol) +
+    '" src="' + STOCK_LOGO1 + encodeURIComponent(e.symbol) + '.png" ' +
+    'onerror="stockIconErr(this)"></div>';
 }
 function stockRowHtml(e) {
   return stockIconHtml(e, 34) +
