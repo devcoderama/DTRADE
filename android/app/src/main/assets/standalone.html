@@ -314,7 +314,7 @@
   </div>
   <button class="menuitem" id="mReload"><span class="ic"><i class="fa-solid fa-rotate-right"></i></span><span>Muat Ulang Data Pasar<small>Ambil ulang daftar simbol, harga, dan sinyal</small></span></button>
   <button class="menuitem" id="mGithub"><span class="ic"><i class="fa-brands fa-github"></i></span><span>GitHub Resmi D TRADE<small>github.com/devcoderama/binance-ai-future — kode sumber, dokumentasi &amp; rilis terbaru</small></span></button>
-  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.12.0</b> — mode mandiri multi-market: crypto futures
+  <div class="info" style="margin:4px 14px 0">D TRADE <b>v1.13.0</b> — mode mandiri multi-market: crypto futures
   Binance, saham Bursa Indonesia (IDX), dan saham global (Yahoo Finance, timeframe
   1m–1mo dengan grafik live). Berita dikumpulkan
   langsung dari RSS publik 16 sumber: CoinDesk, CoinTelegraph, Decrypt, CryptoPotato, The Block,
@@ -1325,8 +1325,13 @@ function closeDetail() {
   teardownDetail();
   showTab(currentTab);
 }
+let detailLoadSeq = 0;
 async function loadDetail(keepScroll, restartWs) {
   tradePlan = null;
+  /* Penjaga balapan (v1.13.0): ganti timeframe/simbol cepat bisa membuat
+     dua muatan berjalan bersamaan — hasil yang datang belakangan dari
+     muatan lama tidak boleh menimpa tampilan muatan terbaru. */
+  const mySeq = ++detailLoadSeq;
   if (detailMarket === "stock") {
     const e = detailEntry;
     const tf = STOCK_TFS.find(t => t.id === stockInterval) || STOCK_TFS[6];
@@ -1347,6 +1352,7 @@ async function loadDetail(keepScroll, restartWs) {
     try {
       if (!e) throw new Error("instrumen tidak ditemukan");
       const got = await fetchYahoo(e, tf.iv, tf.range);
+      if (mySeq !== detailLoadSeq) return;
       let candles = got.candles;
       const meta = got.meta;
       if (tf.agg) candles = aggregateCandles(candles, tf.agg);
@@ -1374,6 +1380,7 @@ async function loadDetail(keepScroll, restartWs) {
   try {
     detailKlines = await api("/fapi/v1/klines?symbol=" + currentSymbol +
       "&interval=" + currentInterval + "&limit=" + KLINE_LIMIT);
+    if (mySeq !== detailLoadSeq) return;
     drawChart(detailKlines);
     renderAnalysis();
     renderRelatedNews();

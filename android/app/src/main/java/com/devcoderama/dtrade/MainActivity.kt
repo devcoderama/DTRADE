@@ -48,6 +48,9 @@ class MainActivity : Activity() {
     /** true selama halaman mode mandiri yang sedang ditampilkan. */
     private var standaloneMode = false
 
+    /** Dialog pembaruan yang sedang tampil (untuk dibersihkan di onDestroy). */
+    private var updateDialog: AlertDialog? = null
+
     /** Isi assets/standalone.html, dibaca sekali lalu disimpan di memori. */
     private var standaloneHtml: String? = null
 
@@ -87,8 +90,29 @@ class MainActivity : Activity() {
             // aktif) hidup di cookie sesi WebView milik server.
             allowFileAccess = false
             allowContentAccess = false
+            // Pengerasan tambahan (v1.13.0): tanpa konten campuran
+            // HTTP-di-dalam-HTTPS, tanpa akses berkas lintas-asal, tanpa
+            // jendela pop-up otomatis, tanpa geolokasi, tanpa simpan
+            // formulir, Safe Browsing aktif, dan inspeksi WebView mati.
+            @Suppress("DEPRECATION")
+            allowFileAccessFromFileURLs = false
+            @Suppress("DEPRECATION")
+            allowUniversalAccessFromFileURLs = false
+            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            setGeolocationEnabled(false)
+            @Suppress("DEPRECATION")
+            saveFormData = false
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                safeBrowsingEnabled = true
+            }
         }
-        webView.addJavascriptInterface(ApiBridge(), "AndroidBridge")
+        WebView.setWebContentsDebuggingEnabled(false)
+        // v1.13.0: jembatan JavaScript TIDAK lagi terdaftar permanen —
+        // ia hanya dipasang selama halaman mode mandiri tampil (lihat
+        // loadStandalone/loadHome). Halaman Web UI server (konten jarak
+        // jauh) tidak boleh menyentuh jembatan sama sekali.
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -113,7 +137,16 @@ class MainActivity : Activity() {
             ): Boolean {
                 val target = request?.url ?: return false
                 val allowedHost = android.net.Uri.parse(serverUrl()).host
-                return target.host != allowedHost && target.host != STANDALONE_HOST
+                if (target.host != allowedHost && target.host != STANDALONE_HOST) {
+                    return true
+                }
+                // v1.13.0: HTTP teks-terang hanya untuk host lokal/LAN
+                // privat. Server publik wajib HTTPS — cookie sesi backend
+                // tidak boleh melintasi internet tanpa enkripsi.
+                if (target.scheme == "http" && !isPrivateOrLocalHost(target.host)) {
+                    return true
+                }
+                return false
             }
 
             // v1.8.0: halaman mode mandiri dimuat dengan base URL semu
@@ -172,6 +205,11 @@ class MainActivity : Activity() {
 
         if (savedInstanceState == null) {
             loadHome()
+        } else if (savedInstanceState.getBoolean(KEY_STANDALONE, false)) {
+            // Halaman loadDataWithBaseURL tidak bisa dipulihkan oleh
+            // restoreState — muat ulang mode mandiri secara eksplisit
+            // (v1.13.0; sebelumnya layar bisa kosong setelah proses mati).
+            loadStandalone()
         } else {
             webView.restoreState(savedInstanceState)
         }
@@ -197,6 +235,9 @@ class MainActivity : Activity() {
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 conn.connectTimeout = 8000
                 conn.readTimeout = 8000
+                // v1.13.0: jangan ikuti redirect — jawaban selain 200
+                // langsung dari api.github.com dianggap gagal (diam).
+                conn.instanceFollowRedirects = false
                 if (conn.responseCode != 200) return@Thread
                 val json = JSONObject(conn.inputStream.bufferedReader().readText())
                 val latest = json.optString("tag_name").removePrefix("v")
@@ -204,7 +245,10 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 val current = packageManager.getPackageInfo(packageName, 0)
                     .versionName ?: "0"
-                if (page.isNotEmpty() && isNewerVersion(latest, current)) {
+                if (page.startsWith("https://") && isNewerVersion(latest, current) &&
+                    updatePromptedVersion != latest
+                ) {
+                    updatePromptedVersion = latest
                     runOnUiThread { showUpdateDialog(latest, current, page) }
                 }
             } catch (e: Exception) {
@@ -227,7 +271,7 @@ class MainActivity : Activity() {
 
     private fun showUpdateDialog(latest: String, current: String, page: String) {
         if (isFinishing) return
-        AlertDialog.Builder(this)
+        updateDialog = AlertDialog.Builder(this)
             .setTitle("Pembaruan Wajib Tersedia")
             .setMessage(
                 "Versi terbaru D TRADE v$latest sudah tersedia " +
@@ -257,7 +301,22 @@ class MainActivity : Activity() {
     private fun loadHome() {
         standaloneMode = false
         fabMenu.visibility = View.VISIBLE
-        webView.loadUrl(serverUrl())
+        // v1.13.0: halaman server adalah konten jarak jauh — jembatan
+        // JavaScript dicabut sebelum memuatnya.
+        webView.removeJavascriptInterface("AndroidBridge")
+        val url = serverUrl()
+        val uri = android.net.Uri.parse(url)
+        if (uri.scheme == "http" && !isPrivateOrLocalHost(uri.host)) {
+            showError(
+                "Alamat server memakai HTTP ke host publik:\n$url\n\n" +
+                    "Demi keamanan, HTTP hanya diizinkan untuk alamat lokal/LAN " +
+                    "(localhost, 10.x, 172.16–31.x, 192.168.x). Untuk server di " +
+                    "internet gunakan HTTPS.\n\n" +
+                    "Ketuk di sini untuk mengatur alamat server."
+            )
+            return
+        }
+        webView.loadUrl(url)
     }
 
     /**
@@ -281,15 +340,17 @@ class MainActivity : Activity() {
             "Server tidak terjangkau — mode mandiri (data Binance langsung)",
             Toast.LENGTH_LONG
         ).show()
+        // v1.13.0: jembatan hanya hidup untuk halaman bawaan ini.
+        webView.addJavascriptInterface(ApiBridge(), "AndroidBridge")
         webView.loadDataWithBaseURL(
             "https://$STANDALONE_HOST/", html, "text/html", "UTF-8", null
         )
     }
 
-    private fun showError() {
+    private fun showError(message: String? = null) {
         webView.visibility = View.GONE
         errorView.visibility = View.VISIBLE
-        errorView.text =
+        errorView.text = message ?:
             "Tidak dapat terhubung ke server binance-ai-future di:\n${serverUrl()}\n\n" +
                 "Pastikan backend berjalan di komputer/VPS Anda:\n" +
                 "python run.py web\n\n" +
@@ -305,7 +366,19 @@ class MainActivity : Activity() {
             .setMessage("Alamat Web UI binance-ai-future di komputer/VPS Anda (satu jaringan Wi-Fi untuk IP lokal).")
             .setView(input)
             .setPositiveButton("Simpan") { _, _ ->
-                prefs.edit().putString(KEY_URL, input.text.toString().trim()).apply()
+                val raw = input.text.toString().trim()
+                val probe = android.net.Uri.parse(
+                    if (raw.startsWith("http")) raw else "http://$raw")
+                // v1.13.0: tolak HTTP ke host publik sejak di dialog.
+                if (probe.scheme == "http" && !isPrivateOrLocalHost(probe.host)) {
+                    Toast.makeText(
+                        this,
+                        "HTTP hanya untuk alamat lokal/LAN. Gunakan HTTPS untuk server publik.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+                prefs.edit().putString(KEY_URL, raw).apply()
                 loadHome()
             }
             .setNegativeButton("Batal", null)
@@ -339,7 +412,34 @@ class MainActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_STANDALONE, standaloneMode)
         webView.saveState(outState)
+    }
+
+    override fun onDestroy() {
+        updateDialog?.dismiss()
+        updateDialog = null
+        super.onDestroy()
+    }
+
+    /**
+     * Host lokal/LAN privat yang masih diizinkan memakai HTTP: localhost,
+     * nama *.local (mDNS), dan IP literal loopback / privat / link-local.
+     * Nama host publik lewat HTTP selalu ditolak (v1.13.0).
+     */
+    private fun isPrivateOrLocalHost(host: String?): Boolean {
+        if (host.isNullOrBlank()) return false
+        val h = host.lowercase()
+        if (h == "localhost" || h.endsWith(".local") || h == "::1") return true
+        val parts = h.split(".")
+        if (parts.size != 4) return false
+        val nums = parts.map { it.toIntOrNull() ?: return false }
+        val a = nums[0]
+        val b = nums[1]
+        return a == 10 || a == 127 ||
+            (a == 172 && b in 16..31) ||
+            (a == 192 && b == 168) ||
+            (a == 169 && b == 254)
     }
 
     /**
@@ -362,21 +462,40 @@ class MainActivity : Activity() {
                 var body = ""
                 var error: String? = null
                 try {
-                    val parsed = URL(url)
-                    if (parsed.protocol != "https" ||
-                        (parsed.host !in BINANCE_HOSTS && parsed.host !in NEWS_HOSTS &&
-                            parsed.host !in TRANSLATE_HOSTS && parsed.host !in STOCK_HOSTS)
-                    ) {
-                        throw SecurityException("host tidak diizinkan")
+                    // v1.13.0: redirect diikuti MANUAL (maks 5) dan SETIAP
+                    // lompatan divalidasi ulang ke daftar-izin — sebelumnya
+                    // HttpURLConnection mengikuti redirect otomatis ke host
+                    // mana pun, melewati pemeriksaan host awal.
+                    var current = URL(url)
+                    var redirects = 0
+                    var done = false
+                    while (!done) {
+                        if (current.protocol != "https" ||
+                            (current.host !in BINANCE_HOSTS && current.host !in NEWS_HOSTS &&
+                                current.host !in TRANSLATE_HOSTS && current.host !in STOCK_HOSTS)
+                        ) {
+                            throw SecurityException("host tidak diizinkan")
+                        }
+                        val conn = current.openConnection() as HttpURLConnection
+                        conn.connectTimeout = 15000
+                        conn.readTimeout = 15000
+                        conn.instanceFollowRedirects = false
+                        conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
+                        val code = conn.responseCode
+                        if (code in 300..399) {
+                            val loc = conn.getHeaderField("Location")
+                            if (loc.isNullOrBlank() || ++redirects > 5) {
+                                throw SecurityException("redirect tidak valid")
+                            }
+                            current = URL(current, loc)
+                        } else {
+                            val stream =
+                                if (code in 200..299) conn.inputStream else conn.errorStream
+                            body = stream?.bufferedReader()?.readText() ?: ""
+                            if (code !in 200..299) error = "HTTP $code"
+                            done = true
+                        }
                     }
-                    val conn = parsed.openConnection() as HttpURLConnection
-                    conn.connectTimeout = 15000
-                    conn.readTimeout = 15000
-                    conn.setRequestProperty("User-Agent", "DTrade/1.2 Android")
-                    val code = conn.responseCode
-                    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                    body = stream?.bufferedReader()?.readText() ?: ""
-                    if (code !in 200..299) error = "HTTP $code"
                 } catch (e: Exception) {
                     error = e.message ?: "network error"
                 }
@@ -434,6 +553,15 @@ class MainActivity : Activity() {
     companion object {
         private const val PREFS = "dtrade"
         private const val KEY_URL = "server_url"
+        private const val KEY_STANDALONE = "standalone_mode"
+
+        /**
+         * Versi yang sudah dimunculkan dialog pembaruannya pada proses
+         * ini — mencegah dialog menumpuk saat onCreate berjalan lagi
+         * (v1.13.0).
+         */
+        @Volatile
+        private var updatePromptedVersion: String? = null
 
         /** Bawaan untuk emulator Android (10.0.2.2 = localhost komputer host). */
         private const val DEFAULT_URL = "http://10.0.2.2:8000"
