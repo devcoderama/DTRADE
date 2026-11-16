@@ -214,7 +214,7 @@
     <a href="#keamanan"><i class="fa-solid fa-shield-halved"></i>Keamanan</a>
     <a href="#lisensi"><i class="fa-solid fa-scale-balanced"></i>Lisensi</a>
     <a href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Repositori GitHub</a>
-    <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.12.0"><i class="fa-solid fa-box-open"></i>Release v1.12.0</a>
+    <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.13.0"><i class="fa-solid fa-box-open"></i>Release v1.13.0</a>
   </nav>
   <div class="side-foot">Dokumentasi binance-ai-future.<br>Bukan nasihat keuangan.</div>
 </aside>
@@ -233,7 +233,7 @@
     lolos <strong>manajemen risiko</strong> yang ketat.</p>
     <div class="cta">
       <a class="btn" href="https://github.com/devcoderama/binance-ai-future"><i class="fa-brands fa-github"></i>Lihat di GitHub</a>
-      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.12.0"><i class="fa-brands fa-android"></i>Unduh D TRADE v1.12.0</a>
+      <a class="btn ghost" href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.13.0"><i class="fa-brands fa-android"></i>Unduh D TRADE v1.13.0</a>
       <a class="btn ghost" href="#instalasi"><i class="fa-solid fa-rocket"></i>Mulai Cepat</a>
     </div>
     <div class="warn">
@@ -373,12 +373,12 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
   <h2><span class="no">07</span><i class="fa-brands fa-android"></i>D TRADE — Aplikasi Android</h2>
   <p>Aplikasi Android ringan (WebView) untuk membuka Web UI dari ponsel Anda di jaringan yang sama.
   Server backend tetap berjalan di komputer/VPS Anda; aplikasi hanya antarmuka.</p>
-  <p><span class="tag"><i class="fa-solid fa-tag"></i>v1.12.0</span><span class="tag"><i class="fa-solid fa-code-commit"></i>versionCode 14</span><span class="tag"><i class="fa-solid fa-mobile-screen"></i>minSdk 24</span><span class="tag"><i class="fa-solid fa-file-zipper"></i>375 KB</span></p>
+  <p><span class="tag"><i class="fa-solid fa-tag"></i>v1.13.0</span><span class="tag"><i class="fa-solid fa-code-commit"></i>versionCode 15</span><span class="tag"><i class="fa-solid fa-mobile-screen"></i>minSdk 24</span><span class="tag"><i class="fa-solid fa-file-zipper"></i>377 KB</span></p>
   <p>Unduh APK dari
-  <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.12.0">GitHub Release v1.12.0</a>,
+  <a href="https://github.com/devcoderama/binance-ai-future/releases/tag/v1.13.0">GitHub Release v1.13.0</a>,
   pasang, lalu atur alamat server lewat tombol menu melayang ⋮ (mis. <code>http://192.168.1.10:8000</code>).
   Backend harus dijalankan dengan <code>WEB_HOST=0.0.0.0</code> dan <code>WEB_API_TOKEN</code> terisi.</p>
-  <h3>Mode Mandiri (v1.2.0, grafik live di v1.3.0, Entry/TP/SL di v1.4.0, logo koin di v1.5.0, navigasi bawah + berita di v1.6.0, pembaca berita + terjemahan di v1.7.0, ikon Font Awesome + NFT di v1.8.0, catatan kaki khusus Analisis di v1.8.1, multi-market + berita pendukung sinyal di v1.9.0, tab Sinyal dihapus + timeframe saham lengkap & grafik live di v1.10.0, logo emiten saham di v1.11.0, orderbook Bid/Offer + 99 IDX & 60 global + simbol kustom di v1.12.0)</h3>
+  <h3>Mode Mandiri (v1.2.0, grafik live di v1.3.0, Entry/TP/SL di v1.4.0, logo koin di v1.5.0, navigasi bawah + berita di v1.6.0, pembaca berita + terjemahan di v1.7.0, ikon Font Awesome + NFT di v1.8.0, catatan kaki khusus Analisis di v1.8.1, multi-market + berita pendukung sinyal di v1.9.0, tab Sinyal dihapus + timeframe saham lengkap & grafik live di v1.10.0, logo emiten saham di v1.11.0, orderbook Bid/Offer + 99 IDX & 60 global + simbol kustom di v1.12.0, audit keamanan + SSL pinning di v1.13.0)</h3>
   <p>Bila server tidak terjangkau, aplikasi otomatis beralih ke <strong>mode mandiri</strong>
   (atau pilih manual lewat menu <strong>Mode Mandiri</strong>): menampilkan <strong>sinyal
   teknikal</strong> dan <strong>grafik candlestick semua simbol USDT perpetual</strong> langsung
@@ -436,7 +436,15 @@ python run.py cli selfcheck  # periksa konfigurasi &amp; konektivitas</code></pr
   teknikal + tekanan orderbook (±10) + rasio volume (±5). Daftar saham
   diperluas menjadi <strong>99 instrumen IDX</strong> dan <strong>60
   global</strong>, dan pengguna bisa <strong>menambah simbol emiten apa
-  pun</strong> dari tombol "Tambah simbol saham" (tersimpan di perangkat).</p>
+  pun</strong> dari tombol "Tambah simbol saham" (tersimpan di perangkat).
+  <strong>v1.13.0</strong> adalah rilis audit & pengerasan keamanan:
+  <strong>SSL pinning</strong> (SPKI CA perantara, dari data Certificate
+  Transparency yang terverifikasi) untuk koneksi Binance, Yahoo, dan GitHub;
+  jembatan JavaScript kini hanya aktif di halaman mode mandiri (tidak lagi
+  terekspos ke Web UI server); redirect jembatan divalidasi ulang per
+  lompatan; HTTP ke host publik ditolak (LAN privat tetap bisa); dialog
+  pembaruan tidak lagi bisa menumpuk; dan balapan data saat berganti
+  timeframe dengan cepat sudah dijaga.</p>
   <div class="phones">
     <figure class="shot reveal">
       <img src="https://raw.githubusercontent.com/devcoderama/binance-ai-future/main/screenshots/android-standalone-list.jpg" alt="D TRADE mode mandiri — daftar simbol berlogo koin" loading="lazy">
