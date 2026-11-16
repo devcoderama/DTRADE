@@ -235,6 +235,16 @@
     white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
   .cbub.me{align-self:flex-end;background:var(--gold);color:#0b0e11;border-bottom-right-radius:4px;font-weight:600}
   .cbub.me.long{font-weight:500;text-align:left}
+  /* Aksi pada pesan pengguna: Edit / Salin / Kirim ulang (v1.31.3) */
+  .cacts{align-self:flex-end;display:flex;gap:4px;margin:3px 2px 9px}
+  .cacts button{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:3px 10px;font-size:.72rem;cursor:pointer}
+  .cacts button:active{color:var(--gold);border-color:var(--gold)}
+  .editbar{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:8px 14px;background:var(--panel2);border-top:1px solid var(--line);
+    font-size:.82rem;color:var(--gold)}
+  .editbar button{background:transparent;border:1px solid var(--line);color:var(--text);
+    border-radius:999px;padding:3px 12px;font-size:.78rem;cursor:pointer}
   .cbub.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
     color:var(--text);border-bottom-left-radius:4px;white-space:normal}
   .cbub.typing{color:var(--muted);font-style:italic}
@@ -451,6 +461,10 @@
     <button data-q="Apa beda sinyal LONG dan SHORT di trading futures?">LONG vs SHORT</button>
     <button data-q="Tips manajemen risiko trading futures untuk pemula">Manajemen risiko</button>
     <button id="chatClear">🗑 Hapus riwayat</button>
+  </div>
+  <div id="editBar" class="editbar hidden">
+    <span><i class="fa-solid fa-pen"></i> Mengedit pesan…</span>
+    <button id="editCancel">✕ Batal</button>
   </div>
   <div class="chatbar">
     <input id="chatInput" type="text" placeholder="Tulis pesan untuk AI…" autocomplete="off">
@@ -3499,7 +3513,7 @@ function renderChat() {
       '"Minta Pendapat AI" agar saya membantu membaca analisis sebuah simbol.</div>';
     return;
   }
-  chatMsgs.forEach(m => {
+  chatMsgs.forEach((m, i) => {
     const d = document.createElement("div");
     d.className = "cbub " + (m.role === "user" ? "me" : "ai");
     if (m.role === "user") {
@@ -3513,6 +3527,17 @@ function renderChat() {
         '<div class="md">' + mdLite(m.content) + "</div>";
     }
     box.appendChild(d);
+    if (m.role === "user") {
+      // Baris aksi di bawah pesan pengguna (v1.31.3): Edit / Salin / Kirim ulang.
+      const acts = document.createElement("div");
+      acts.className = "cacts";
+      acts.dataset.idx = i;
+      acts.innerHTML =
+        '<button data-act="edit"><i class="fa-solid fa-pen"></i> Edit</button>' +
+        '<button data-act="copy"><i class="fa-solid fa-copy"></i> Salin</button>' +
+        '<button data-act="resend"><i class="fa-solid fa-rotate-right"></i> Kirim ulang</button>';
+      box.appendChild(acts);
+    }
   });
   box.scrollTop = box.scrollHeight;
 }
@@ -3530,6 +3555,7 @@ function aiAsk(messages) {
     headers: { "Content-Type": "application/json" },
     body: payload
   }).then(r => {
+    if (r.status === 402) throw new Error("Batas gratis layanan AI tercapai — tunggu sekitar 1 menit, lalu kirim ulang pesanmu.");
     if (r.status === 429) throw new Error("AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi.");
     if (!r.ok) throw new Error("AI menolak permintaan (HTTP " + r.status + ").");
     return r.text();
@@ -3540,6 +3566,7 @@ function aiAsk(messages) {
 function cleanAiError(msg) {
   const m = String(msg || "").trim();
   if (!m) return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
+  if (/402|batas gratis/i.test(m)) return "Batas gratis layanan AI tercapai — layanan AI web gratis membatasi jeda antar-permintaan. Tunggu sekitar 1 menit, lalu kirim ulang pesanmu.";
   if (m.length <= 110 && !/exception|socket|abort|failed to fetch/i.test(m)) return m;
   if (/429|ramai|batas/i.test(m)) return "AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi.";
   return "AI web tidak terjangkau. Periksa koneksi internet, lalu coba lagi.";
@@ -3571,8 +3598,67 @@ async function sendChat(content, display) {
   chatBusy = false;
   $("chatSend").disabled = false;
 }
+/* ===== Aksi pesan pengguna: Edit / Salin / Kirim ulang (v1.31.3) ===== */
+let chatEditIdx = null;
+function cancelChatEdit() {
+  chatEditIdx = null;
+  $("editBar").classList.add("hidden");
+  $("chatInput").value = "";
+}
+$("editCancel").addEventListener("click", cancelChatEdit);
+function copyChatText(t) {
+  if (window.AndroidBridge && window.AndroidBridge.copyText) {
+    window.AndroidBridge.copyText(t);
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = t;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) { /* abaikan */ }
+  ta.remove();
+}
+function chatAct(act, idx) {
+  if (chatBusy) return;
+  const m = chatMsgs[idx];
+  if (!m || m.role !== "user") return;
+  if (act === "copy") { copyChatText(m.display || m.content); return; }
+  if (act === "resend") {
+    // Potong percakapan sampai pesan ini, lalu kirim ulang isinya persis.
+    const content = m.content, display = m.display;
+    chatMsgs = chatMsgs.slice(0, idx);
+    saveChat();
+    renderChat();
+    sendChat(content, display);
+    return;
+  }
+  if (act === "edit") {
+    chatEditIdx = idx;
+    $("chatInput").value = m.display || m.content;
+    $("editBar").classList.remove("hidden");
+    $("chatInput").focus();
+  }
+}
+$("chatList").addEventListener("click", e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  chatAct(b.dataset.act, parseInt(b.parentElement.dataset.idx, 10));
+});
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
+  if (chatEditIdx != null) {
+    // Kirim hasil edit: percakapan dipotong di pesan yang diedit,
+    // lalu teks baru dikirim sebagai pesan pengganti.
+    const idx = chatEditIdx;
+    cancelChatEdit();
+    if (!v.trim()) return;
+    chatMsgs = chatMsgs.slice(0, idx);
+    saveChat();
+    sendChat(v);
+    return;
+  }
   $("chatInput").value = "";
   sendChat(v);
 });
@@ -3582,6 +3668,7 @@ $("chatInput").addEventListener("keydown", e => {
 $("chatChips").querySelectorAll("button[data-q]").forEach(b =>
   b.addEventListener("click", () => sendChat(b.dataset.q)));
 $("chatClear").addEventListener("click", () => {
+  cancelChatEdit();
   chatMsgs = [];
   saveChat();
   renderChat();

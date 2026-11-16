@@ -936,6 +936,8 @@ class MainActivity : Activity() {
                         body = stream?.bufferedReader()?.readText() ?: ""
                         error = when {
                             code in 200..299 -> null
+                            code == 402 ->
+                                "Batas gratis layanan AI tercapai — layanan AI web gratis membatasi jeda antar-permintaan. Tunggu sekitar 1 menit, lalu kirim ulang pesanmu."
                             code == 429 ->
                                 "AI gratis sedang ramai (kena batas layanan) — tunggu sekitar 1 menit, lalu coba lagi."
                             code in 500..599 ->
@@ -1097,6 +1099,22 @@ class MainActivity : Activity() {
                     ).show()
                 }
             }.start()
+        }
+
+        /** Salin teks ke clipboard (tombol Salin pada pesan chat AI). */
+        @JavascriptInterface
+        fun copyText(text: String) {
+            webView.post {
+                try {
+                    val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    cm.setPrimaryClip(
+                        android.content.ClipData.newPlainText("D TRADE", text))
+                    Toast.makeText(
+                        this@MainActivity, "Teks disalin", Toast.LENGTH_SHORT
+                    ).show()
+                } catch (e: Exception) { /* abaikan kegagalan clipboard */ }
+            }
         }
 
         @JavascriptInterface
