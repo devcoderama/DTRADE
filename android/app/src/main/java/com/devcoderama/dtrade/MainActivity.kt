@@ -844,6 +844,14 @@ class MainActivity : Activity() {
         }
     }
 
+    /** v1.31.16: beri tahu halaman bahwa bacaan TTS sudah berakhir. */
+    private fun notifySpeakEnded() {
+        webView.post {
+            webView.evaluateJavascript(
+                "window.__speakEnded && window.__speakEnded()", null)
+        }
+    }
+
     private fun speakNow(text: String) {
         val clean = text.take(1500)
         val engine = tts
@@ -868,6 +876,23 @@ class MainActivity : Activity() {
                     }
                 }
             }
+            // v1.31.16: kabari halaman saat bacaan selesai/berhenti/error
+            // agar status tombol suara di halaman bisa diatur ulang.
+            try {
+                tts?.setOnUtteranceProgressListener(object :
+                    android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) { notifySpeakEnded() }
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                        notifySpeakEnded()
+                    }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) { notifySpeakEnded() }
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        notifySpeakEnded()
+                    }
+                })
+            } catch (e: Exception) { /* abaikan */ }
             return
         }
         if (ttsReady) {

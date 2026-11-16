@@ -364,6 +364,15 @@
   .att-meta{font-size:.7rem;color:var(--muted);margin-top:1px}
   .attbar button{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);
     background:var(--panel2);color:var(--muted);cursor:pointer}
+  /* Chat AI mengambang (v1.31.16) */
+  #chatFab{position:fixed;right:16px;bottom:88px;width:54px;height:54px;border-radius:50%;
+    background:var(--gold);color:#0b0e11;border:none;font-size:1.3rem;z-index:65;cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
+  #chatFab.hidden{display:none}
+  #chatOverlay{position:fixed;left:0;right:0;top:0;bottom:0;background:var(--bg);z-index:60;
+    display:flex;flex-direction:column}
+  #chatOverlay.hidden{display:none}
+  #chatOverlay #chatView{height:100%;flex:1;min-height:0}
   .cbub-att{margin-bottom:6px;font-size:.8rem;font-weight:600}
   .cbub-att i{margin-right:5px}
   .cbub-img{display:block;max-width:100%;border-radius:8px}
@@ -669,6 +678,8 @@
   <button data-tab="berita"><i class="fa-solid fa-newspaper ic"></i>Berita</button>
   <button data-tab="lainnya"><i class="fa-solid fa-bars ic"></i>Lainnya</button>
 </nav>
+<button id="chatFab" class="hidden" aria-label="Buka Chat AI mengambang"><i class="fa-solid fa-robot"></i></button>
+<div id="chatOverlay" class="hidden"></div>
 
 <script>
 "use strict";
@@ -3565,6 +3576,7 @@ function syncNavDepth() {
 }
 function showTab(name) {
   if (name === "analisis") { openDetail(lastSymbol || "BTCUSDT"); return; }
+  if (name === "chat") closeChatFloat();
   currentTab = name;
   Object.entries(TAB_VIEWS).forEach(([t, id]) => $(id).classList.toggle("hidden", t !== name));
   $("detailView").classList.remove("open");
@@ -3574,6 +3586,7 @@ function showTab(name) {
   if (name === "berita" && !newsLoaded) loadNews(false);
   window.scrollTo(0, 0);
   syncNavDepth();
+  syncChatFab();
 }
 $("bottomNav").querySelectorAll("button").forEach(b =>
   b.addEventListener("click", () => {
@@ -3982,6 +3995,7 @@ function renderChat() {
     }
   });
   box.scrollTop = box.scrollHeight;
+  updateSpeakIcons();
 }
 function aiAsk(messages) {
   const payload = JSON.stringify({ messages: messages, model: "openai" });
@@ -4067,8 +4081,17 @@ async function sendChat(content, display, useAtt) {
     if (t) t.textContent = thinkPhrases[thinkIdx];
   }, 2200);
   try {
+    const recent = chatMsgs.slice(-16);
     let convo = [{ role: "system", content: AI_SYSTEM }].concat(
-      chatMsgs.slice(-16).map(m => ({ role: m.role, content: m.content })));
+      recent.map((m, ix) => ({
+        role: m.role,
+        // Pesan lama yang sangat panjang (mis. isi dokumen ±12rb karakter)
+        // dipangkas dalam riwayat kirim agar total muatan tidak melewati
+        // batas layanan; pesan terakhir selalu dikirim utuh (v1.31.16).
+        content: ix < recent.length - 1 && m.content.length > 4000
+          ? m.content.slice(0, 4000) + " …[dipotong]"
+          : m.content
+      })));
     let reply;
     if (att && att.kind === "image") {
       // Pesan terakhir diganti format bagian teks+gambar untuk model
@@ -4083,7 +4106,7 @@ async function sendChat(content, display, useAtt) {
       reply = (await aiAsk(convo)).trim();
     }
     chatMsgs.push({ role: "assistant", content: reply || "(AI mengembalikan jawaban kosong)" });
-    if (ttsOn && reply) speakAi(chatMsgs[chatMsgs.length - 1]);
+    if (ttsOn && reply) speakAi(chatMsgs[chatMsgs.length - 1], chatMsgs.length - 1);
   } catch (e) {
     chatMsgs.push({ role: "assistant", content: "⚠️ " + cleanAiError(e.message) });
   }
@@ -4134,7 +4157,7 @@ function chatAct(act, idx) {
   }
   if (act === "speak") {
     const mm = chatMsgs[idx];
-    if (mm && mm.role === "assistant") speakAi(mm);
+    if (mm && mm.role === "assistant") speakAi(mm, idx);
     return;
   }
   if (chatBusy) return;
@@ -4198,9 +4221,31 @@ function renderTtsBtn() {
   b.innerHTML = '<i class="fa-solid fa-volume-' + (ttsOn ? "high" : "xmark") + '"></i>';
   b.classList.toggle("off", !ttsOn);
 }
+/* Status bacaan suara (v1.31.16): indeks pesan yang SEDANG dibacakan.
+   Ketuk tombol suara pesan yang sama = berhenti (sebelumnya setiap
+   ketukan justru mengulang bacaan dari awal — bug yang dilaporkan). */
+let speakingIdx = -1;
 function stopSpeak() {
   if (window.AndroidBridge && window.AndroidBridge.stopSpeak) window.AndroidBridge.stopSpeak();
+  speakingIdx = -1;
+  updateSpeakIcons();
 }
+function updateSpeakIcons() {
+  document.querySelectorAll("#chatList .cacts").forEach(row => {
+    const b = row.querySelector('button[data-act="speak"]');
+    if (!b) return;
+    const ic = b.querySelector("i");
+    if (ic) {
+      ic.className = "fa-solid " +
+        (speakingIdx === parseInt(row.dataset.idx, 10) ? "fa-stop" : "fa-volume-high");
+    }
+  });
+}
+/* Dipanggil jembatan native saat bacaan TTS selesai/berhenti/error. */
+window.__speakEnded = function () {
+  speakingIdx = -1;
+  updateSpeakIcons();
+};
 function speakTextFor(m) {
   const tmp = document.createElement("div");
   tmp.innerHTML = mdLite(m.content);
@@ -4213,9 +4258,16 @@ function speakTextFor(m) {
   tmp.remove();
   return txt;
 }
-function speakAi(m) {
+function speakAi(m, idx) {
+  // Sedang membacakan pesan ini dan tombolnya diketuk lagi → berhenti.
+  if (idx != null && speakingIdx === idx) { stopSpeak(); return; }
+  stopSpeak();
   if (window.AndroidBridge && window.AndroidBridge.speak) {
     window.AndroidBridge.speak(speakTextFor(m));
+    if (idx != null) {
+      speakingIdx = idx;
+      updateSpeakIcons();
+    }
   }
 }
 function voiceAsk() {
@@ -4397,6 +4449,59 @@ $("chatAttach").addEventListener("click", async () => {
     renderAttBar();
   });
 })();
+/* ===== Chat AI mengambang (v1.31.16) =====
+   Di luar tab Chat AI, tombol robot emas mengambang di kanan bawah.
+   Ketuk → Chat AI tampil sebagai lapisan layar penuh TANPA pindah tab:
+   elemen #chatView yang sama dipindahkan ke lapisan itu (sesi, suara,
+   dan lampiran identik), lalu dikembalikan ke tempat asalnya saat
+   ditutup atau saat tab Chat AI dibuka. Di tab Chat AI tombolnya
+   sembunyi; di halaman detail/pembaca juga sembunyi agar tidak menutupi
+   konten. */
+var chatFloatState = { floated: false, parent: null, next: null };
+function syncChatFab() {
+  const fab = $("chatFab");
+  if (!fab) return;
+  const detailOpen = $("detailView").classList.contains("open");
+  const readerOpen = !$("readerView").classList.contains("hidden");
+  const show = chatFloatState.floated ||
+    (currentTab !== "chat" && !detailOpen && !readerOpen);
+  fab.classList.toggle("hidden", !show);
+  fab.innerHTML = '<i class="fa-solid ' +
+    (chatFloatState.floated ? "fa-xmark" : "fa-robot") + '"></i>';
+}
+function openChatFloat() {
+  if (currentTab === "chat" || chatFloatState.floated) return;
+  const cv = $("chatView");
+  chatFloatState.parent = cv.parentNode;
+  chatFloatState.next = cv.nextElementSibling;
+  $("chatOverlay").appendChild(cv);
+  cv.classList.remove("hidden");
+  $("chatOverlay").classList.remove("hidden");
+  chatFloatState.floated = true;
+  syncChatFab();
+  const cl = $("chatList");
+  if (cl) cl.scrollTop = cl.scrollHeight;
+}
+function closeChatFloat() {
+  if (!chatFloatState.floated) return;
+  const cv = $("chatView");
+  if (chatFloatState.parent) {
+    chatFloatState.parent.insertBefore(cv, chatFloatState.next);
+  }
+  $("chatOverlay").classList.add("hidden");
+  chatFloatState.floated = false;
+  if (currentTab !== "chat") cv.classList.add("hidden");
+  syncChatFab();
+}
+$("chatFab").addEventListener("click", () => {
+  if (chatFloatState.floated) closeChatFloat();
+  else openChatFloat();
+});
+new MutationObserver(syncChatFab)
+  .observe($("detailView"), { attributes: true, attributeFilter: ["class"] });
+new MutationObserver(syncChatFab)
+  .observe($("readerView"), { attributes: true, attributeFilter: ["class"] });
+syncChatFab();
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
   if (chatEditIdx != null) {
