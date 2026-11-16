@@ -26,6 +26,16 @@
   .mode button.on{background:var(--gold);color:#0b0e11}
   .iconbtn{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
     border-radius:9px;width:36px;height:36px;font-size:1rem;cursor:pointer;flex:none}
+  /* Tombol Ganti Simbol berlabel jelas (v1.31.17 — sebelumnya hanya ikon
+     kecil yang mudah terlewat) */
+  #btnPick{width:auto;height:38px;padding:0 12px;border-radius:999px;display:flex;
+    align-items:center;gap:6px;font-size:.78rem;font-weight:700}
+  @media (max-width:400px){
+    #btnPick .pick-lbl{display:none}
+    #btnPick{padding:0 10px}
+  }
+  #dSymbolRow{display:flex;align-items:center;gap:5px;cursor:pointer}
+  .pick-caret{font-size:.58rem;color:var(--gold)}
   .info{margin:10px 14px 0;background:rgba(240,185,11,.07);border:1px solid rgba(240,185,11,.3);
     border-radius:10px;padding:9px 12px;color:#e7cf8a;font-size:.83rem}
   .serverbar{margin:10px 14px 0;display:flex;align-items:center;gap:10px;
@@ -428,7 +438,7 @@
     <button class="iconbtn" id="btnBack" aria-label="Kembali"><i class="fa-solid fa-arrow-left"></i></button>
     <span id="dCoin"></span>
     <div>
-      <div class="nm" id="dSymbol">—</div>
+      <div class="nm" id="dSymbolRow"><span id="dSymbol">—</span><i class="fa-solid fa-chevron-down pick-caret"></i></div>
       <div class="chg" id="dSub">—</div>
       <span class="livedot" id="liveDot"><span class="dot"></span><span id="liveTxt">menghubungkan…</span></span>
     </div>
@@ -436,7 +446,7 @@
       <div class="p" id="dPrice">—</div>
       <div class="chg" id="dChange">—</div>
     </div>
-    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+    <button class="iconbtn" id="btnPick" aria-label="Ganti simbol" title="Ganti simbol"><i class="fa-solid fa-arrow-right-arrow-left"></i><span class="pick-lbl">Ganti Simbol</span></button>
     <button class="iconbtn favbtn" id="btnFav" aria-label="Favorit" title="Tambah/hapus dari favorit"><i class="fa-regular fa-star"></i></button>
   </div>
   <div class="tabs" id="tabs">
@@ -4461,10 +4471,12 @@ var chatFloatState = { floated: false, parent: null, next: null };
 function syncChatFab() {
   const fab = $("chatFab");
   if (!fab) return;
-  const detailOpen = $("detailView").classList.contains("open");
-  const readerOpen = !$("readerView").classList.contains("hidden");
+  // v1.31.17: tombol tampil juga di halaman Analisis/detail & pembaca
+  // (permintaan pemilik) — hanya sembunyi di tab Chat AI itu sendiri
+  // dan saat pemilih simbol terbuka (layar penuh sementara).
+  const pickerOpen = !$("pickerView").classList.contains("hidden");
   const show = chatFloatState.floated ||
-    (currentTab !== "chat" && !detailOpen && !readerOpen);
+    (currentTab !== "chat" && !pickerOpen);
   fab.classList.toggle("hidden", !show);
   fab.innerHTML = '<i class="fa-solid ' +
     (chatFloatState.floated ? "fa-xmark" : "fa-robot") + '"></i>';
@@ -4498,9 +4510,7 @@ $("chatFab").addEventListener("click", () => {
   else openChatFloat();
 });
 new MutationObserver(syncChatFab)
-  .observe($("detailView"), { attributes: true, attributeFilter: ["class"] });
-new MutationObserver(syncChatFab)
-  .observe($("readerView"), { attributes: true, attributeFilter: ["class"] });
+  .observe($("pickerView"), { attributes: true, attributeFilter: ["class"] });
 syncChatFab();
 $("chatSend").addEventListener("click", () => {
   const v = $("chatInput").value;
@@ -5080,13 +5090,23 @@ function renderPicker() {
       wrap.appendChild(d);
     });
 }
-function openPicker() {
+async function openPicker() {
   $("pq").placeholder = detailMarket === "stock"
     ? (lastMarket === "idx" ? "Cari saham IDX… (cth: GOTO)" : "Cari saham global… (cth: AAPL)")
     : "Cari simbol… (cth: ETH)";
   $("pq").value = "";
   renderPicker();
   $("pickerView").classList.remove("hidden");
+  /* v1.31.17: pastikan daftar saham pasar ini sudah termuat — tanpa ini
+     pemilih tampil KOSONG bila halaman detail dibuka lewat chip chat/
+     jalur lain sebelum daftar Pasar sempat dimuat (bug yang ditemukan
+     audit v1.31.17). */
+  if (detailMarket === "stock" && !(stockLists[lastMarket] || []).length) {
+    $("pickList").innerHTML =
+      '<div class="status" style="padding:14px">Memuat daftar simbol…</div>';
+    try { await loadStocks(lastMarket); } catch (e) { /* abaikan */ }
+    if (!$("pickerView").classList.contains("hidden")) renderPicker();
+  }
 }
 function closePicker() { $("pickerView").classList.add("hidden"); }
 /* QRIS donasi di tab Lainnya (v1.23.0): ketuk gambar untuk layar
@@ -5110,7 +5130,7 @@ $("qrisDl").addEventListener("click", ev2 => {
   }
 });
 $("btnPick").addEventListener("click", openPicker);
-$("dSymbol").addEventListener("click", openPicker);
+$("dSymbolRow").addEventListener("click", openPicker);
 $("btnPickBack").addEventListener("click", closePicker);
 $("pq").addEventListener("input", renderPicker);
 
