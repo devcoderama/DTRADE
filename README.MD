@@ -216,7 +216,7 @@ API yang panjang:
 | `MAX_OPEN_POSITIONS` | Batas posisi terbuka (bawaan 3) |
 | `DAILY_LOSS_LIMIT_PCT` | Berhenti trading bila rugi harian mencapai % ini |
 | `DEFAULT_INTERVAL` | Interval candle bawaan (bawaan `15m`) |
-| `WEB_HOST` / `WEB_PORT` | Alamat & port Web UI (bawaan aman `127.0.0.1:8000`) |
+| `WEB_HOST` / `WEB_PORT` | Alamat & port Web UI (bawaan `0.0.0.0:8000` — semua perangkat di jaringan yang sama, dilindungi PIN/token) |
 
 ### Mengganti Provider AI
 

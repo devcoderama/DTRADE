@@ -26,16 +26,16 @@ function toast(msg) {
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 4200);
 }
-async function api(path, options, _retried) {
-  // Autentikasi HANYA lewat cookie HttpOnly `baf_token` dari /api/auth/login
-  // (fetch mengirim cookie same-origin secara bawaan). Token TIDAK disimpan
-  // di localStorage — skrip apa pun di halaman tidak boleh bisa membacanya.
-  const resp = await fetch(path, options || {});
-  const data = await resp.json().catch(() => ({}));
-  if (resp.status === 401 && !_retried) {
-    // Server terkunci: cara utama masuk adalah PIN aplikasi (dibuat server
-    // saat pertama kali berjalan, tampil di konsol server). Token API lama
-    // (WEB_API_TOKEN) tetap diterima sebagai alternatif.
+/* Login DIBAGI untuk semua panggilan api(): saat halaman dimuat, banyak
+   panggilan berjalan paralel; tanpa ini, setiap panggilan yang menerima
+   401 sebelum login selesai akan memunculkan prompt PIN-nya sendiri —
+   pengguna diminta PIN berkali-kali berturut-turut walau PIN-nya benar
+   (diperbaiki v1.32.7). Kini prompt hanya muncul SATU kali; panggilan
+   lain menunggu login yang sama lalu mengulang request-nya. */
+let loginInFlight = null;
+function ensureLogin() {
+  if (loginInFlight) return loginInFlight;
+  loginInFlight = (async () => {
     const doLogin = async (body) => {
       const login = await fetch("/api/auth/login", {
         method: "POST",
@@ -44,12 +44,31 @@ async function api(path, options, _retried) {
       }).catch(() => null);
       return !!(login && login.ok);
     };
+    // Server terkunci: cara utama masuk adalah PIN aplikasi (dibuat server
+    // saat pertama kali berjalan, tampil di konsol server). Token API lama
+    // (WEB_API_TOKEN) tetap diterima sebagai alternatif.
     const pin = window.prompt("🔐 Masukkan PIN aplikasi DTRADE:");
-    if (pin && (await doLogin({ pin: pin.trim() }))) return api(path, options, true);
+    if (pin && (await doLogin({ pin: pin.trim() }))) return true;
     if (pin) {
       const token = window.prompt("PIN ditolak. Alternatif: masukkan token API (WEB_API_TOKEN), atau kosongkan untuk batal:");
-      if (token && (await doLogin({ token: token.trim() }))) return api(path, options, true);
+      if (token && (await doLogin({ token: token.trim() }))) return true;
     }
+    return false;
+  })();
+  // Janji dipakai bersama selama login berjalan; setelah selesai, 401
+  // berikutnya (mis. sesi berakhir seminggu kemudian) boleh prompt lagi.
+  loginInFlight.finally(() => { loginInFlight = null; });
+  return loginInFlight;
+}
+
+async function api(path, options, _retried) {
+  // Autentikasi HANYA lewat cookie HttpOnly `baf_token` dari /api/auth/login
+  // (fetch mengirim cookie same-origin secara bawaan). Token TIDAK disimpan
+  // di localStorage — skrip apa pun di halaman tidak boleh bisa membacanya.
+  const resp = await fetch(path, options || {});
+  const data = await resp.json().catch(() => ({}));
+  if (resp.status === 401 && !_retried) {
+    if (await ensureLogin()) return api(path, options, true);
     throw new Error("Login gagal — PIN/token ditolak server.");
   }
   if (!resp.ok) throw new Error(data.detail || ("HTTP " + resp.status));

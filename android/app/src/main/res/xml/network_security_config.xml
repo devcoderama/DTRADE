@@ -1,26 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Kebijakan jaringan D TRADE (diperketat):
-     - Bawaan: HTTPS wajib, cleartext (HTTP) DITOLAK.
-     - Cleartext hanya diizinkan untuk pengembangan lokal: localhost dan
-       emulator host 10.0.2.2.
-     - Android TIDAK mendukung rentang CIDR privat (192.168.0.0/16 dsb.)
-       di domain-config. Bila backend Anda berjalan di IP LAN tertentu,
-       tambahkan SATU entri domain-config dengan IP persis itu (lihat
-       android/README.md), atau — lebih aman — akses backend lewat
-       Tailscale/HTTPS dan tidak perlu cleartext sama sekali.
+<!-- Kebijakan jaringan D TRADE:
+     - Cleartext (HTTP) diizinkan di tingkat platform KARENA fitur utama
+       aplikasi adalah terhubung ke backend DTRADE milik pengguna sendiri
+       di jaringan lokal (mis. http://192.168.1.3:8000) — kebijakan lama
+       (v1.13.0, cleartext hanya localhost/10.0.2.2) membuat aplikasi sama
+       sekali tidak bisa terhubung ke server LAN (probe + WebView ditolak
+       sistem: "Cleartext communication not permitted"), sementara browser
+       ponsel bisa. Diperbaiki di v1.32.7.
+     - Perlindungan berlapis tetap berlaku di tingkat aplikasi:
+       (1) MainActivity menolak URL server HTTP ke host PUBLIK — HTTP hanya
+           untuk host lokal/LAN privat (localhost, 10.x, 172.16–31.x,
+           192.168.x, *.local); server internet wajib HTTPS.
+       (2) Navigasi WebView dikunci allowlist ke host server yang diatur
+           pengguna sendiri.
+       (3) Jembatan data mode mandiri menolak HTTP publik dan memvalidasi
+           redirect; semua API data (Binance/Yahoo) tetap HTTPS.
      - CATATAN v1.13.1: pin-set SSL yang sempat ditambahkan di v1.13.0
-       DICABUT. Pin diturunkan dari data Certificate Transparency, tetapi
-       edge regional yang melayani pengguna ternyata menyajikan rantai
-       CA perantara yang berbeda, sehingga aplikasi menolak koneksi
-       Binance/Yahoo ("Pin verification failed"). Pinning hanya boleh
+       DICABUT (gagal di jaringan asli pengguna). Pinning hanya boleh
        diaktifkan lagi setelah rantai asli teramati dari jaringan
-       pengguna sendiri. Seluruh pengerasan lain v1.13.0 (cakupan
-       jembatan, validasi redirect, blokir HTTP publik, setelan WebView)
-       tetap berlaku. -->
+       pengguna sendiri. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

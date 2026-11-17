@@ -73,29 +73,22 @@ bilah judul bawaan Android; menu aplikasi (Beranda Server / Mode
 Mandiri / Muat Ulang / Alamat Server) hidup di **tombol melayang ⋮**
 di kanan bawah layar.
 
-## Catatan Keamanan Jaringan (penting sejak pengerasan 2026-11-16)
+## Catatan Keamanan Jaringan
 
-Aplikasi kini **menolak HTTP (cleartext) secara bawaan**; hanya
-`localhost` dan `10.0.2.2` (emulator) yang diizinkan memakai HTTP.
-Akibatnya, alamat backend berupa IP LAN biasa (mis. `http://192.168.1.10:8000`)
-**tidak akan dimuat** sampai Anda memilih salah satu:
+Sejak **v1.32.7**, aplikasi **mengizinkan HTTP (cleartext) ke server
+milik pengguna sendiri** — kebijakan lama (hanya localhost/10.0.2.2)
+ternyata membuat aplikasi sama sekali tidak bisa terhubung ke backend
+di IP LAN (mis. `http://192.168.1.3:8000`) padahal browser ponsel bisa.
+Perlindungan dipindah ke tingkat aplikasi: URL server HTTP ke host
+**publik ditolak** (HTTP hanya untuk localhost/LAN privat; server
+internet wajib HTTPS), navigasi WebView dikunci ke host server yang
+diatur pengguna, dan semua API data tetap HTTPS.
 
-1. **(Dianjurkan) Tailscale/HTTPS** — jalankan backend di belakang
-   Tailscale atau reverse proxy HTTPS, lalu isi alamat `https://…` di
-   aplikasi. Tidak perlu mengubah aplikasi sama sekali.
-2. **Tambahkan IP LAN Anda secara eksplisit** — Android tidak mendukung
-   rentang CIDR di `network_security_config.xml`; tambahkan satu entri
-   untuk IP persis backend Anda lalu build ulang APK:
-
-   ```xml
-   <domain-config cleartextTrafficPermitted="true">
-       <domain includeSubdomains="false">192.168.1.10</domain>
-   </domain-config>
-   ```
-
-Backend juga kini **menolak start** bila bind non-loopback tanpa
-`WEB_API_TOKEN` — isi token di `.env` backend; Web UI akan memintanya
-sekali di dalam aplikasi.
+Backend berjalan dengan bawaan `WEB_HOST=0.0.0.0` (semua perangkat di
+jaringan yang sama) dan dilindungi PIN aplikasi/`WEB_API_TOKEN` —
+server tetap **menolak start** untuk mode live tanpa autentikasi.
+Untuk akses dari luar jaringan rumah, gunakan Tailscale/HTTPS, jangan
+mengekspos port 8000 mentah ke internet.
 
 ## Build dari Sumber
 
