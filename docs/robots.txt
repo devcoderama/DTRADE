@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://devcoderama.github.io/DTRADE/sitemap.xml
