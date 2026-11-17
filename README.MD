@@ -17,6 +17,9 @@ mengeksekusi order hanya setelah lolos **manajemen risiko** yang ketat.
 > **Spot, saham, forex, dan lainnya** — nama DTRADE dipilih agar tidak
 > terikat pada satu market saja.
 
+> 📖 **Dokumentasi & situs resmi:** [GitHub Pages](https://devcoderama.github.io/DTRADE/) ·
+> [Mirror Netlify](https://cosmic-gingersnap-84c111.netlify.app/)
+
 Tersedia dalam dua antarmuka di atas core yang sama:
 
 - **Web UI** — dashboard responsif, nyaman dibuka dari desktop maupun browser
